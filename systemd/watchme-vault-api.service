@@ -1,0 +1,21 @@
+[Unit]
+Description=WatchMe Vault API Server
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/watchme_api
+Environment=PATH=/home/ubuntu/watchme_api/venv/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PYTHONPATH=/home/ubuntu/watchme_api/venv/lib/python3.12/site-packages
+ExecStart=/home/ubuntu/watchme_api/venv/bin/uvicorn app:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=watchme-vault-api
+
+[Install]
+WantedBy=multi-user.target

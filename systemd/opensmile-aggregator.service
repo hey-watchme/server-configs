@@ -1,0 +1,20 @@
+[Unit]
+Description=OpenSMILE Aggregator API Docker Container
+After=docker.service
+Requires=docker.service
+
+[Service]
+TimeoutStartSec=0
+Restart=always
+RestartSec=5
+# 既存のコンテナがあれば停止・削除してから起動
+ExecStartPre=-/usr/bin/docker stop opensmile-aggregator
+ExecStartPre=-/usr/bin/docker rm opensmile-aggregator
+# Dockerコンテナを起動。ホストの8012ポートをコンテナの8012ポートにマッピング。
+# --env-file で .env ファイルから環境変数を読み込みます。
+ExecStart=/usr/bin/docker run --name opensmile-aggregator -p 8012:8012 --env-file /home/ubuntu/watchme-opensmile-aggregator/.env watchme-opensmile-aggregator:latest
+# EnvironmentFileで環境変数を読み込む
+EnvironmentFile=/home/ubuntu/watchme-opensmile-aggregator/.env
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,15 @@
+[Unit]
+Description=WatchMe Web App
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/watchme-web-app
+ExecStart=/home/ubuntu/.nvm/versions/node/v22.17.0/bin/npm run start
+Restart=always
+Environment=NODE_ENV=production
+Environment=PATH=/home/ubuntu/.nvm/versions/node/v22.17.0/bin:/usr/bin:/bin
+
+[Install]
+WantedBy=multi-user.target

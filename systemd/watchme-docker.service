@@ -1,0 +1,21 @@
+[Unit]
+Description=WatchMe Web Docker Container
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+RemainAfterExit=yes
+WorkingDirectory=/home/ubuntu/watchme-docker
+ExecStart=/usr/bin/docker-compose -f docker-compose.prod.yml up -d
+ExecStop=/usr/bin/docker-compose -f docker-compose.prod.yml down
+ExecReload=/usr/bin/docker-compose -f docker-compose.prod.yml pull && /usr/bin/docker-compose -f docker-compose.prod.yml up -d
+TimeoutStartSec=300
+Restart=on-failure
+RestartSec=30
+User=ubuntu
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,16 @@
+[Unit]
+Description=OpenSMILE API Docker Container
+After=docker.service
+Requires=docker.service
+
+[Service]
+TimeoutStartSec=0
+Restart=always
+RestartSec=5
+ExecStartPre=-/usr/bin/docker stop opensmile-api
+ExecStartPre=-/usr/bin/docker rm opensmile-api
+ExecStart=/usr/bin/docker run --name opensmile-api -p 8011:8000 --env-file /home/ubuntu/opensmile/.env watchme-opensmile-api:latest
+EnvironmentFile=/home/ubuntu/opensmile/.env
+
+[Install]
+WantedBy=multi-user.target

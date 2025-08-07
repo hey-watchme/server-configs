@@ -1,0 +1,17 @@
+[Unit]
+Description=WatchMe Behavior YamNet (Sound Event Detection) API Service
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+RemainAfterExit=yes
+ExecStartPre=-/usr/bin/docker stop sed_api
+ExecStartPre=-/usr/bin/docker rm sed_api
+ExecStart=/usr/bin/docker run --rm --name sed_api -p 8004:8004 --env-file /home/ubuntu/watchme-behavior-yamnet/.env watchme-behavior-yamnet:latest
+ExecStop=/usr/bin/docker stop sed_api
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

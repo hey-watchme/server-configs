@@ -1,0 +1,18 @@
+[Unit]
+Description=Mood Chart Prompt Generator API
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=10
+WorkingDirectory=/home/ubuntu/api_gen-prompt_mood-chart_v1
+ExecStart=/usr/bin/docker-compose up
+ExecStop=/usr/bin/docker-compose down
+StandardOutput=append:/home/ubuntu/api_gen-prompt_mood-chart_v1/service.log
+StandardError=append:/home/ubuntu/api_gen-prompt_mood-chart_v1/service-error.log
+
+[Install]
+WantedBy=multi-user.target
+EOF < /dev/null

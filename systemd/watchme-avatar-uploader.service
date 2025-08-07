@@ -1,0 +1,17 @@
+[Unit]
+Description=WatchMe Avatar Uploader API
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/home/ubuntu
+ExecStart=/home/ubuntu/run-avatar-uploader.sh
+ExecStop=/usr/bin/docker-compose -f /home/ubuntu/docker-compose.prod.yml down
+TimeoutStartSec=0
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
