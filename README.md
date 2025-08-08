@@ -146,6 +146,22 @@ RestartSec=10
 WantedBy=multi-user.target
 ```
 
+### 3.2. コンテナ間通信のルール
+
+サービスAのコンテナから、サービスBのコンテナのAPIを呼び出すなど、コンテナ間で通信を行う場合は、**ホスト名としてサービス名（コンテナ名）を使用してください。**
+
+`host.docker.internal` や `localhost` は、環境によって挙動が異なるため、使用を避けるべきです。
+
+**前提条件:**
+- 通信する全てのサービスが、`docker-compose.yml` 内で同じ `networks` に所属していること。（例: `watchme-net`）
+
+**実装例（Pythonの場合）:**
+```python
+# 'api-transcriber' という名前のコンテナにリクエストを送る
+API_ENDPOINT = "http://api-transcriber:8001/fetch-and-transcribe"
+response = requests.post(API_ENDPOINT, json=data)
+```
+
 ---
 
 ## 4. トラブルシューティングのヒント
