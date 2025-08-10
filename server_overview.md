@@ -121,8 +121,8 @@ docker exec [コンテナA] ping -c 1 [コンテナB]
 | **API Manager (Scheduler)** | `https://api.hey-watch.me/scheduler/` | `8015` | `watchme-api-manager.service` | `watchme-api-manager` |
 | **管理用フロントエンド** | `https://admin.hey-watch.me/` | `9000` | `watchme-admin.service` | `watchme_admin` |
 | **[心理] Whisper書き起こし** | `/vibe-transcriber/` | `8001` | `api-transcriber.service` | `watchme_api_whisper` |
-| **[心理] プロンプト生成** | `/vibe-aggregator/` | `8009` | `mood-chart-api.service` | `watchme-api-whisper-prompt` |
-| **[心理] スコアリング** | `/vibe-scorer/` | `8002` | `api-gpt-v1.service` | `watchme-api-whisper-gpt` |
+| **[心理] プロンプト生成** | `/vibe-aggregator/generate-mood-prompt-supabase` | `8009` | `mood-chart-api.service` | `watchme-api-whisper-prompt` |
+| **[心理] スコアリング** | `/vibe-scorer/analyze-vibegraph-supabase` | `8002` | `api-gpt-v1.service` | `watchme-api-whisper-gpt` |
 | **[行動] 音声イベント検出** | `/behavior-features/` | `8004` | `watchme-behavior-yamnet.service` | `watchme-behavior-yamnet` |
 | **[行動] 音声イベント集計** | `/behavior-aggregator/` | `8010` | `api-sed-aggregator.service` | `watchme-behavior-yamnet-aggregator` |
 | **[感情] 音声特徴量抽出** | `/emotion-features/` | `8011` | `opensmile-api.service` | `opensmile` |
