@@ -130,6 +130,27 @@ docker exec [コンテナA] ping -c 1 [コンテナB]
 
 *※公開エンドポイントが `/` から始まるものは、`https://api.hey-watch.me` に続くパスです。*
 
+### API詳細情報（2025年8月10日更新）
+
+#### 🚨 重要：コンテナ間通信のエンドポイント一覧
+
+スケジューラーやコンテナ間で通信する際の**正確な情報**：
+
+| API種類 | コンテナ名 | ポート | 内部エンドポイント | HTTPメソッド | 処理タイプ |
+|---------|-----------|--------|------------------|-------------|-----------|
+| **[心理] Whisper書き起こし** | `api-transcriber` | 8001 | `/fetch-and-transcribe` | POST | ファイルベース |
+| **[心理] プロンプト生成** | `api_gen_prompt_mood_chart` | 8009 | `/generate-mood-prompt-supabase` | **GET** ⚠️ | デバイスベース |
+| **[心理] スコアリング** | `api-gpt-v1` | 8002 | `/analyze-vibegraph-supabase` | POST | デバイスベース |
+| **[行動] 音声イベント検出** | `api_sed_v1-sed_api-1` | 8004 | `/fetch-and-process-paths` | POST | ファイルベース |
+| **[行動] 音声イベント集計** | `api-sed-aggregator` | 8010 | `/analysis/sed` | POST | デバイスベース |
+| **[感情] 音声特徴量抽出** | `opensmile-api` | 8011 | `/process/emotion-features` | POST | ファイルベース |
+| **[感情] 感情スコア集計** | `opensmile-aggregator` | 8012 | `/analyze/opensmile-aggregator` | POST | デバイスベース |
+
+**⚠️ 注意事項:**
+1. コンテナ間通信では`localhost`は使用不可。必ずコンテナ名を使用
+2. `vibe-aggregator`（プロンプト生成）のみGETメソッド、他はすべてPOST
+3. 公開URLのパスとコンテナ内部のパスは異なる場合がある
+
 ### ポート番号の統一について
 
 すべてのサービスは、混乱を避けるため**公開ポート（ホスト側）とコンテナ内部ポートを同じ番号で統一**しています。これにより、設定の一貫性とメンテナンス性が向上します。
@@ -179,6 +200,19 @@ APIキーやパスワードなどの機密情報は、ソースコードやド�
 **解決策**: 
 1. コンテナ名を使用して通信（例: `http://api-transcriber:8001`）
 2. 両方のコンテナを共通ネットワーク（`watchme-network`）に接続
+
+#### スケジューラーAPIエンドポイントエラー（2025年8月10日追記）
+**症状**: スケジューラーが手動実行では成功するAPIを自動実行で失敗する
+**原因**: エンドポイントのパスやHTTPメソッドの不一致
+**解決策**:
+1. 上記の「API詳細情報」表を必ず参照
+2. 特に注意が必要なAPI:
+   - `vibe-aggregator`: GETメソッドを使用（他はPOST）
+   - `emotion-aggregator`: パスは `/analyze/opensmile-aggregator`（`/analyze/batch`ではない）
+   - `vibe-scorer`: パスは `/analyze-vibegraph-supabase`（`/analyze-batch`ではない）
+3. 修正ファイル:
+   - `/home/ubuntu/watchme-api-manager/scheduler/run-api-process-docker.py`
+   - API_CONFIGS辞書のエンドポイント設定を確認
 
 #### API処理のタイムアウト
 **症状**: Whisper APIなどの処理でタイムアウトエラーが発生
