@@ -132,9 +132,51 @@ docker exec [コンテナA] ping -c 1 [コンテナB]
 
 ### API詳細情報（2025年8月10日更新）
 
+#### 🔍 エンドポイントの3層構造を理解する（全API開発者必読）
+
+WatchMeシステムには**3種類の異なるエンドポイント**が存在し、それぞれ異なる役割を持っています。**新しいAPIを追加する際や、既存APIを修正する際は、必ずこの3層構造を理解してください。**
+
+##### 1️⃣ **管理・設定用エンドポイント**
+- **用途**: UIから各APIの設定を管理（例：スケジューラーのON/OFF）
+- **例**: `https://api.hey-watch.me/scheduler/status/whisper`
+- **Nginxルーティング**: `/scheduler/` → `http://localhost:8015/api/scheduler/`
+- **重要**: FastAPIは `/api/scheduler/` でリスンする（Nginxが `/scheduler/` を `/api/scheduler/` に変換するため）
+
+##### 2️⃣ **API間の実行エンドポイント（内部通信）**
+- **用途**: あるAPIが別のAPIを呼び出す際に使用（例：スケジューラーが各APIを実行）
+- **例**: `http://api-transcriber:8001/fetch-and-transcribe`
+- **注意**: 必ずコンテナ名を使用（`localhost`や`host.docker.internal`は使用不可）
+- **定義場所**: 各APIの実装コード内
+
+##### 3️⃣ **外部公開エンドポイント**
+- **用途**: ブラウザや外部システムからAPIにアクセス
+- **例**: `https://api.hey-watch.me/vibe-transcriber/`
+- **Nginxルーティング**: 公開パスから内部APIへプロキシ
+- **定義場所**: Nginx設定ファイル（このリポジトリの`sites-available/`）
+
+##### 📊 エンドポイント相関図
+```
+[外部クライアント]
+    ↓ ③ 公開エンドポイント
+    ↓ https://api.hey-watch.me/vibe-transcriber/
+[Nginx]
+    ↓ プロキシ
+[api-transcriber:8001]
+
+[管理UI]
+    ↓ ① 管理用エンドポイント
+    ↓ https://api.hey-watch.me/scheduler/toggle/whisper
+[Nginx] → [scheduler-api:8015/api/scheduler/toggle/whisper]
+
+[スケジューラー]
+    ↓ ② 内部実行エンドポイント
+    ↓ http://api-transcriber:8001/fetch-and-transcribe
+[api-transcriber]
+```
+
 #### 🚨 重要：コンテナ間通信のエンドポイント一覧
 
-スケジューラーやコンテナ間で通信する際の**正確な情報**：
+スケジューラーやコンテナ間で通信する際の**正確な情報**（上記の②に該当）：
 
 | API種類 | コンテナ名 | ポート | 内部エンドポイント | HTTPメソッド | 処理タイプ |
 |---------|-----------|--------|------------------|-------------|-----------|
@@ -193,6 +235,20 @@ APIキーやパスワードなどの機密情報は、ソースコードやド�
 ## 7. トラブルシューティング
 
 ### よくある問題と解決方法
+
+#### エンドポイントの混同による404エラー（最重要）
+**症状**: 
+- APIが404エラーを返す
+- `Cannot GET /api/scheduler/api/scheduler/...` のような二重パスエラー
+- 管理UIから設定が保存できない
+
+**原因**: 3種類のエンドポイント（管理用、内部実行用、外部公開用）を混同している
+
+**解決策**:
+1. 上記の「エンドポイントの3層構造」を理解する
+2. FastAPIでは、Nginxのプロキシパスを考慮したパスでリスンする
+   - 例：Nginxが `/scheduler/` → `/api/scheduler/` にプロキシする場合、FastAPIは `/api/scheduler/` でリスン
+3. コンテナ間通信では必ずコンテナ名を使用（localhostは不可）
 
 #### Dockerコンテナ間通信エラー
 **症状**: `Failed to resolve 'host.docker.internal'`
