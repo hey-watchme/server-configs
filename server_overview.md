@@ -35,6 +35,52 @@
 - **例**: スケジューラーAPIコンテナからWhisper APIコンテナを呼び出す場合、接続先は `http://api-transcriber:8001` となります。
 - **重要**: Linux環境では `host.docker.internal` は使用できません。必ずコンテナ名を使用してください。
 
+#### ネットワーク設計詳細（2025年8月12日調査結果）
+
+##### 🌐 統一ネットワーク: watchme-network
+- **ネットワークID**: `d319f6a17c26`
+- **IP範囲**: `172.27.0.0/16`
+- **ゲートウェイ**: `172.27.0.1`
+- **用途**: 全WatchMeサービス間のコンテナ間通信
+- **作成日**: 2025年8月6日
+
+**現在の接続コンテナ一覧**（2025年8月12日現在）：
+```
+api-gpt-v1: 172.27.0.8/16                    # [心理] スコアリング
+api-sed-aggregator: 172.27.0.14/16           # [行動] 音声イベント集計
+api-transcriber: 172.27.0.3/16               # [心理] Whisper書き起こし
+api_gen_prompt_mood_chart: 172.27.0.7/16     # [心理] プロンプト生成
+api_sed_v1-sed_api-1: 172.27.0.11/16         # [行動] 音声イベント検出
+opensmile-aggregator: 172.27.0.5/16          # [感情] 感情スコア集計
+opensmile-api: 172.27.0.12/16                # [感情] 音声特徴量抽出
+vibe-transcriber-v2: 172.27.0.10/16          # [心理] 転写サービス
+watchme-admin: 172.27.0.13/16                # 管理用フロントエンド
+watchme-api-manager-prod: 172.27.0.4/16      # API Manager (UI)
+watchme-scheduler-prod: 172.27.0.2/16        # API Manager (Scheduler)
+watchme-vault-api: 172.27.0.6/16             # Gateway API
+watchme-web-prod: 172.27.0.9/16              # Webダッシュボード
+```
+
+##### 🚨 レガシーネットワーク（統合対象）
+現在、以下の個別ネットワークが残存しており、段階的に統一ネットワークに移行する必要があります：
+
+- `admin_watchme-network` - watchme-admin用（一部コンテナが重複接続）
+- `api_whisper_v1_watchme-network` - whisper API用（現在は未使用）
+- `ubuntu_watchme-network` - ubuntu用（現在は未使用）
+- `watchme-api-manager_watchme-network` - API Manager用（一部コンテナが重複接続）
+- `watchme-docker_watchme-network` - watchme-web用（一部コンテナが重複接続）
+- `watchme-vault-api-docker_default` - vault API用（重複接続あり）
+
+**課題**: 
+- 一部コンテナが複数ネットワークに接続されている
+- 設定の複雑化とメンテナンス性の低下
+- 新規開発者がネットワーク構成を理解しにくい
+
+**今後の対応方針**:
+1. 全コンテナをwatchme-networkに統一
+2. レガシーネットワークの段階的廃止
+3. docker-compose.ymlでの標準化
+
 #### ネットワーク接続の確認方法
 新しいコンテナを追加した際は、必ず共通ネットワークに接続してください：
 ```bash
@@ -43,6 +89,9 @@ docker network connect watchme-network [コンテナ名]
 
 # 接続確認
 docker exec [コンテナA] ping -c 1 [コンテナB]
+
+# 現在の接続状況確認
+docker network inspect watchme-network | jq -r '.[] | .Containers | to_entries[] | "\(.value.Name): \(.value.IPv4Address)"' | sort
 ```
 
 ```
@@ -251,11 +300,29 @@ APIキーやパスワードなどの機密情報は、ソースコードやド�
 3. コンテナ間通信では必ずコンテナ名を使用（localhostは不可）
 
 #### Dockerコンテナ間通信エラー
-**症状**: `Failed to resolve 'host.docker.internal'`
-**原因**: Linux環境では `host.docker.internal` が使用できない
+**症状**: 
+- `Failed to resolve 'host.docker.internal'`
+- `bad address 'api-gpt-v1'` など、コンテナ名の名前解決失敗
+- スケジューラーAPIが他のAPIに接続できない
+
+**原因**: 
+- Linux環境では `host.docker.internal` が使用できない
+- **コンテナがwatchme-networkに接続されていない**（最頻出）
+
 **解決策**: 
 1. コンテナ名を使用して通信（例: `http://api-transcriber:8001`）
-2. 両方のコンテナを共通ネットワーク（`watchme-network`）に接続
+2. **両方のコンテナを共通ネットワーク（`watchme-network`）に接続**
+3. 接続確認：`docker exec [scheduler] ping -c 1 [target-container]`
+
+**実例**: 2025年8月12日 - Vibe Scorer（心理スコアリング）修復事例
+```bash
+# 問題：コンテナ名 'api-gpt-v1' が解決できません
+# 原因：api-gpt-v1がwatchme-networkに未接続
+docker network connect watchme-network api-gpt-v1
+
+# 結果：接続成功、IPアドレス 172.27.0.8 が割り当てられた
+# 確認：docker exec watchme-scheduler-prod ping -c 1 api-gpt-v1 ✅
+```
 
 #### スケジューラーAPIエンドポイントエラー（2025年8月10日追記）
 **症状**: スケジューラーが手動実行では成功するAPIを自動実行で失敗する
@@ -279,4 +346,4 @@ APIキーやパスワードなどの機密情報は、ソースコードやド�
 
 ---
 
-*最終更新: 2025年8月9日*
+*最終更新: 2025年8月12日*
