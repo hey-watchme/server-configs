@@ -1,8 +1,18 @@
 # WatchMe サーバー設定リポジトリ
 
-このリポジトリは、WatchMeプラットフォームのEC2サーバーで稼働する、**Nginx** と **systemd** の全ての設定ファイルを一元管理します。
+このリポジトリは、WatchMeプラットフォームのEC2サーバーで稼働する、**Nginx** と **systemd** の設定ファイルのテンプレートと変更履歴を管理します。
 
-**サーバー上の設定ファイルを直接編集することは固く禁止します。** 全ての変更は、このリポジトリへのPull Requestを通じて行われなければなりません。
+## ⚠️ 重要な理解事項
+
+**このリポジトリの役割：**
+- ✅ 設定ファイルのテンプレートと変更履歴の管理
+- ✅ Pull Requestによるレビュープロセスの実施
+- ❌ **本番サーバーへの自動デプロイ機能はありません**
+
+**本番環境への反映方法：**
+1. このリポジトリで設定を変更し、Pull Requestでレビュー
+2. マージ後、**手動で**本番サーバーの設定ファイルを更新
+3. 本番サーバー上の設定ファイルは`/etc/nginx/`や`/etc/systemd/`に直接存在します
 
 ## 📚 ドキュメント構成
 
@@ -65,36 +75,79 @@ Reactなどのフレームワークでは、ビルド設定（例: `vite.config.
 
 Pull Requestがマージされた後、EC2サーバーにSSHで接続し、以下の作業を行います。
 
-1.  **設定リポジトリを更新**
-    ```bash
-    # このリポジトリがクローンされているディレクトリに移動
-    cd /path/to/watchme-server-configs 
-    git pull origin main
-    ```
+#### 📝 重要な前提知識
+- **このリポジトリはEC2サーバー上にクローンされていません**
+- 本番サーバーの設定ファイルは直接編集します（ただし、必ずバックアップを取る）
+- 設定内容はこのリポジトリの`sites-available/`フォルダを参考にします
 
-2.  **変更内容を反映**
-    - **Nginxの場合**:
-        ```bash
-        # 1. 設定ファイルをコピー
-        sudo cp sites-available/api.hey-watch.me /etc/nginx/sites-available/
+#### 実際のデプロイ手順
 
-        # 2. 文法テスト (最重要)
-        sudo nginx -t
+##### 1️⃣ EC2サーバーにSSH接続
+```bash
+# EC2サーバーに接続
+ssh -i ~/watchme-key.pem ubuntu@3.24.16.82
+```
 
-        # 3. テスト成功後、設定をリロード
-        sudo systemctl reload nginx
-        ```
-    - **systemdの場合**:
-        ```bash
-        # 1. 設定ファイルをコピー
-        sudo cp systemd/your-service.service /etc/systemd/system/
+##### 2️⃣ Nginxの設定を変更する場合
 
-        # 2. systemdデーモンをリロード
-        sudo systemctl daemon-reload
+```bash
+# 1. 現在の設定をバックアップ（必須！）
+sudo cp /etc/nginx/sites-available/api.hey-watch.me \
+        /etc/nginx/sites-available/api.hey-watch.me.backup.$(date +%Y%m%d_%H%M%S)
 
-        # 3. サービスを有効化 & 起動
-        sudo systemctl enable --now your-service.service
-        ```
+# 2. 設定ファイルを編集
+#    このリポジトリのsites-available/api.hey-watch.meの内容を参考に編集
+sudo nano /etc/nginx/sites-available/api.hey-watch.me
+
+# 3. 文法テスト（最重要）
+sudo nginx -t
+
+# 4. エラーがなければリロード
+sudo systemctl reload nginx
+
+# 5. 動作確認
+curl https://api.hey-watch.me/[追加したパス]/health
+```
+
+##### 3️⃣ systemdサービスを変更する場合
+
+```bash
+# 1. 現在のサービスファイルをバックアップ（存在する場合）
+if [ -f /etc/systemd/system/your-service.service ]; then
+    sudo cp /etc/systemd/system/your-service.service \
+            /etc/systemd/system/your-service.service.backup.$(date +%Y%m%d_%H%M%S)
+fi
+
+# 2. サービスファイルを作成または編集
+#    このリポジトリのsystemd/フォルダの内容を参考に作成
+sudo nano /etc/systemd/system/your-service.service
+
+# 3. systemdデーモンをリロード
+sudo systemctl daemon-reload
+
+# 4. サービスを有効化 & 起動
+sudo systemctl enable --now your-service.service
+
+# 5. 状態確認
+sudo systemctl status your-service.service
+```
+
+#### 🔄 ロールバック手順
+
+問題が発生した場合：
+
+```bash
+# Nginxの場合
+sudo cp /etc/nginx/sites-available/api.hey-watch.me.backup.[タイムスタンプ] \
+        /etc/nginx/sites-available/api.hey-watch.me
+sudo nginx -t && sudo systemctl reload nginx
+
+# systemdの場合
+sudo cp /etc/systemd/system/your-service.service.backup.[タイムスタンプ] \
+        /etc/systemd/system/your-service.service
+sudo systemctl daemon-reload
+sudo systemctl restart your-service.service
+```
 
 ---
 
@@ -120,6 +173,42 @@ location /[公開URLパス]/ {
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
+    
+    # CORS設定（必要に応じて）
+    add_header "Access-Control-Allow-Origin" "*";
+    add_header "Access-Control-Allow-Methods" "GET, POST, OPTIONS";
+    add_header "Access-Control-Allow-Headers" "Content-Type, Authorization";
+    
+    # OPTIONSリクエストの処理（必要に応じて）
+    if ($request_method = "OPTIONS") {
+        return 204;
+    }
+}
+```
+
+#### 実例：Avatar Uploader APIの追加
+
+```nginx
+# Avatar Uploader API
+location /avatar/ {
+    proxy_pass http://localhost:8014/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    
+    # CORS設定
+    add_header "Access-Control-Allow-Origin" "*";
+    add_header "Access-Control-Allow-Methods" "GET, POST, DELETE, OPTIONS";
+    add_header "Access-Control-Allow-Headers" "Content-Type, Authorization";
+    
+    # OPTIONSリクエストの処理
+    if ($request_method = "OPTIONS") {
+        return 204;
+    }
+    
+    # ファイルアップロード用の設定
+    client_max_body_size 10M;  # 10MBまでの画像アップロードを許可
 }
 ```
 
@@ -197,3 +286,79 @@ Nginx関連で404エラーなどの問題が発生した場合、以下の手順
 
 3.  **設定は正しくリロードされているか？**
     - 設定ファイルを変更した後は、`sudo nginx -t` でテストし、`sudo systemctl reload nginx` を実行したか再確認してください。単純なリロード忘れもよくある原因です。
+
+---
+
+## 5. よくある質問とベストプラクティス
+
+### Q: このリポジトリの設定ファイルをそのまま本番にコピーすればいい？
+
+**A: いいえ、直接コピーはできません。**
+- このリポジトリはテンプレートと変更履歴の管理用です
+- 本番サーバーには既に動作中の設定があり、それを参考に**手動で編集**する必要があります
+- 必ず現在の設定をバックアップしてから編集してください
+
+### Q: なぜ本番サーバーにこのリポジトリをクローンしないの？
+
+**A: セキュリティとシンプルさのため。**
+- 本番サーバーに不要なGitリポジトリを置かない
+- 設定ファイルは`/etc/`配下に直接存在するのが標準的
+- 変更履歴はこのGitHubリポジトリで管理
+
+### Q: 新しいAPIを追加する時の手順は？
+
+**A: 以下の手順で進めます：**
+1. このリポジトリで新しいブランチを作成
+2. `sites-available/api.hey-watch.me`にlocation設定を追加
+3. Pull Requestを作成してレビュー
+4. マージ後、本番サーバーで手動で同じ設定を追加
+5. `sudo nginx -t`でテスト → `sudo systemctl reload nginx`
+
+### Q: 設定を間違えてサービスが落ちた！
+
+**A: バックアップから復元：**
+```bash
+# バックアップファイルを探す
+ls -la /etc/nginx/sites-available/*.backup.*
+
+# 最新のバックアップから復元
+sudo cp /etc/nginx/sites-available/api.hey-watch.me.backup.[最新のタイムスタンプ] \
+        /etc/nginx/sites-available/api.hey-watch.me
+
+# テストとリロード
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+### Q: どのポートが使われているか確認したい
+
+**A: 以下のコマンドで確認：**
+```bash
+# 使用中のポート一覧
+sudo lsof -i -P -n | grep LISTEN
+
+# 特定のポートを確認
+sudo lsof -i:8014
+
+# Nginxの設定で使用しているポートを確認
+grep -E "proxy_pass|listen" /etc/nginx/sites-available/api.hey-watch.me
+```
+
+### ベストプラクティス
+
+1. **常にバックアップを取る**
+   - 設定変更前に必ず`backup.$(date +%Y%m%d_%H%M%S)`形式でバックアップ
+
+2. **段階的にテスト**
+   - まず`nginx -t`で文法チェック
+   - 次に`curl`で内部から動作確認
+   - 最後に外部からHTTPS経由で確認
+
+3. **ドキュメント化**
+   - 新しいサービスを追加したら、このREADMEも更新
+   - server_overview.mdにもエンドポイント情報を追加
+
+4. **ポート番号の管理**
+   - 8000番台: メインAPI
+   - 8001-8099: マイクロサービス
+   - 9000番台: 管理ツール
+   - 新しいサービスは既存のポートと重複しないよう確認
