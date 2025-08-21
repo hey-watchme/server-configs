@@ -54,7 +54,7 @@ api_sed_v1-sed_api-1: 172.27.0.11/16         # [行動] 音声イベント検出
 opensmile-aggregator: 172.27.0.5/16          # [感情] 感情スコア集計
 opensmile-api: 172.27.0.12/16                # [感情] 音声特徴量抽出
 vibe-transcriber-v2: 172.27.0.10/16          # [心理] 転写サービス
-watchme-admin: 172.27.0.13/16                # 管理用フロントエンド
+watchme-admin: 172.27.0.13/16                # 管理用フロントエンド (ECRデプロイ済み)
 watchme-api-manager-prod: 172.27.0.4/16      # API Manager (UI)
 watchme-scheduler-prod: 172.27.0.2/16        # API Manager (Scheduler)
 watchme-vault-api: 172.27.0.6/16             # Gateway API
@@ -64,7 +64,7 @@ watchme-web-prod: 172.27.0.9/16              # Webダッシュボード
 ##### 🚨 レガシーネットワーク（統合対象）
 現在、以下の個別ネットワークが残存しており、段階的に統一ネットワークに移行する必要があります：
 
-- `admin_watchme-network` - watchme-admin用（一部コンテナが重複接続）
+- `admin_watchme-network` - watchme-admin用（ECRデプロイにより統一ネットワークに移行済み）
 - `api_whisper_v1_watchme-network` - whisper API用（現在は未使用）
 - `ubuntu_watchme-network` - ubuntu用（現在は未使用）
 - `watchme-api-manager_watchme-network` - API Manager用（一部コンテナが重複接続）
@@ -168,7 +168,7 @@ docker network inspect watchme-network | jq -r '.[] | .Containers | to_entries[]
 | **Webダッシュボード** | `https://dashboard.hey-watch.me/` | `3001` | `watchme-web-app.service` | `watchme-web-app` |
 | **API Manager (UI)** | `https://api.hey-watch.me/manager/` | `9001` | `watchme-api-manager.service` | `watchme-api-manager` |
 | **API Manager (Scheduler)** | `https://api.hey-watch.me/scheduler/` | `8015` | `watchme-api-manager.service` | `watchme-api-manager` |
-| **管理用フロントエンド** | `https://admin.hey-watch.me/` | `9000` | `watchme-admin.service` | `watchme_admin` |
+| **管理用フロントエンド** | `https://admin.hey-watch.me/` | `9000` | `watchme-admin.service` | `watchme/admin` |
 | **[心理] Whisper書き起こし** | `/vibe-transcriber/` | `8001` | `api-transcriber.service` | `watchme_api_whisper` |
 | **[心理] プロンプト生成** | `/vibe-aggregator/generate-mood-prompt-supabase` | `8009` | `mood-chart-api.service` | `watchme-api-whisper-prompt` |
 | **[心理] スコアリング** | `/vibe-scorer/analyze-vibegraph-supabase` | `8002` | `api-gpt-v1.service` | `watchme-api-whisper-gpt` |
@@ -346,4 +346,19 @@ docker network connect watchme-network api-gpt-v1
 
 ---
 
-*最終更新: 2025年8月12日*
+## 8. 更新履歴
+
+### 2025年8月21日
+- **watchme-admin管理画面**: 完全リニューアル版をECRからデプロイ
+  - Docker化完了: `754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-admin:latest`
+  - 統一ネットワーク（watchme-network）への移行完了
+  - FastAPIベースの新アーキテクチャに刷新
+  - systemdサービス設定をECR対応に更新
+
+### 2025年8月12日
+- Vibe Scorer（心理スコアリング）のネットワーク接続修復
+- ネットワーク設計詳細の文書化
+
+---
+
+*最終更新: 2025年8月21日*
