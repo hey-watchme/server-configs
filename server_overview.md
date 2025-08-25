@@ -165,6 +165,9 @@ docker network inspect watchme-network | jq -r '.[] | .Containers | to_entries[]
 | サービス概要 | 公開エンドポイント | 内部ポート | systemdサービス名 | Gitリポジトリ |
 | :--- | :--- | :--- | :--- | :--- |
 | **Gateway API (Vault)** | `https://api.hey-watch.me/` | `8000` | `watchme-vault-api.service` | `watchme-vault-api` |
+| └ *音声ファイル管理* | `/api/audio-files` (一覧取得) | `8000` | - | - |
+| └ *署名付きURL生成* | `/api/audio-files/presigned-url` | `8000` | - | - |
+| └ *デバイス一覧* | `/api/devices` | `8000` | - | - |
 | **Webダッシュボード** | `https://dashboard.hey-watch.me/` | `3001` | `watchme-web-app.service` | `watchme-web-app` |
 | **API Manager (UI)** | `https://api.hey-watch.me/manager/` | `9001` | `watchme-api-manager.service` | `watchme-api-manager` |
 | **API Manager (Scheduler)** | `https://api.hey-watch.me/scheduler/` | `8015` | `watchme-api-manager.service` | `watchme-api-manager` |
@@ -247,6 +250,39 @@ WatchMeシステムには**3種類の異なるエンドポイント**が存在�
 すべてのサービスは、混乱を避けるため**公開ポート（ホスト側）とコンテナ内部ポートを同じ番号で統一**しています。これにより、設定の一貫性とメンテナンス性が向上します。
 
 - **例**: opensmile-apiは公開ポート8011、内部ポート8011（2025年8月9日に統一完了）
+
+### 🎵 音声ファイル管理機能（2025年8月25日追加）
+
+Vault APIに新しく追加された音声ファイル管理機能により、API Managerから音声データの品質確認・再生が可能になりました。
+
+#### 新しいエンドポイント
+
+| エンドポイント | 用途 | 主な機能 |
+|---------------|------|----------|
+| `GET /api/audio-files` | 音声ファイル一覧取得 | フィルタリング（日付・デバイス）、ページネーション、処理ステータス表示 |
+| `GET /api/audio-files/presigned-url` | 署名付きURL生成 | 1-24時間有効な安全な再生・ダウンロード用URL |
+| `GET /api/devices` | デバイス一覧取得 | UIフィルター用の登録済みデバイス一覧 |
+
+#### 主な特徴
+
+- **処理ステータス可視化**: 転写・行動分析・感情分析の処理状況を一目で確認
+- **S3メタデータ統合**: ファイルサイズ、最終更新日時、存在確認を自動取得
+- **セキュリティ**: 署名付きURLによる一時的・制限付きアクセス
+- **パフォーマンス**: インデックス活用による高速検索
+- **ユーザビリティ**: 日付範囲・デバイス別フィルタリング対応
+
+#### アクセス例
+
+```bash
+# 音声ファイル一覧取得（最新5件、特定デバイス）
+curl "https://api.hey-watch.me/api/audio-files?device_id=9f7d6e27...&limit=5"
+
+# 署名付きURL生成（1時間有効）
+curl "https://api.hey-watch.me/api/audio-files/presigned-url?file_path=files/device.../audio.wav"
+
+# デバイス一覧取得
+curl "https://api.hey-watch.me/api/devices"
+```
 
 ---
 
@@ -348,6 +384,16 @@ docker network connect watchme-network api-gpt-v1
 
 ## 8. 更新履歴
 
+### 2025年8月25日
+- **Vault API 拡張**: API Manager統合用の音声ファイル管理機能を追加
+  - `GET /api/audio-files` - 音声ファイル一覧取得（フィルタリング・ページネーション対応）
+  - `GET /api/audio-files/presigned-url` - 署名付きURL生成（ブラウザ再生・ダウンロード用）
+  - `GET /api/devices` - 登録デバイス一覧取得
+  - S3メタデータ統合: ファイル存在確認・サイズ・更新日時の自動取得
+  - 処理ステータス表示: 転写・行動分析・感情分析の処理状況を一覧表示
+  - セキュリティ強化: 署名付きURLによる一時的・安全なファイルアクセス
+  - Docker環境での本番デプロイ完了: `https://api.hey-watch.me/api/audio-files`
+
 ### 2025年8月21日
 - **watchme-admin管理画面**: 完全リニューアル版をECRからデプロイ
   - Docker化完了: `754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-admin:latest`
@@ -361,4 +407,4 @@ docker network connect watchme-network api-gpt-v1
 
 ---
 
-*最終更新: 2025年8月21日*
+*最終更新: 2025年8月25日*
