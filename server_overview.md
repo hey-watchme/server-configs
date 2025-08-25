@@ -173,6 +173,7 @@ docker network inspect watchme-network | jq -r '.[] | .Containers | to_entries[]
 | **API Manager (Scheduler)** | `https://api.hey-watch.me/scheduler/` | `8015` | `watchme-api-manager.service` | `watchme-api-manager` |
 | **管理用フロントエンド** | `https://admin.hey-watch.me/` | `9000` | `watchme-admin.service` | `watchme/admin` |
 | **[心理] Whisper書き起こし** | `/vibe-transcriber/` | `8001` | `api-transcriber.service` | `watchme_api_whisper` |
+| **[心理] Azure Speech書き起こし** | `/vibe-transcriber-v2/` | `8013` | - | `vibe-transcriber-v2` |
 | **[心理] プロンプト生成** | `/vibe-aggregator/generate-mood-prompt-supabase` | `8009` | `mood-chart-api.service` | `watchme-api-whisper-prompt` |
 | **[心理] スコアリング** | `/vibe-scorer/analyze-vibegraph-supabase` | `8002` | `api-gpt-v1.service` | `watchme-api-whisper-gpt` |
 | **[行動] 音声イベント検出** | `/behavior-features/` | `8004` | `watchme-behavior-yamnet.service` | `watchme-behavior-yamnet` |
@@ -233,6 +234,7 @@ WatchMeシステムには**3種類の異なるエンドポイント**が存在�
 | API種類 | コンテナ名 | ポート | 内部エンドポイント | HTTPメソッド | 処理タイプ |
 |---------|-----------|--------|------------------|-------------|-----------|
 | **[心理] Whisper書き起こし** | `api-transcriber` | 8001 | `/fetch-and-transcribe` | POST | ファイルベース |
+| **[心理] Azure Speech書き起こし** | `vibe-transcriber-v2` | 8013 | `/fetch-and-transcribe` | POST | ファイルベース |
 | **[心理] プロンプト生成** | `api_gen_prompt_mood_chart` | 8009 | `/generate-mood-prompt-supabase` | **GET** ⚠️ | デバイスベース |
 | **[心理] スコアリング** | `api-gpt-v1` | 8002 | `/analyze-vibegraph-supabase` | POST | デバイスベース |
 | **[行動] 音声イベント検出** | `api_sed_v1-sed_api-1` | 8004 | `/fetch-and-process-paths` | POST | ファイルベース |
@@ -383,6 +385,12 @@ docker network connect watchme-network api-gpt-v1
 ---
 
 ## 8. 更新履歴
+
+### 2025年8月26日
+- **Azure Speech Service API追加**: vibe-transcriber-v2のNginxルーティング設定を追加
+  - エンドポイント: `/vibe-transcriber-v2/` → port 8013
+  - Azure Speech Serviceを使用した高速音声文字起こし
+  - Whisper APIと同じインターフェースで互換性を保持
 
 ### 2025年8月25日
 - **Vault API 拡張**: API Manager統合用の音声ファイル管理機能を追加
