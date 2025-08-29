@@ -1,7 +1,7 @@
 [Unit]
 Description=WatchMe Web Docker Container
-After=docker.service
-Requires=docker.service
+After=docker.service watchme-infrastructure.service
+Requires=docker.service watchme-infrastructure.service
 
 [Service]
 Type=simple
