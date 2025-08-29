@@ -1,0 +1,47 @@
+[Unit]
+Description=WatchMe Infrastructure (Networks and Volumes)
+Documentation=https://github.com/matsumotokaya/watchme-server-configs
+After=docker.service
+Before=watchme-api-manager.service watchme-vault-api.service watchme-web-app.service
+Wants=docker.service
+RequiredBy=watchme-api-manager.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+
+# 環境変数
+Environment="COMPOSE_FILE=/home/ubuntu/watchme-server-configs/docker-compose.infra.yml"
+
+# インフラストラクチャの起動
+ExecStartPre=/usr/bin/docker --version
+ExecStartPre=-/usr/bin/docker network ls
+ExecStart=/usr/bin/docker-compose -f ${COMPOSE_FILE} up -d
+
+# インフラストラクチャの停止（通常は実行しない）
+ExecStop=/bin/echo "Infrastructure networks and volumes are preserved (not removed)"
+
+# ヘルスチェック
+ExecStartPost=/bin/bash -c 'docker network inspect watchme-network > /dev/null 2>&1 || exit 1'
+ExecStartPost=/bin/echo "WatchMe infrastructure initialized successfully"
+
+# 再起動ポリシー
+Restart=on-failure
+RestartSec=10
+StartLimitInterval=60
+StartLimitBurst=3
+
+[Install]
+WantedBy=multi-user.target
+# 他のサービスが依存するように設定
+RequiredBy=watchme-api-manager.service
+RequiredBy=watchme-vault-api.service
+RequiredBy=watchme-web-app.service
+RequiredBy=api-transcriber.service
+RequiredBy=mood-chart-api.service
+RequiredBy=api-gpt-v1.service
+RequiredBy=api-sed-aggregator.service
+RequiredBy=opensmile-api.service
+RequiredBy=opensmile-aggregator.service

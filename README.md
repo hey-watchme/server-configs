@@ -1,24 +1,145 @@
 # WatchMe サーバー設定リポジトリ
 
-このリポジトリは、WatchMeプラットフォームのEC2サーバーで稼働する、**Nginx** と **systemd** の設定ファイルのテンプレートと変更履歴を管理します。
+このリポジトリは、WatchMeプラットフォームのEC2サーバーで稼働する **インフラストラクチャ**、**Nginx**、**systemd** の設定を一元管理します。
+
+## 🆕 2025年8月28日 重要アップデート
+
+**watchme-networkのインフラ管理を集約化しました！**
+- ✅ ネットワーク管理が `docker-compose.infra.yml` に一元化
+- ✅ 自動監視・修復システムが稼働中
+- ✅ 全APIサービスの接続状態を5分ごとに自動チェック
+
+詳細は [NETWORK-ARCHITECTURE.md](./NETWORK-ARCHITECTURE.md) を参照してください。
 
 ## ⚠️ 重要な理解事項
 
 **このリポジトリの役割：**
-- ✅ 設定ファイルのテンプレートと変更履歴の管理
+- ✅ **Dockerネットワークインフラの一元管理** ← NEW!
+- ✅ Nginx/systemd設定ファイルのテンプレートと変更履歴の管理
+- ✅ ネットワーク監視・自動修復スクリプトの提供 ← NEW!
 - ✅ Pull Requestによるレビュープロセスの実施
 - ❌ **本番サーバーへの自動デプロイ機能はありません**
 
 **本番環境への反映方法：**
 1. このリポジトリで設定を変更し、Pull Requestでレビュー
 2. マージ後、**手動で**本番サーバーの設定ファイルを更新
-3. 本番サーバー上の設定ファイルは`/etc/nginx/`や`/etc/systemd/`に直接存在します
+3. 本番サーバー上の設定は `/home/ubuntu/watchme-server-configs/` に配置
 
 ## 📚 ドキュメント構成
 
-- **このファイル（README.md）**: Nginx/systemd設定の変更方法、作業手順
-- **[server_overview.md](./server_overview.md)**: サーバー構成、API一覧、エンドポイント詳細、トラブルシューティング
-  - 🔍 **API開発者の方は `server_overview.md` を先にお読みください**
+| ドキュメント | 内容 | 対象読者 |
+|------------|------|---------|
+| **[README.md](./README.md)** | 全体概要、デプロイ手順、運用ルール | 全員 |
+| **[NETWORK-ARCHITECTURE.md](./NETWORK-ARCHITECTURE.md)** 🆕 | ネットワーク設計、移行計画、トラブルシューティング | インフラ/DevOps担当 |
+| **[server_overview.md](./server_overview.md)** | サーバー構成、API一覧、エンドポイント詳細 | API開発者 |
+
+## 📁 リポジトリ構造
+
+```
+watchme-server-configs/
+├── docker-compose.infra.yml    # 🆕 ネットワークインフラ定義
+├── systemd/                     # systemdサービスファイル
+│   ├── watchme-infrastructure.service  # 🆕 インフラ管理サービス
+│   ├── watchme-api-manager.service
+│   └── ...
+├── sites-available/             # Nginx設定ファイル
+│   └── api.hey-watch.me
+├── scripts/                     # 🆕 管理・監視スクリプト
+│   ├── check-infrastructure.sh # ネットワークヘルスチェック
+│   └── network_monitor.py      # Python監視ツール
+├── README.md                    # このファイル
+├── NETWORK-ARCHITECTURE.md     # 🆕 ネットワーク設計文書
+└── server_overview.md          # サーバー全体構成
+```
+
+---
+
+## 🌐 ネットワークインフラストラクチャ管理【NEW!】
+
+### watchme-networkの概要
+
+**watchme-network** は、全マイクロサービスが相互通信するための共有Dockerネットワークです。
+
+- **サブネット**: 172.27.0.0/16
+- **ゲートウェイ**: 172.27.0.1
+- **管理者**: watchme-infrastructure service
+- **作成日**: 2025年8月6日
+
+### 現在の接続状況（2025年8月28日時点）
+
+#### ✅ 接続済みコンテナ（13個）
+```
+watchme-scheduler-prod       (172.27.0.2)  # APIスケジューラー
+api-transcriber              (172.27.0.3)  # Whisper書き起こし
+watchme-api-manager-prod     (172.27.0.4)  # API管理UI
+opensmile-aggregator         (172.27.0.5)  # 感情スコア集計
+watchme-vault-api            (172.27.0.6)  # Gateway API
+api_gen_prompt_mood_chart    (172.27.0.7)  # Vibe Aggregator ← 修正済み
+api-gpt-v1                   (172.27.0.8)  # スコアリング
+watchme-web-prod             (172.27.0.9)  # Webダッシュボード
+vibe-transcriber-v2          (172.27.0.10) # Azure Speech
+api_sed_v1-sed_api-1         (172.27.0.11) # 音声イベント検出
+opensmile-api                (172.27.0.12) # 音声特徴量抽出
+watchme-admin                (172.27.0.13) # 管理画面
+api-sed-aggregator           (172.27.0.14) # 音声イベント集計
+```
+
+### 段階的移行計画
+
+#### Phase 1: インフラ整備（✅ 完了）
+- docker-compose.infra.yml作成
+- 監視スクリプト配置
+- systemdサービス定義
+
+#### Phase 2: 問題修正（✅ 完了）
+- api_gen_prompt_mood_chart を watchme-network に接続
+- watchme-vault-api を自動修復
+
+#### Phase 3: 既存サービスの移行（🔄 進行中）
+
+**移行が必要なサービス**:
+各サービスの `docker-compose.yml` を以下のように修正する必要があります。
+
+```yaml
+# 現在（ネットワーク作成側）
+networks:
+  watchme-network:
+    driver: bridge  # ❌ これが問題
+
+# 修正後（ネットワーク利用側）
+networks:
+  watchme-network:
+    external: true  # ✅ 既存ネットワークを利用
+```
+
+**優先度順の移行対象**:
+1. ⚠️ `/home/ubuntu/api_whisper_v1/docker-compose.prod.yml`
+2. ⚠️ `/home/ubuntu/watchme-docker/docker-compose.prod.yml`
+3. ⚠️ `/home/ubuntu/watchme-api-manager/docker-compose.prod.yml`
+
+### インフラ管理コマンド
+
+```bash
+# ネットワーク状態の確認
+bash /home/ubuntu/watchme-server-configs/scripts/check-infrastructure.sh
+
+# Python監視ツールで詳細確認
+python3 /home/ubuntu/watchme-server-configs/scripts/network_monitor.py
+
+# 自動修復モードで実行
+python3 /home/ubuntu/watchme-server-configs/scripts/network_monitor.py --fix
+
+# JSON形式で出力
+python3 /home/ubuntu/watchme-server-configs/scripts/network_monitor.py --json
+```
+
+### 自動監視設定（推奨）
+
+```bash
+# Cronジョブ設定（5分ごとに自動チェック）
+crontab -e
+*/5 * * * * /home/ubuntu/watchme-server-configs/scripts/check-infrastructure.sh
+```
 
 ---
 
@@ -153,7 +274,27 @@ sudo systemctl restart your-service.service
 
 ## 3. テンプレート：新しいAPIサービスの追加
 
-新しいAPIサービスを追加する際は、以下の2つのファイルをテンプレートとして使用してください。
+新しいAPIサービスを追加する際は、以下の**3つの設定**が必要です。
+
+### ⓪ 【最重要】Docker Composeでネットワーク設定
+
+**必ず** docker-compose.yml に以下のネットワーク設定を追加してください：
+
+```yaml
+version: '3.8'
+
+services:
+  your-service:
+    # ... サービス設定 ...
+    networks:
+      - watchme-network  # 必須！
+
+networks:
+  watchme-network:
+    external: true  # 必ず external: true を使用
+```
+
+⚠️ **注意**: `driver: bridge` は使用しないでください（ネットワーク作成側になってしまいます）
 
 ### ① Nginx設定の追加
 
@@ -219,8 +360,8 @@ location /avatar/ {
 ```ini
 [Unit]
 Description=[サービスの説明]
-After=docker.service
-Requires=docker.service
+After=docker.service watchme-infrastructure.service  # インフラの後に起動
+Requires=docker.service watchme-infrastructure.service
 
 [Service]
 TimeoutStartSec=0
@@ -259,9 +400,44 @@ response = requests.post(API_ENDPOINT, json=data)
 
 ---
 
-## 4. トラブルシューティングのヒント
+## 4. トラブルシューティング
 
-Nginx関連で404エラーなどの問題が発生した場合、以下の手順で問題を切り分けてください。
+### 🌐 ネットワーク関連の問題
+
+#### 症状: APIコンテナ間の通信エラー
+```
+ERROR: API接続エラー - コンテナ名 'xxx' が解決できません
+```
+
+**解決方法：**
+```bash
+# 1. ネットワーク接続状態を確認
+bash /home/ubuntu/watchme-server-configs/scripts/check-infrastructure.sh
+
+# 2. 自動修復を実行
+python3 /home/ubuntu/watchme-server-configs/scripts/network_monitor.py --fix
+
+# 3. 手動で接続（必要な場合）
+docker network connect watchme-network [container-name]
+```
+
+#### 症状: Vibe Aggregatorが動作しない
+
+**確認手順：**
+```bash
+# cronログ確認
+sudo tail -100 /var/log/scheduler/cron.log | grep vibe-aggregator
+
+# コンテナログ確認
+docker logs api_gen_prompt_mood_chart --tail 50
+
+# 手動実行テスト
+docker exec watchme-scheduler-prod python /app/run-api-process-docker.py vibe-aggregator --date 2025-08-28
+```
+
+### 🔧 Nginx関連の問題
+
+404エラーなどの問題が発生した場合、以下の手順で問題を切り分けてください。
 
 1.  **APIは生きているか？ (サーバー内部から確認)**
     - サービスがダウンしているのが原因かもしれません。まず、サーバー内部から直接APIを叩いてみます。
@@ -290,6 +466,29 @@ Nginx関連で404エラーなどの問題が発生した場合、以下の手順
 ---
 
 ## 5. よくある質問とベストプラクティス
+
+### Q: watchme-networkとは何ですか？
+
+**A: 全マイクロサービス間の通信を可能にするDockerの仮想ネットワークです。**
+- 172.27.0.0/16のプライベートIPアドレス空間
+- コンテナ名でのDNS解決が可能
+- 外部からはアクセス不可（セキュア）
+- `docker-compose.infra.yml`で一元管理
+
+### Q: 新しいAPIがネットワークに繋がらない！
+
+**A: docker-compose.ymlの設定を確認してください：**
+```yaml
+networks:
+  watchme-network:
+    external: true  # これが必須！
+```
+
+エラーが続く場合：
+```bash
+# 監視スクリプトで自動修復
+python3 /home/ubuntu/watchme-server-configs/scripts/network_monitor.py --fix
+```
 
 ### Q: このリポジトリの設定ファイルをそのまま本番にコピーすればいい？
 
@@ -345,20 +544,42 @@ grep -E "proxy_pass|listen" /etc/nginx/sites-available/api.hey-watch.me
 
 ### ベストプラクティス
 
-1. **常にバックアップを取る**
+1. **ネットワーク設定を最優先** 🆕
+   - 新しいサービスは必ず`watchme-network`に`external: true`で参加
+   - デプロイ後は`check-infrastructure.sh`で接続確認
+   - 問題があれば`network_monitor.py --fix`で自動修復
+
+2. **常にバックアップを取る**
    - 設定変更前に必ず`backup.$(date +%Y%m%d_%H%M%S)`形式でバックアップ
 
-2. **段階的にテスト**
+3. **段階的にテスト**
    - まず`nginx -t`で文法チェック
    - 次に`curl`で内部から動作確認
    - 最後に外部からHTTPS経由で確認
 
-3. **ドキュメント化**
+4. **ドキュメント化**
    - 新しいサービスを追加したら、このREADMEも更新
    - server_overview.mdにもエンドポイント情報を追加
+   - NETWORK-ARCHITECTURE.mdに接続状態を記録 🆕
 
-4. **ポート番号の管理**
+5. **ポート番号の管理**
    - 8000番台: メインAPI
    - 8001-8099: マイクロサービス
    - 9000番台: 管理ツール
    - 新しいサービスは既存のポートと重複しないよう確認
+
+## 📝 変更履歴
+
+| 日付 | 変更内容 | 影響範囲 |
+|------|---------|---------|
+| 2025-08-28 | watchme-networkインフラ管理システム導入 | 全サービス |
+| 2025-08-28 | 監視・自動修復スクリプト追加 | 運用改善 |
+| 2025-08-28 | api_gen_prompt_mood_chart接続問題修正 | Vibe Aggregator |
+| 2025-08-28 | NETWORK-ARCHITECTURE.md作成 | ドキュメント |
+
+## 🚀 今後の予定
+
+- [ ] 既存サービスの`docker-compose.yml`を段階的に`external: true`へ移行
+- [ ] レガシーネットワークの削除
+- [ ] systemdによる起動順序の完全制御
+- [ ] 監視ダッシュボードの構築
