@@ -162,26 +162,27 @@ docker network inspect watchme-network | jq -r '.[] | .Containers | to_entries[]
 
 現在サーバー上で稼働している主要なサービスは以下の通りです。
 
-| サービス概要 | 公開エンドポイント | 内部ポート | systemdサービス名 | Gitリポジトリ |
-| :--- | :--- | :--- | :--- | :--- |
-| **Gateway API (Vault)** | `https://api.hey-watch.me/` | `8000` | `watchme-vault-api.service` | `watchme-vault-api` |
-| └ *音声ファイル管理* | `/api/audio-files` (一覧取得) | `8000` | - | - |
-| └ *署名付きURL生成* | `/api/audio-files/presigned-url` | `8000` | - | - |
-| └ *デバイス一覧* | `/api/devices` | `8000` | - | - |
-| **Webダッシュボード** | `https://dashboard.hey-watch.me/` | `3001` | `watchme-web-app.service` | `watchme-web-app` |
-| **API Manager (UI)** | `https://api.hey-watch.me/manager/` | `9001` | `watchme-api-manager.service` | `watchme-api-manager` |
-| **API Manager (Scheduler)** | `https://api.hey-watch.me/scheduler/` | `8015` | `watchme-api-manager.service` | `watchme-api-manager` |
-| **管理用フロントエンド** | `https://admin.hey-watch.me/` | `9000` | `watchme-admin.service` | `watchme/admin` |
-| **[心理] Whisper書き起こし** | `/vibe-transcriber/` | `8001` | `api-transcriber.service` | `watchme_api_whisper` |
-| **[心理] Azure Speech書き起こし** | `/vibe-transcriber-v2/` | `8013` | - | `vibe-transcriber-v2` |
-| └ *WatchMeシステム統合* | `/vibe-transcriber-v2/fetch-and-transcribe` | `8013` | - | - |
-| └ *デバイスIDベース処理* | `device_id + local_date インターフェース` | `8013` | - | - |
-| **[心理] プロンプト生成** | `/vibe-aggregator/generate-mood-prompt-supabase` | `8009` | `mood-chart-api.service` | `watchme-api-whisper-prompt` |
-| **[心理] スコアリング** | `/vibe-scorer/analyze-vibegraph-supabase` | `8002` | `api-gpt-v1.service` | `watchme-api-whisper-gpt` |
-| **[行動] 音声イベント検出** | `/behavior-features/` | `8004` | `watchme-behavior-yamnet.service` | `watchme-behavior-yamnet` |
-| **[行動] 音声イベント集計** | `/behavior-aggregator/` | `8010` | `api-sed-aggregator.service` | `watchme-behavior-yamnet-aggregator` |
-| **[感情] 音声特徴量抽出** | `/emotion-features/` | `8011` | `opensmile-api.service` | `opensmile` |
-| **[感情] 感情スコア集計** | `/emotion-aggregator/` | `8012` | `opensmile-aggregator.service` | `watchme-opensmile-aggregator` |
+| サービス概要 | 公開エンドポイント | 内部ポート | systemdサービス名 | Gitリポジトリ | デプロイ方式 / ECRイメージ名 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Gateway API (Vault)** | `https://api.hey-watch.me/` | `8000` | `watchme-vault-api.service` | `watchme-vault-api` | ビルド・オン・プロッド |
+| └ *音声ファイル管理* | `/api/audio-files` (一覧取得) | `8000` | - | - | - |
+| └ *署名付きURL生成* | `/api/audio-files/presigned-url` | `8000` | - | - | - |
+| └ *デバイス一覧* | `/api/devices` | `8000` | - | - | - |
+| **Webダッシュボード** | `https://dashboard.hey-watch.me/` | `3001` | `watchme-web-app.service` | `watchme-web-app` | ビルド・オン・プロッド |
+| **API Manager (UI)** | `https://api.hey-watch.me/manager/` | `9001` | `watchme-api-manager.service` | `watchme-api-manager` | ビルド・オン・プロッド |
+| **API Manager (Scheduler)** | `https://api.hey-watch.me/scheduler/` | `8015` | `watchme-api-manager.service` | `watchme-api-manager` | ビルド・オン・プロッド |
+| **管理用フロントエンド** | `https://admin.hey-watch.me/` | `9000` | `watchme-admin.service` | `watchme/admin` | ECR (`watchme-admin`) |
+| **アバターアップロード** | (内部サービス) | `8014` | `watchme-avatar-uploader.service` | `watchme-api-avatar-uploader.git` | ECR (`watchme-api-avatar-uploader`) |
+| **[心理] Whisper書き起こし** | `/vibe-transcriber/` | `8001` | `api-transcriber.service` | `watchme-api-whisper.git` | ECR (`watchme-api-whisper`) |
+| **[心理] Azure Speech書き起こし** | `/vibe-transcriber-v2/` | `8013` | - | `watchme-api-transcriber-v2.git` | ECR (`watchme-api-transcriber-v2`) |
+| └ *WatchMeシステム統合* | `/vibe-transcriber-v2/fetch-and-transcribe` | `8013` | - | - | - |
+| └ *デバイスIDベース処理* | `device_id + local_date ...` | `8013` | - | - | - |
+| **[心理] プロンプト生成** | `/vibe-aggregator/...` | `8009` | `mood-chart-api.service` | `watchme-api-whisper-prompt.git` | ビルド・オン・プロッド |
+| **[心理] スコアリング** | `/vibe-scorer/...` | `8002` | `api-gpt-v1.service` | `watchme-api-whisper-gpt.git` | ビルド・オン・プロッド |
+| **[行動] 音声イベント検出** | `/behavior-features/` | `8004` | `watchme-behavior-yamnet.service` | `watchme-behavior-yamnet` | ビルド・オン・プロッド |
+| **[行動] 音声イベント集計** | `/behavior-aggregator/` | `8010` | `api-sed-aggregator.service` | `watchme-behavior-yamnet-aggregator` | ビルド・オン・プロッド |
+| **[感情] 音声特徴量抽出** | `/emotion-features/` | `8011` | `opensmile-api.service` | `opensmile` | ビルド・オン・プロッド |
+| **[感情] 感情スコア集計** | `/emotion-aggregator/` | `8012` | `opensmile-aggregator.service` | `watchme-opensmile-aggregator` | ビルド・オン・プロッド |
 
 *※公開エンドポイントが `/` から始まるものは、`https://api.hey-watch.me` に続くパスです。*
 
