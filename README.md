@@ -11,6 +11,51 @@
 
 詳細は [NETWORK-ARCHITECTURE.md](./NETWORK-ARCHITECTURE.md) を参照してください。
 
+## 🖥️ サーバーインフラ構成 【重要】
+
+### AWS EC2インスタンス仕様
+- **インスタンスタイプ**: t4g.small 
+- **CPU**: 2 vCPU (AWS Graviton2 Processor - Neoverse-N1)
+- **メモリ**: 2.0GB RAM (実使用可能: 1.8GB)
+- **ストレージ**: 30GB gp3 SSD
+- **ネットワーク**: 最大 5 Gigabit
+- **リージョン**: ap-southeast-2 (Sydney)
+
+### ⚠️ **リソース制約の理解（最重要）**
+
+**メモリ制約が最大の課題**:
+- **総メモリ**: 1.8GB (OS込み)
+- **現在使用量**: ~1.4GB (78%使用率)
+- **Swap**: 2.0GB (1.3GB使用中 65%使用率)
+- **利用可能**: ~400MB未満
+
+**Whisper API メモリ使用状況**:
+- **アイドル時**: ~580MB (メモリ制限1GB中 57%使用)
+- **処理中**: 800MB-1GB（制限値まで使用）
+- **⚠️ 重要**: baseモデルでも580MB必要、largeモデルは不可
+
+### 💡 メモリ管理のベストプラクティス
+
+1. **新しいコンテナ追加時の必須チェック**:
+   ```bash
+   # メモリ使用量確認
+   docker stats --no-stream
+   free -h
+   
+   # 必要に応じてメモリ制限設定
+   docker run --memory="500m" --cpus="0.5" ...
+   ```
+
+2. **メモリ不足時の対応手順**:
+   ```bash
+   # 不要なコンテナを一時停止
+   docker stop <低優先度コンテナ>
+   
+   # Dockerリソースクリーンアップ
+   docker system prune -f
+   docker image prune -a -f
+   ```
+
 ## ⚠️ 重要な理解事項
 
 **このリポジトリの役割：**
@@ -18,6 +63,7 @@
 - ✅ Nginx/systemd設定ファイルのテンプレートと変更履歴の管理
 - ✅ ネットワーク監視・自動修復スクリプトの提供 ← NEW!
 - ✅ Pull Requestによるレビュープロセスの実施
+- ✅ **インフラリソース管理と制約情報** ← NEW!
 - ❌ **本番サーバーへの自動デプロイ機能はありません**
 
 **本番環境への反映方法：**
@@ -183,41 +229,73 @@ Reactなどのフレームワークでは、ビルド設定（例: `vite.config.
 
 ---
 
-## 2. 運用ルールと作業フロー
+## 2. 運用ルールと作業フロー【推奨】
 
-### 変更手順
+このリポジトリの設定を本番サーバーに反映させるための、推奨ワークフローです。
+**サーバー上のファイルを直接編集するのではなく、常にこのGitリポジリを起点として作業を行ってください。**
 
-1.  ローカルでこのリポジトリをクローンし、新しいブランチを作成します。
-2.  後述のテンプレートに従って、`sites-available/` または `systemd/` に設定ファイルを追加・修正します。
-3.  変更をコミットし、GitHubにプッシュします。
-4.  Pull Requestを作成し、他の開発者のレビューを受けます。
+### サーバーへの初回セットアップ手順
 
-### デプロイ手順
+新しいEC2サーバーを構築した際に、最初に一度だけ実行する手順です。
 
-Pull Requestがマージされた後、EC2サーバーにSSHで接続し、以下の作業を行います。
+1.  **リポジトリをクローン**
+    ```bash
+    # EC2サーバーにSSH接続
+    ssh -i ~/watchme-key.pem ubuntu@3.24.16.82
 
-#### 📝 重要な前提知識
-- **このリポジトリはEC2サーバー上にクローンされていません**
-- 本番サーバーの設定ファイルは直接編集します（ただし、必ずバックアップを取る）
-- 設定内容はこのリポジトリの`sites-available/`フォルダを参考にします
+    # 適切な場所にリポジトリをクローン
+    cd /home/ubuntu
+    git clone git@github.com:matsumotokaya/watchme-server-configs.git
+    ```
 
-#### 実際のデプロイ手順
+2.  **初期設定スクリプトを実行**
+    ```bash
+    # クローンしたディレクトリに移動
+    cd /home/ubuntu/watchme-server-configs
 
-##### 1️⃣ EC2サーバーにSSH接続
-```bash
-# EC2サーバーに接続
-ssh -i ~/watchme-key.pem ubuntu@3.24.16.82
-```
+    # スクリプトに実行権限を付与
+    chmod +x setup_server.sh
 
-##### 2️⃣ Nginxの設定を変更する場合
+    # 初期設定スクリプトを実行
+    ./setup_server.sh
+    ```
+    これにより、リポジトリ内のすべてのNginxおよびsystemdの設定が、OSの適切な場所に自動でリンクされ、サービスが有効化されます。
+
+### 設定変更時のデプロイ手順
+
+一度セットアップが完了したサーバーで、Nginxやsystemdの設定を変更・追加する際の標準的な手順です。
+
+1.  **ローカルで変更作業**
+    - ローカルPCでこのリポジトリを修正し、GitHub上でPull Requestを作成・マージします。
+
+2.  **本番サーバーで変更を反映**
+    ```bash
+    # EC2サーバーにSSH接続
+    ssh -i ~/watchme-key.pem ubuntu@3.24.16.82
+
+    # リポジトリのディレクトリに移動
+    cd /home/ubuntu/watchme-server-configs
+
+    # 最新の変更を取得
+    git pull origin main
+
+    # セットアップスクリプトを再実行して、変更を自動で適用
+    ./setup_server.sh
+    ```
+    `setup_server.sh`は何度実行しても安全です。新しいファイルはリンクを作成し、既存のファイルはリンクを更新し、最後に各種サービスをリロードして変更を完全に適用します。
+
+---
+
+### 緊急時の手動復旧手順（非推奨）
+
+万が一、上記の方法が使えない場合にのみ、以下の手動手順で作業を行ってください。作業ミスを防ぐため、可能な限り`setup_server.sh`の使用を推奨します。
 
 ```bash
 # 1. 現在の設定をバックアップ（必須！）
 sudo cp /etc/nginx/sites-available/api.hey-watch.me \
         /etc/nginx/sites-available/api.hey-watch.me.backup.$(date +%Y%m%d_%H%M%S)
 
-# 2. 設定ファイルを編集
-#    このリポジトリのsites-available/api.hey-watch.meの内容を参考に編集
+# 2. 設定ファイルを編集（このリポジトリの内容を参考に手動で編集）
 sudo nano /etc/nginx/sites-available/api.hey-watch.me
 
 # 3. 文法テスト（最重要）
@@ -225,49 +303,6 @@ sudo nginx -t
 
 # 4. エラーがなければリロード
 sudo systemctl reload nginx
-
-# 5. 動作確認
-curl https://api.hey-watch.me/[追加したパス]/health
-```
-
-##### 3️⃣ systemdサービスを変更する場合
-
-```bash
-# 1. 現在のサービスファイルをバックアップ（存在する場合）
-if [ -f /etc/systemd/system/your-service.service ]; then
-    sudo cp /etc/systemd/system/your-service.service \
-            /etc/systemd/system/your-service.service.backup.$(date +%Y%m%d_%H%M%S)
-fi
-
-# 2. サービスファイルを作成または編集
-#    このリポジトリのsystemd/フォルダの内容を参考に作成
-sudo nano /etc/systemd/system/your-service.service
-
-# 3. systemdデーモンをリロード
-sudo systemctl daemon-reload
-
-# 4. サービスを有効化 & 起動
-sudo systemctl enable --now your-service.service
-
-# 5. 状態確認
-sudo systemctl status your-service.service
-```
-
-#### 🔄 ロールバック手順
-
-問題が発生した場合：
-
-```bash
-# Nginxの場合
-sudo cp /etc/nginx/sites-available/api.hey-watch.me.backup.[タイムスタンプ] \
-        /etc/nginx/sites-available/api.hey-watch.me
-sudo nginx -t && sudo systemctl reload nginx
-
-# systemdの場合
-sudo cp /etc/systemd/system/your-service.service.backup.[タイムスタンプ] \
-        /etc/systemd/system/your-service.service
-sudo systemctl daemon-reload
-sudo systemctl restart your-service.service
 ```
 
 ---
@@ -435,7 +470,107 @@ docker logs api_gen_prompt_mood_chart --tail 50
 docker exec watchme-scheduler-prod python /app/run-api-process-docker.py vibe-aggregator --date 2025-08-28
 ```
 
+### 💾 メモリ不足関連の問題 【2025年8月30日追加】
+
+#### 症状: Dockerイメージプル/コンテナ起動時の "no space left on device"
+```
+failed to register layer: write /usr/lib/aarch64-linux-gnu/libLLVM.so.19.1: no space left on device
+```
+
+**根本原因**: ディスク容量不足（95%以上使用）
+**解決手順**:
+```bash
+# 1. 現在のディスク使用状況確認
+df -h
+
+# 2. Dockerリソース大量クリーンアップ
+sudo docker container prune -f    # 停止コンテナ削除
+sudo docker image prune -a -f     # 未使用イメージ削除
+sudo docker volume prune -f       # 未使用ボリューム削除
+sudo docker system prune -a -f    # 包括的クリーンアップ
+
+# 3. 効果確認
+df -h  # 10GB以上削減されることを確認
+```
+
+#### 症状: コンテナが起動するがすぐに停止する（メモリ不足）
+```bash
+# コンテナが見つからない、またはステータスがExited (137)
+```
+
+**根本原因**: メモリ使用量が制限を超過（OOM Killer作動）
+**解決手順**:
+```bash
+# 1. メモリ使用状況確認
+docker stats --no-stream
+free -h
+
+# 2. 重要度の低いコンテナを一時停止
+docker stop opensmile-aggregator api-sed-aggregator
+
+# 3. メモリ制限付きで起動
+docker run -d --name api-transcriber-v1 \
+  --network watchme-network \
+  -p 8001:8001 \
+  --memory="1g" --cpus="1.0" \  # リソース制限重要
+  --env-file /path/to/.env \
+  --restart unless-stopped \
+  [IMAGE_URI]
+```
+
+#### 症状: ECR認証エラー "authorization token has expired"
+```
+pull access denied ... may require 'docker login': denied: Your authorization token has expired
+```
+
+**解決手順**:
+```bash
+# ECRに再ログイン
+aws ecr get-login-password --region ap-southeast-2 | \
+  sudo docker login --username AWS --password-stdin \
+  754724220380.dkr.ecr.ap-southeast-2.amazonaws.com
+```
+
 ### 🔧 Nginx関連の問題
+
+#### 症状: 502 Bad Gateway エラー
+外部からAPIアクセス時に502エラーが発生する場合の診断手順：
+
+1. **コンテナの生存確認**
+   ```bash
+   # コンテナが実際に動作しているか確認
+   docker ps | grep [コンテナ名]
+   
+   # 内部からの直接アクセステスト
+   curl http://localhost:[ポート]/
+   ```
+
+2. **Nginx設定の確認（最重要）**
+   ```bash
+   # 現在の設定を確認
+   grep -A 5 "location /[API名]/" /etc/nginx/sites-available/api.hey-watch.me
+   
+   # ⚠️ よくある間違い：
+   # 誤： proxy_pass http://localhost:8001/;  # Nginxがホスト上にある場合はOK
+   # 誤： proxy_pass http://api-transcriber:8001/;  # Nginxがコンテナの場合のみ
+   ```
+   
+   **重要**: Nginxがホスト上で直接動作している場合は`localhost`が正しい
+
+3. **ポートマッピングの確認**
+   ```bash
+   # ポートが正しくマッピングされているか確認
+   sudo lsof -i:[ポート番号]
+   docker port [コンテナ名]
+   ```
+
+4. **Nginxログ確認**
+   ```bash
+   sudo tail -n 50 /var/log/nginx/error.log
+   sudo tail -n 50 /var/log/nginx/access.log | grep "[API名]"
+   ```
+
+#### その他のNginx問題
 
 404エラーなどの問題が発生した場合、以下の手順で問題を切り分けてください。
 
@@ -513,6 +648,33 @@ python3 /home/ubuntu/watchme-server-configs/scripts/network_monitor.py --fix
 4. マージ後、本番サーバーで手動で同じ設定を追加
 5. `sudo nginx -t`でテスト → `sudo systemctl reload nginx`
 
+### Q: Whisper APIのメモリ使用量が心配です。今後どうすべき？
+
+**A: 【重要】現在のt4g.smallでは限界に近い状況です。**
+
+**現在の状況**:
+- Whisper API: 580MB (アイドル時) → 1GB (処理時)
+- 全システム: 1.4GB/1.8GB使用 (78%使用率)
+- 利用可能: 約400MB未満
+
+**今後の選択肢**:
+
+1. **短期的解決策（現状維持）**:
+   - baseモデルのみ使用継続
+   - 必要時に低優先度コンテナを一時停止
+   - リソース制限の厳格化
+
+2. **中長期的解決策（推奨）**:
+   - **t4g.medium** (4GB RAM) へのアップグレード検討
+   - **t4g.large** (8GB RAM) なら複数のWhisperモデル同時実行可能
+   - コスト: t4g.small ($13.3/月) → t4g.medium ($26.6/月)
+
+3. **代替案**:
+   - OpenAI Whisper API (外部サービス) への移行
+   - Whisper処理を別サーバーに分離
+
+**⚠️ 注意**: largeモデルは現在の環境では動作不可（2GB以上必要）
+
 ### Q: 設定を間違えてサービスが落ちた！
 
 **A: バックアップから復元：**
@@ -572,6 +734,10 @@ grep -E "proxy_pass|listen" /etc/nginx/sites-available/api.hey-watch.me
 
 | 日付 | 変更内容 | 影響範囲 |
 |------|---------|---------|
+| **2025-08-30** | **Whisper API (api_whisper_v1) デプロイ完了とトラブルシューティング文書化** | **新サービス追加** |
+| 2025-08-30 | インフラ構成情報とリソース制約の詳細化 | ドキュメント |
+| 2025-08-30 | メモリ不足・ディスク容量・ECR認証エラーの対処法追加 | 運用改善 |
+| 2025-08-30 | 502 Bad Gateway エラーの診断手順と解決策を詳細化 | トラブルシューティング |
 | 2025-08-28 | watchme-networkインフラ管理システム導入 | 全サービス |
 | 2025-08-28 | 監視・自動修復スクリプト追加 | 運用改善 |
 | 2025-08-28 | api_gen_prompt_mood_chart接続問題修正 | Vibe Aggregator |
