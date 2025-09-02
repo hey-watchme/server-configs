@@ -116,7 +116,6 @@ watchme-server-configs/
 #### ✅ 接続済みコンテナ（13個）
 ```
 watchme-scheduler-prod       (172.27.0.2)  # APIスケジューラー
-api-transcriber              (172.27.0.3)  # Whisper書き起こし
 watchme-api-manager-prod     (172.27.0.4)  # API管理UI
 opensmile-aggregator         (172.27.0.5)  # 感情スコア集計
 watchme-vault-api            (172.27.0.6)  # Gateway API
@@ -159,7 +158,7 @@ networks:
 ```
 
 **優先度順の移行対象**:
-1. ⚠️ `/home/ubuntu/api_whisper_v1/docker-compose.prod.yml`
+1. ⚠️ ~~`/home/ubuntu/api_whisper_v1/docker-compose.prod.yml`~~ (2025/09/02 削除済み)
 2. ⚠️ `/home/ubuntu/watchme-docker/docker-compose.prod.yml`
 3. ⚠️ `/home/ubuntu/watchme-api-manager/docker-compose.prod.yml`
 
@@ -428,8 +427,8 @@ WantedBy=multi-user.target
 
 **実装例（Pythonの場合）:**
 ```python
-# 'api-transcriber' という名前のコンテナにリクエストを送る
-API_ENDPOINT = "http://api-transcriber:8001/fetch-and-transcribe"
+# 例: 'vibe-transcriber-v2' という名前のコンテナにリクエストを送る
+API_ENDPOINT = "http://vibe-transcriber-v2:8013/transcribe"
 response = requests.post(API_ENDPOINT, json=data)
 ```
 
@@ -508,10 +507,10 @@ free -h
 # 2. 重要度の低いコンテナを一時停止
 docker stop opensmile-aggregator api-sed-aggregator
 
-# 3. メモリ制限付きで起動
-docker run -d --name api-transcriber-v1 \
+# 3. メモリ制限付きで起動（例）
+docker run -d --name [container-name] \
   --network watchme-network \
-  -p 8001:8001 \
+  -p [port]:[port] \
   --memory="1g" --cpus="1.0" \  # リソース制限重要
   --env-file /path/to/.env \
   --restart unless-stopped \
@@ -551,8 +550,8 @@ aws ecr get-login-password --region ap-southeast-2 | \
    grep -A 5 "location /[API名]/" /etc/nginx/sites-available/api.hey-watch.me
    
    # ⚠️ よくある間違い：
-   # 誤： proxy_pass http://localhost:8001/;  # Nginxがホスト上にある場合はOK
-   # 誤： proxy_pass http://api-transcriber:8001/;  # Nginxがコンテナの場合のみ
+   # 例： proxy_pass http://localhost:[port]/;  # Nginxがホスト上にある場合
+   # 例： proxy_pass http://[container-name]:[port]/;  # Nginxがコンテナの場合
    ```
    
    **重要**: Nginxがホスト上で直接動作している場合は`localhost`が正しい
@@ -734,7 +733,8 @@ grep -E "proxy_pass|listen" /etc/nginx/sites-available/api.hey-watch.me
 
 | 日付 | 変更内容 | 影響範囲 |
 |------|---------|---------|
-| **2025-08-30** | **Whisper API (api_whisper_v1) デプロイ完了とトラブルシューティング文書化** | **新サービス追加** |
+| **2025-09-02** | **Whisper API (api_whisper_v1) 削除完了 - Azure Speechへ完全移行** | **サービス削除** |
+| 2025-08-30 | Whisper API (api_whisper_v1) デプロイ完了とトラブルシューティング文書化 | 新サービス追加 |
 | 2025-08-30 | インフラ構成情報とリソース制約の詳細化 | ドキュメント |
 | 2025-08-30 | メモリ不足・ディスク容量・ECR認証エラーの対処法追加 | 運用改善 |
 | 2025-08-30 | 502 Bad Gateway エラーの診断手順と解決策を詳細化 | トラブルシューティング |

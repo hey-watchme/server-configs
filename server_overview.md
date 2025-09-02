@@ -32,7 +32,7 @@
 
 コンテナから別のコンテナのAPIを呼び出す際は、ホスト名として **サービス名（コンテナ名）** を使用します。
 
-- **例**: スケジューラーAPIコンテナからWhisper APIコンテナを呼び出す場合、接続先は `http://api-transcriber:8001` となります。
+- **例**: スケジューラーAPIコンテナから他のAPIコンテナを呼び出す場合、接続先は `http://[コンテナ名]:[ポート]` となります。
 - **重要**: Linux環境では `host.docker.internal` は使用できません。必ずコンテナ名を使用してください。
 
 #### ネットワーク設計詳細（2025年8月12日調査結果）
@@ -48,7 +48,7 @@
 ```
 api-gpt-v1: 172.27.0.8/16                    # [心理] スコアリング
 api-sed-aggregator: 172.27.0.14/16           # [行動] 音声イベント集計
-api-transcriber: 172.27.0.3/16               # [心理] Whisper書き起こし
+api-transcriber: 172.27.0.3/16               # [心理] Whisper書き起こし ※2025/09/02削除済み - Azure Speechへ移行
 api_gen_prompt_mood_chart: 172.27.0.7/16     # [心理] プロンプト生成
 api_sed_v1-sed_api-1: 172.27.0.11/16         # [行動] 音声イベント検出
 opensmile-aggregator: 172.27.0.5/16          # [感情] 感情スコア集計
@@ -65,7 +65,7 @@ watchme-web-prod: 172.27.0.9/16              # Webダッシュボード
 現在、以下の個別ネットワークが残存しており、段階的に統一ネットワークに移行する必要があります：
 
 - `admin_watchme-network` - watchme-admin用（ECRデプロイにより統一ネットワークに移行済み）
-- `api_whisper_v1_watchme-network` - whisper API用（現在は未使用）
+- ~~`api_whisper_v1_watchme-network`~~ - whisper API用（2025/09/02削除済み）
 - `ubuntu_watchme-network` - ubuntu用（現在は未使用）
 - `watchme-api-manager_watchme-network` - API Manager用（一部コンテナが重複接続）
 - `watchme-docker_watchme-network` - watchme-web用（一部コンテナが重複接続）
@@ -173,7 +173,7 @@ docker network inspect watchme-network | jq -r '.[] | .Containers | to_entries[]
 | **API Manager (Scheduler)** | `https://api.hey-watch.me/scheduler/` | `8015` | `watchme-api-manager.service` | `watchme-api-manager` | ビルド・オン・プロッド |
 | **管理用フロントエンド** | `https://admin.hey-watch.me/` | `9000` | `watchme-admin.service` | `watchme/admin` | ECR (`watchme-admin`) |
 | **アバターアップロード** | (内部サービス) | `8014` | `watchme-avatar-uploader.service` | `watchme-api-avatar-uploader.git` | ECR (`watchme-api-avatar-uploader`) |
-| **[心理] Whisper書き起こし** | `/vibe-transcriber/` | `8001` | `api-transcriber.service` | `watchme-api-whisper.git` | ECR (`watchme-api-whisper`) |
+| ~~**[心理] Whisper書き起こし**~~ | ~~`/vibe-transcriber/`~~ | ~~`8001`~~ | ~~`api-transcriber.service`~~ | ~~`watchme-api-whisper.git`~~ | ~~ECR (`watchme-api-whisper`)~~ | **※2025/09/02削除 - Azure Speechへ移行** |
 | **[心理] Azure Speech書き起こし** | `/vibe-transcriber-v2/` | `8013` | - | `watchme-api-transcriber-v2.git` | ECR (`watchme-api-transcriber-v2`) |
 | └ *WatchMeシステム統合* | `/vibe-transcriber-v2/fetch-and-transcribe` | `8013` | - | - | - |
 | └ *デバイスIDベース処理* | `device_id + local_date ...` | `8013` | - | - | - |
@@ -200,7 +200,7 @@ WatchMeシステムには**3種類の異なるエンドポイント**が存在�
 
 ##### 2️⃣ **API間の実行エンドポイント（内部通信）**
 - **用途**: あるAPIが別のAPIを呼び出す際に使用（例：スケジューラーが各APIを実行）
-- **例**: `http://api-transcriber:8001/fetch-and-transcribe`
+- **例**: `http://vibe-transcriber-v2:8013/transcribe`
 - **注意**: 必ずコンテナ名を使用（`localhost`や`host.docker.internal`は使用不可）
 - **定義場所**: 各APIの実装コード内
 
@@ -214,20 +214,20 @@ WatchMeシステムには**3種類の異なるエンドポイント**が存在�
 ```
 [外部クライアント]
     ↓ ③ 公開エンドポイント
-    ↓ https://api.hey-watch.me/vibe-transcriber/
+    ↓ https://api.hey-watch.me/vibe-transcriber-v2/
 [Nginx]
     ↓ プロキシ
-[api-transcriber:8001]
+[vibe-transcriber-v2:8013]
 
 [管理UI]
     ↓ ① 管理用エンドポイント
-    ↓ https://api.hey-watch.me/scheduler/toggle/whisper
-[Nginx] → [scheduler-api:8015/api/scheduler/toggle/whisper]
+    ↓ https://api.hey-watch.me/scheduler/toggle/azure-transcriber
+[Nginx] → [scheduler-api:8015/api/scheduler/toggle/azure-transcriber]
 
 [スケジューラー]
     ↓ ② 内部実行エンドポイント
-    ↓ http://api-transcriber:8001/fetch-and-transcribe
-[api-transcriber]
+    ↓ http://vibe-transcriber-v2:8013/transcribe
+[vibe-transcriber-v2]
 ```
 
 #### 🚨 重要：コンテナ間通信のエンドポイント一覧
@@ -236,7 +236,7 @@ WatchMeシステムには**3種類の異なるエンドポイント**が存在�
 
 | API種類 | コンテナ名 | ポート | 内部エンドポイント | HTTPメソッド | 処理タイプ |
 |---------|-----------|--------|------------------|-------------|-----------|
-| **[心理] Whisper書き起こし** | `api-transcriber` | 8001 | `/fetch-and-transcribe` | POST | ファイルベース |
+| ~~**[心理] Whisper書き起こし**~~ | ~~`api-transcriber`~~ | ~~8001~~ | ~~`/fetch-and-transcribe`~~ | ~~POST~~ | ~~ファイルベース~~ | **※2025/09/02削除** |
 | **[心理] Azure Speech書き起こし** | `vibe-transcriber-v2` | 8013 | `/fetch-and-transcribe` | POST | ファイル&デバイスベース |
 | **[心理] プロンプト生成** | `api_gen_prompt_mood_chart` | 8009 | `/generate-mood-prompt-supabase` | **GET** ⚠️ | デバイスベース |
 | **[心理] スコアリング** | `api-gpt-v1` | 8002 | `/analyze-vibegraph-supabase` | POST | デバイスベース |
@@ -354,7 +354,7 @@ APIキーやパスワードなどの機密情報は、ソースコードやド�
 - **コンテナがwatchme-networkに接続されていない**（最頻出）
 
 **解決策**: 
-1. コンテナ名を使用して通信（例: `http://api-transcriber:8001`）
+1. コンテナ名を使用して通信（例: `http://vibe-transcriber-v2:8013`）
 2. **両方のコンテナを共通ネットワーク（`watchme-network`）に接続**
 3. 接続確認：`docker exec [scheduler] ping -c 1 [target-container]`
 
