@@ -2,14 +2,11 @@
 
 このリポジトリは、WatchMeプラットフォームのEC2サーバーで稼働する **インフラストラクチャ**、**Nginx**、**systemd** の設定を一元管理します。
 
-## 🆕 2025年8月28日 重要アップデート
+## ⚡ クイックスタート
 
-**watchme-networkのインフラ管理を集約化しました！**
-- ✅ ネットワーク管理が `docker-compose.infra.yml` に一元化
-- ✅ 自動監視・修復システムが稼働中
-- ✅ 全APIサービスの接続状態を5分ごとに自動チェック
-
-詳細は [NETWORK-ARCHITECTURE.md](./NETWORK-ARCHITECTURE.md) を参照してください。
+**デプロイが必要な場合** → [OPERATIONS_GUIDE.md](./OPERATIONS_GUIDE.md)  
+**技術詳細を調べる場合** → [TECHNICAL_REFERENCE.md](./TECHNICAL_REFERENCE.md)  
+**変更履歴を確認する場合** → [CHANGELOG.md](./CHANGELOG.md)
 
 ## 🖥️ サーバーインフラ構成 【重要】
 
@@ -73,12 +70,11 @@
 
 ## 📚 ドキュメント構成
 
-| ドキュメント | 内容 | 対象読者 |
-|------------|------|---------|
-| **[README.md](./README.md)** | 全体概要、デプロイ手順、運用ルール | 全員 |
-| **[API_DEPLOYMENT_GUIDE.md](./API_DEPLOYMENT_GUIDE.md)** 🆕 | APIデプロイ標準手順書、トラブルシューティング | API開発者・デプロイ担当 |
-| **[NETWORK-ARCHITECTURE.md](./NETWORK-ARCHITECTURE.md)** | ネットワーク設計、移行計画、トラブルシューティング | インフラ/DevOps担当 |
-| **[server_overview.md](./server_overview.md)** | サーバー構成、API一覧、エンドポイント詳細 | API開発者 |
+| ドキュメント | 内容 | 読者 |
+|------------|------|------|
+| **[OPERATIONS_GUIDE.md](./OPERATIONS_GUIDE.md)** | デプロイ手順、トラブルシューティング、日常運用 | 開発者・運用担当 |
+| **[TECHNICAL_REFERENCE.md](./TECHNICAL_REFERENCE.md)** | システム仕様、ネットワーク設計、API一覧 | エンジニア |
+| **[CHANGELOG.md](./CHANGELOG.md)** | 全変更履歴（時系列） | 全員 |
 
 ## 📁 リポジトリ構造
 
@@ -730,26 +726,7 @@ grep -E "proxy_pass|listen" /etc/nginx/sites-available/api.hey-watch.me
    - 9000番台: 管理ツール
    - 新しいサービスは既存のポートと重複しないよう確認
 
-## 📝 変更履歴
-
-| 日付 | 変更内容 | 影響範囲 |
-|------|---------|---------|
-| **2025-09-03** | **APIデプロイメントガイド作成、watchme-vault-api完全修正** | **運用改善・ドキュメント** |
-| 2025-09-03 | watchme-vault-apiをDocker/systemd管理に移行 | Gateway API |
-| 2025-09-03 | API_DEPLOYMENT_GUIDE.md作成（標準デプロイ手順書） | 全API開発者向け |
-| **2025-09-02** | **Whisper API (api_whisper_v1) 削除完了 - Azure Speechへ完全移行** | **サービス削除** |
-| 2025-08-30 | Whisper API (api_whisper_v1) デプロイ完了とトラブルシューティング文書化 | 新サービス追加 |
-| 2025-08-30 | インフラ構成情報とリソース制約の詳細化 | ドキュメント |
-| 2025-08-30 | メモリ不足・ディスク容量・ECR認証エラーの対処法追加 | 運用改善 |
-| 2025-08-30 | 502 Bad Gateway エラーの診断手順と解決策を詳細化 | トラブルシューティング |
-| 2025-08-28 | watchme-networkインフラ管理システム導入 | 全サービス |
-| 2025-08-28 | 監視・自動修復スクリプト追加 | 運用改善 |
-| 2025-08-28 | api_gen_prompt_mood_chart接続問題修正 | Vibe Aggregator |
-| 2025-08-28 | NETWORK-ARCHITECTURE.md作成 | ドキュメント |
-
 ## 🚀 今後の予定
 
-- [ ] 既存サービスの`docker-compose.yml`を段階的に`external: true`へ移行
-- [ ] レガシーネットワークの削除
-- [ ] systemdによる起動順序の完全制御
+- [ ] 既存サービスの統一ネットワーク移行完了
 - [ ] 監視ダッシュボードの構築
