@@ -80,18 +80,26 @@
 
 ```
 watchme-server-configs/
-├── docker-compose.infra.yml    # 🆕 ネットワークインフラ定義
+├── docker-compose.infra.yml    # ネットワークインフラ定義
+├── docker-compose-files/        # 🆕 各サービスのdocker-compose設定
+│   ├── opensmile-api-docker-compose.prod.yml
+│   ├── opensmile-aggregator-docker-compose.prod.yml
+│   ├── api-sed-aggregator-docker-compose.prod.yml
+│   └── vibe-transcriber-v2-docker-compose.prod.yml
 ├── systemd/                     # systemdサービスファイル
-│   ├── watchme-infrastructure.service  # 🆕 インフラ管理サービス
-│   ├── watchme-api-manager.service
+│   ├── watchme-infrastructure.service  # インフラ管理サービス
+│   ├── opensmile-api.service          # 🆕 systemd管理
+│   ├── opensmile-aggregator.service   # 🆕 systemd管理
+│   ├── api-sed-aggregator.service     # 🆕 systemd管理
+│   ├── vibe-transcriber-v2.service    # 🆕 systemd管理
 │   └── ...
 ├── sites-available/             # Nginx設定ファイル
 │   └── api.hey-watch.me
-├── scripts/                     # 🆕 管理・監視スクリプト
+├── scripts/                     # 管理・監視スクリプト
 │   ├── check-infrastructure.sh # ネットワークヘルスチェック
 │   └── network_monitor.py      # Python監視ツール
 ├── README.md                    # このファイル
-├── NETWORK-ARCHITECTURE.md     # 🆕 ネットワーク設計文書
+├── NETWORK-ARCHITECTURE.md     # ネットワーク設計文書
 └── server_overview.md          # サーバー全体構成
 ```
 
@@ -108,22 +116,22 @@ watchme-server-configs/
 - **管理者**: watchme-infrastructure service
 - **作成日**: 2025年8月6日
 
-### 現在の接続状況（2025年8月28日時点）
+### 現在の接続状況（2025年9月3日更新）
 
 #### ✅ 接続済みコンテナ（13個）
 ```
 watchme-scheduler-prod       (172.27.0.2)  # APIスケジューラー
 watchme-api-manager-prod     (172.27.0.4)  # API管理UI
-opensmile-aggregator         (172.27.0.5)  # 感情スコア集計
+opensmile-aggregator         (172.27.0.5)  # 感情スコア集計 ✅ systemd管理
 watchme-vault-api            (172.27.0.6)  # Gateway API
-api_gen_prompt_mood_chart    (172.27.0.7)  # Vibe Aggregator ← 修正済み
+api_gen_prompt_mood_chart    (172.27.0.7)  # Vibe Aggregator
 api-gpt-v1                   (172.27.0.8)  # スコアリング
 watchme-web-prod             (172.27.0.9)  # Webダッシュボード
-vibe-transcriber-v2          (172.27.0.10) # Azure Speech
+vibe-transcriber-v2          (172.27.0.10) # Azure Speech ✅ systemd管理
 api_sed_v1-sed_api-1         (172.27.0.11) # 音声イベント検出
-opensmile-api                (172.27.0.12) # 音声特徴量抽出
+opensmile-api                (172.27.0.12) # 音声特徴量抽出 ✅ systemd管理
 watchme-admin                (172.27.0.13) # 管理画面
-api-sed-aggregator           (172.27.0.14) # 音声イベント集計
+api-sed-aggregator           (172.27.0.14) # 音声イベント集計 ✅ systemd管理
 ```
 
 ### 段階的移行計画
@@ -137,7 +145,13 @@ api-sed-aggregator           (172.27.0.14) # 音声イベント集計
 - api_gen_prompt_mood_chart を watchme-network に接続
 - watchme-vault-api を自動修復
 
-#### Phase 3: 既存サービスの移行（🔄 進行中）
+#### Phase 3: systemd移行（✅ 2025/09/03 完了）
+- opensmile-api: systemd管理に移行完了
+- opensmile-aggregator: systemd管理に移行完了
+- api-sed-aggregator: systemd管理に移行完了
+- vibe-transcriber-v2: systemd新規作成・移行完了
+
+#### Phase 4: 既存サービスの移行（🔄 進行中）
 
 **移行が必要なサービス**:
 各サービスの `docker-compose.yml` を以下のように修正する必要があります。

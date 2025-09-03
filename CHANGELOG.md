@@ -1,6 +1,23 @@
 # WatchMe Server 変更履歴
 
-## 2025年9月3日
+## 2025年9月3日（17:20 JST更新）
+
+### systemdサービスの完全移行 - 4つのrestart:noサービス修正
+- **opensmile-api**: systemdサービス化完了
+  - docker-compose.prod.yml作成
+  - watchme-network接続設定追加
+  - サーバー再起動時の自動復旧を保証
+- **opensmile-aggregator**: systemdサービス化完了
+  - docker-compose.prod.yml作成
+  - watchme-network接続設定追加
+- **api-sed-aggregator**: systemd設定修正完了
+  - docker runからdocker-composeへ移行
+  - watchme-network接続設定追加
+- **vibe-transcriber-v2**: 新規systemdサービス作成
+  - ECRベースサービスのsystemd管理実装
+  - docker-compose.prod.yml作成
+  - イメージ名修正（vibe-transcriber-v2 → watchme-api-transcriber-v2）
+- **docker-compose v2対応**: 全systemdファイルを/usr/local/bin/docker-composeパスに統一
 
 ### APIデプロイメントガイド作成、watchme-vault-api完全修正
 - **watchme-vault-api修正完了**: Docker化とsystemd管理への完全移行

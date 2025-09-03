@@ -1,6 +1,6 @@
 # WatchMe 技術仕様書
 
-最終更新: 2025年9月3日
+最終更新: 2025年9月3日 17:20 JST
 
 ## 🏗️ システムアーキテクチャ
 
@@ -53,7 +53,7 @@
 | **Web Dashboard** | `https://dashboard.hey-watch.me/` | 3001 | watchme-web-app | watchme-web-app | Docker |
 | **Admin Panel** | `https://admin.hey-watch.me/` | 9000 | watchme-admin | watchme/admin | ECR |
 | **Avatar Uploader** | (内部) | 8014 | watchme-avatar-uploader | watchme-api-avatar-uploader | ECR + systemd |
-| **Azure Speech** | `/vibe-transcriber-v2/` | 8013 | - | watchme-api-transcriber-v2 | ECR |
+| **Azure Speech** | `/vibe-transcriber-v2/` | 8013 | vibe-transcriber-v2 | watchme-api-transcriber-v2 | ECR |
 | **Prompt Generator** | `/vibe-aggregator/` | 8009 | mood-chart-api | watchme-api-whisper-prompt | Docker |
 | **Psychology Scorer** | `/vibe-scorer/` | 8002 | api-gpt-v1 | watchme-api-whisper-gpt | Docker |
 | **Behavior Detection** | `/behavior-features/` | 8004 | watchme-behavior-yamnet | watchme-behavior-yamnet | Docker |
