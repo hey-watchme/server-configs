@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  api-sed-aggregator:
+    image: api-sed-aggregator:latest
+    container_name: api-sed-aggregator
+    ports:
+      - "127.0.0.1:8010:8010"
+    env_file:
+      - /home/ubuntu/watchme-behavior-yamnet-aggregator/.env
+    networks:
+      - watchme-network
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8010/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  watchme-network:
+    external: true
