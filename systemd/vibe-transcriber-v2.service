@@ -16,12 +16,12 @@ RestartSec=10
 ExecStartPre=-/bin/bash -c 'aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS --password-stdin 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com'
 
 # 最新イメージをプル
-ExecStartPre=-/usr/bin/docker compose -f /home/ubuntu/watchme-server-configs/docker-compose-files/vibe-transcriber-v2-docker-compose.prod.yml pull
+ExecStartPre=-/usr/local/bin/docker-compose -f /home/ubuntu/watchme-server-configs/docker-compose-files/vibe-transcriber-v2-docker-compose.prod.yml pull
 
 # Docker Composeを使用して起動
-ExecStartPre=-/usr/bin/docker compose -f /home/ubuntu/watchme-server-configs/docker-compose-files/vibe-transcriber-v2-docker-compose.prod.yml down
-ExecStart=/usr/bin/docker compose -f /home/ubuntu/watchme-server-configs/docker-compose-files/vibe-transcriber-v2-docker-compose.prod.yml up
-ExecStop=/usr/bin/docker compose -f /home/ubuntu/watchme-server-configs/docker-compose-files/vibe-transcriber-v2-docker-compose.prod.yml down
+ExecStartPre=-/usr/local/bin/docker-compose -f /home/ubuntu/watchme-server-configs/docker-compose-files/vibe-transcriber-v2-docker-compose.prod.yml down
+ExecStart=/usr/local/bin/docker-compose -f /home/ubuntu/watchme-server-configs/docker-compose-files/vibe-transcriber-v2-docker-compose.prod.yml up
+ExecStop=/usr/local/bin/docker-compose -f /home/ubuntu/watchme-server-configs/docker-compose-files/vibe-transcriber-v2-docker-compose.prod.yml down
 
 [Install]
 WantedBy=multi-user.target

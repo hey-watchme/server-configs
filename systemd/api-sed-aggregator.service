@@ -13,9 +13,9 @@ Restart=always
 RestartSec=10
 
 # Docker Composeを使用して起動
-ExecStartPre=-/usr/bin/docker compose -f /home/ubuntu/watchme-server-configs/docker-compose-files/api-sed-aggregator-docker-compose.prod.yml down
-ExecStart=/usr/bin/docker compose -f /home/ubuntu/watchme-server-configs/docker-compose-files/api-sed-aggregator-docker-compose.prod.yml up
-ExecStop=/usr/bin/docker compose -f /home/ubuntu/watchme-server-configs/docker-compose-files/api-sed-aggregator-docker-compose.prod.yml down
+ExecStartPre=-/usr/local/bin/docker-compose -f /home/ubuntu/watchme-server-configs/docker-compose-files/api-sed-aggregator-docker-compose.prod.yml down
+ExecStart=/usr/local/bin/docker-compose -f /home/ubuntu/watchme-server-configs/docker-compose-files/api-sed-aggregator-docker-compose.prod.yml up
+ExecStop=/usr/local/bin/docker-compose -f /home/ubuntu/watchme-server-configs/docker-compose-files/api-sed-aggregator-docker-compose.prod.yml down
 
 [Install]
 WantedBy=multi-user.target
