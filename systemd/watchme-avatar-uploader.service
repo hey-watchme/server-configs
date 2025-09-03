@@ -10,8 +10,12 @@ Group=ubuntu
 WorkingDirectory=/home/ubuntu/watchme-avatar-uploader
 TimeoutStartSec=0
 
-# ECRベースのコンテナ管理
+# ECRイメージのプル
 ExecStartPre=-/usr/bin/docker-compose -f docker-compose.prod.yml down
+ExecStartPre=/usr/bin/aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS --password-stdin 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com
+ExecStartPre=/usr/bin/docker-compose -f docker-compose.prod.yml pull
+
+# コンテナ起動
 ExecStart=/usr/bin/docker-compose -f docker-compose.prod.yml up
 ExecStop=/usr/bin/docker-compose -f docker-compose.prod.yml down
 
