@@ -281,6 +281,27 @@ sudo systemctl start watchme-vault-api.service
 - [ ] API応答確認: `curl http://localhost:[ポート]/health`
 - [ ] 外部アクセス確認: `curl https://api.hey-watch.me/[path]/health`
 
+### ECRベースサービスの注意点（avatar-uploader実例）
+
+**必須設定:**
+- `.env`ファイル: SUPABASE_URL、SUPABASE_KEY、AWS設定
+- `docker-compose.prod.yml`: ECRイメージ指定、環境変数読み込み
+- systemd: WorkingDirectoryを正しいパスに設定
+
+**典型的な構成例:**
+```yaml
+services:
+  service-name:
+    image: 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/image:latest
+    env_file:
+      - .env
+    networks:
+      - watchme-network
+    ports:
+      - "127.0.0.1:PORT:PORT"
+    restart: always
+```
+
 ## 📞 サポート
 
 **開発者**: Kaya Matsumoto

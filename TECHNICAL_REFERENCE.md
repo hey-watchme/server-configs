@@ -52,7 +52,7 @@
 | **Scheduler** | `https://api.hey-watch.me/scheduler/` | 8015 | watchme-api-manager | watchme-api-manager | Docker |
 | **Web Dashboard** | `https://dashboard.hey-watch.me/` | 3001 | watchme-web-app | watchme-web-app | Docker |
 | **Admin Panel** | `https://admin.hey-watch.me/` | 9000 | watchme-admin | watchme/admin | ECR |
-| **Avatar Uploader** | (内部) | 8014 | watchme-avatar-uploader | watchme-api-avatar-uploader | ECR |
+| **Avatar Uploader** | (内部) | 8014 | watchme-avatar-uploader | watchme-api-avatar-uploader | ECR + systemd |
 | **Azure Speech** | `/vibe-transcriber-v2/` | 8013 | - | watchme-api-transcriber-v2 | ECR |
 | **Prompt Generator** | `/vibe-aggregator/` | 8009 | mood-chart-api | watchme-api-whisper-prompt | Docker |
 | **Psychology Scorer** | `/vibe-scorer/` | 8002 | api-gpt-v1 | watchme-api-whisper-gpt | Docker |
