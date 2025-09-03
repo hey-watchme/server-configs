@@ -164,7 +164,7 @@ docker network inspect watchme-network | jq -r '.[] | .Containers | to_entries[]
 
 | サービス概要 | 公開エンドポイント | 内部ポート | systemdサービス名 | Gitリポジトリ | デプロイ方式 / ECRイメージ名 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Gateway API (Vault)** | `https://api.hey-watch.me/` | `8000` | `watchme-vault-api.service` | `watchme-vault-api` | ビルド・オン・プロッド |
+| **Gateway API (Vault)** | `https://api.hey-watch.me/` | `8000` | `watchme-vault-api.service` | `watchme-api-whisper-prompt` | Docker (docker-compose.prod.yml) |
 | └ *音声ファイル管理* | `/api/audio-files` (一覧取得) | `8000` | - | - | - |
 | └ *署名付きURL生成* | `/api/audio-files/presigned-url` | `8000` | - | - | - |
 | └ *デバイス一覧* | `/api/devices` | `8000` | - | - | - |
@@ -391,6 +391,14 @@ docker network connect watchme-network api-gpt-v1
 ---
 
 ## 8. 更新履歴
+
+### 2025年9月3日
+- **watchme-vault-api修正完了**: Docker化とsystemd管理への完全移行
+  - systemdサービスファイルをDocker対応に更新
+  - docker-compose.prod.ymlを使用した本番運用に切り替え
+  - ヘルスチェック問題を解決（curlインストール済みのDockerfile.prod使用）
+  - サーバー再起動時の自動起動を保証
+  - API_DEPLOYMENT_GUIDE.mdを新規作成（デプロイ標準手順書）
 
 ### 2025年8月26日
 - **Azure Speech Service API統合機能拡張**: WatchMeシステムとの完全統合を実装

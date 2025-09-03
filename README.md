@@ -76,7 +76,8 @@
 | ドキュメント | 内容 | 対象読者 |
 |------------|------|---------|
 | **[README.md](./README.md)** | 全体概要、デプロイ手順、運用ルール | 全員 |
-| **[NETWORK-ARCHITECTURE.md](./NETWORK-ARCHITECTURE.md)** 🆕 | ネットワーク設計、移行計画、トラブルシューティング | インフラ/DevOps担当 |
+| **[API_DEPLOYMENT_GUIDE.md](./API_DEPLOYMENT_GUIDE.md)** 🆕 | APIデプロイ標準手順書、トラブルシューティング | API開発者・デプロイ担当 |
+| **[NETWORK-ARCHITECTURE.md](./NETWORK-ARCHITECTURE.md)** | ネットワーク設計、移行計画、トラブルシューティング | インフラ/DevOps担当 |
 | **[server_overview.md](./server_overview.md)** | サーバー構成、API一覧、エンドポイント詳細 | API開発者 |
 
 ## 📁 リポジトリ構造
@@ -733,6 +734,9 @@ grep -E "proxy_pass|listen" /etc/nginx/sites-available/api.hey-watch.me
 
 | 日付 | 変更内容 | 影響範囲 |
 |------|---------|---------|
+| **2025-09-03** | **APIデプロイメントガイド作成、watchme-vault-api完全修正** | **運用改善・ドキュメント** |
+| 2025-09-03 | watchme-vault-apiをDocker/systemd管理に移行 | Gateway API |
+| 2025-09-03 | API_DEPLOYMENT_GUIDE.md作成（標準デプロイ手順書） | 全API開発者向け |
 | **2025-09-02** | **Whisper API (api_whisper_v1) 削除完了 - Azure Speechへ完全移行** | **サービス削除** |
 | 2025-08-30 | Whisper API (api_whisper_v1) デプロイ完了とトラブルシューティング文書化 | 新サービス追加 |
 | 2025-08-30 | インフラ構成情報とリソース制約の詳細化 | ドキュメント |
