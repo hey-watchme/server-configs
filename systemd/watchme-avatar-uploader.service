@@ -1,17 +1,22 @@
 [Unit]
-Description=WatchMe Avatar Uploader API
-After=docker.service
-Requires=docker.service
+Description=WatchMe Avatar Uploader API (ECR)
+After=docker.service watchme-infrastructure.service
+Requires=docker.service watchme-infrastructure.service
 
 [Service]
-Type=oneshot
-RemainAfterExit=yes
-WorkingDirectory=/home/ubuntu
-ExecStart=/home/ubuntu/run-avatar-uploader.sh
-ExecStop=/usr/bin/docker-compose -f /home/ubuntu/docker-compose.prod.yml down
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/watchme-avatar-uploader
 TimeoutStartSec=0
-StandardOutput=journal
-StandardError=journal
+
+# ECRベースのコンテナ管理
+ExecStartPre=-/usr/bin/docker-compose -f docker-compose.prod.yml down
+ExecStart=/usr/bin/docker-compose -f docker-compose.prod.yml up
+ExecStop=/usr/bin/docker-compose -f docker-compose.prod.yml down
+
+Restart=always
+RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
