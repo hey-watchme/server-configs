@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  api-gpt-v1:
+    image: 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-vibe-scorer:latest
+    container_name: api-gpt-v1
+    ports:
+      - "127.0.0.1:8002:8002"
+    env_file:
+      - /home/ubuntu/api_gpt_v1/.env
+    networks:
+      - watchme-network
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  watchme-network:
+    external: true

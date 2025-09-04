@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   opensmile-api:
-    image: watchme-opensmile-api:latest
+    image: 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-opensmile-api:latest
     container_name: opensmile-api
     ports:
       - "127.0.0.1:8011:8011"

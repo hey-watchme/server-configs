@@ -12,6 +12,12 @@ TimeoutStartSec=0
 Restart=always
 RestartSec=10
 
+# ECRログイン（必要に応じて）
+ExecStartPre=-/bin/bash -c 'aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS --password-stdin 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com'
+
+# 最新イメージをプル
+ExecStartPre=-/usr/local/bin/docker-compose -f /home/ubuntu/watchme-server-configs/docker-compose-files/opensmile-api-docker-compose.prod.yml pull
+
 # Docker Composeを使用して起動
 ExecStartPre=-/usr/local/bin/docker-compose -f /home/ubuntu/watchme-server-configs/docker-compose-files/opensmile-api-docker-compose.prod.yml down
 ExecStart=/usr/local/bin/docker-compose -f /home/ubuntu/watchme-server-configs/docker-compose-files/opensmile-api-docker-compose.prod.yml up

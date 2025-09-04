@@ -1,17 +1,27 @@
 [Unit]
 Description=WatchMe Behavior YamNet (Sound Event Detection) API Service
-After=docker.service
-Requires=docker.service
+After=docker.service watchme-infrastructure.service
+Requires=docker.service watchme-infrastructure.service
 
 [Service]
 Type=simple
-RemainAfterExit=yes
-ExecStartPre=-/usr/bin/docker stop sed_api
-ExecStartPre=-/usr/bin/docker rm sed_api
-ExecStart=/usr/bin/docker run --rm --name sed_api -p 8004:8004 --env-file /home/ubuntu/watchme-behavior-yamnet/.env watchme-behavior-yamnet:latest
-ExecStop=/usr/bin/docker stop sed_api
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/api_sed_v1
+TimeoutStartSec=0
 Restart=always
 RestartSec=10
+
+# ECRログイン（必要に応じて）
+ExecStartPre=-/bin/bash -c 'aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS --password-stdin 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com'
+
+# 最新イメージをプル
+ExecStartPre=-/usr/local/bin/docker-compose -f /home/ubuntu/watchme-server-configs/docker-compose-files/sed-api-docker-compose.prod.yml pull
+
+# Docker Composeを使用して起動
+ExecStartPre=-/usr/local/bin/docker-compose -f /home/ubuntu/watchme-server-configs/docker-compose-files/sed-api-docker-compose.prod.yml down
+ExecStart=/usr/local/bin/docker-compose -f /home/ubuntu/watchme-server-configs/docker-compose-files/sed-api-docker-compose.prod.yml up
+ExecStop=/usr/local/bin/docker-compose -f /home/ubuntu/watchme-server-configs/docker-compose-files/sed-api-docker-compose.prod.yml down
 
 [Install]
 WantedBy=multi-user.target
