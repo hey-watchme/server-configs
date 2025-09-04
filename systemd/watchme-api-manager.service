@@ -16,12 +16,12 @@ RestartSec=10
 ExecStartPre=-/bin/bash -c 'aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS --password-stdin 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com'
 
 # 最新イメージをプル
-ExecStartPre=-/usr/local/bin/docker-compose -f /home/ubuntu/watchme-api-manager/docker-compose.prod.yml pull
+ExecStartPre=-/usr/local/bin/docker-compose -f /home/ubuntu/watchme-api-manager/docker-compose.all.yml pull
 
 # Docker Composeを使用して起動（API ManagerとSchedulerの両方）
-ExecStartPre=-/usr/local/bin/docker-compose -f /home/ubuntu/watchme-api-manager/docker-compose.prod.yml down
-ExecStart=/usr/local/bin/docker-compose -f /home/ubuntu/watchme-api-manager/docker-compose.prod.yml up
-ExecStop=/usr/local/bin/docker-compose -f /home/ubuntu/watchme-api-manager/docker-compose.prod.yml down
+ExecStartPre=-/usr/local/bin/docker-compose -f /home/ubuntu/watchme-api-manager/docker-compose.all.yml down
+ExecStart=/usr/local/bin/docker-compose -f /home/ubuntu/watchme-api-manager/docker-compose.all.yml up
+ExecStop=/usr/local/bin/docker-compose -f /home/ubuntu/watchme-api-manager/docker-compose.all.yml down
 
 [Install]
 WantedBy=multi-user.target
