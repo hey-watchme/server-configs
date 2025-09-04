@@ -116,22 +116,22 @@ watchme-server-configs/
 - **管理者**: watchme-infrastructure service
 - **作成日**: 2025年8月6日
 
-### 現在の接続状況（2025年9月3日更新）
+### 現在の接続状況（2025年9月4日更新）
 
-#### ✅ 接続済みコンテナ（13個）
+#### ✅ 接続済みコンテナ（12個）
 ```
-watchme-scheduler-prod       (172.27.0.2)  # APIスケジューラー
 watchme-api-manager-prod     (172.27.0.4)  # API管理UI
-opensmile-aggregator         (172.27.0.5)  # 感情スコア集計 ✅ systemd管理
+opensmile-aggregator         (172.27.0.5)  # 感情スコア集計
 watchme-vault-api            (172.27.0.6)  # Gateway API
 api_gen_prompt_mood_chart    (172.27.0.7)  # Vibe Aggregator
 api-gpt-v1                   (172.27.0.8)  # スコアリング
-watchme-web-prod             (172.27.0.9)  # Webダッシュボード
-vibe-transcriber-v2          (172.27.0.10) # Azure Speech ✅ systemd管理
-api_sed_v1-sed_api-1         (172.27.0.11) # 音声イベント検出
-opensmile-api                (172.27.0.12) # 音声特徴量抽出 ✅ systemd管理
+watchme-web-prod             (172.27.0.9)  # Webダッシュボード ✅ ネットワーク統合完了
+vibe-transcriber-v2          (172.27.0.10) # Azure Speech
+sed-api                      (172.27.0.11) # 音声イベント検出
+opensmile-api                (172.27.0.12) # 音声特徴量抽出
 watchme-admin                (172.27.0.13) # 管理画面
-api-sed-aggregator           (172.27.0.14) # 音声イベント集計 ✅ systemd管理
+api-sed-aggregator           (172.27.0.14) # 音声イベント集計
+watchme-avatar-uploader      (172.27.0.15) # アバターアップロード
 ```
 
 ### 段階的移行計画
@@ -151,27 +151,19 @@ api-sed-aggregator           (172.27.0.14) # 音声イベント集計 ✅ system
 - api-sed-aggregator: systemd管理に移行完了
 - vibe-transcriber-v2: systemd新規作成・移行完了
 
-#### Phase 4: 既存サービスの移行（🔄 進行中）
+#### Phase 4: ネットワーク統合（✅ 2025/09/04 完了）
 
-**移行が必要なサービス**:
-各サービスの `docker-compose.yml` を以下のように修正する必要があります。
+**実施内容**:
+- レガシーネットワーク4個を削除
+  - api_sed_v1_default
+  - watchme-api-manager_watchme-network  
+  - watchme-docker_watchme-network
+  - watchme-vault-api-docker_vault-network
+- 全サービスがwatchme-networkに統合完了
 
-```yaml
-# 現在（ネットワーク作成側）
-networks:
-  watchme-network:
-    driver: bridge  # ❌ これが問題
-
-# 修正後（ネットワーク利用側）
-networks:
-  watchme-network:
-    external: true  # ✅ 既存ネットワークを利用
-```
-
-**優先度順の移行対象**:
-1. ⚠️ ~~`/home/ubuntu/api_whisper_v1/docker-compose.prod.yml`~~ (2025/09/02 削除済み)
-2. ⚠️ `/home/ubuntu/watchme-docker/docker-compose.prod.yml`
-3. ⚠️ `/home/ubuntu/watchme-api-manager/docker-compose.prod.yml`
+**修正したサービス**:
+- ✅ `/home/ubuntu/watchme-docker/docker-compose.prod.yml` - external: trueに修正済み
+- ✅ watchme-api-manager systemd設定 - docker-compose.all.yml → docker-compose.prod.ymlに修正
 
 ### インフラ管理コマンド
 

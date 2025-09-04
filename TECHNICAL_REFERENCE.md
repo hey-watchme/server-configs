@@ -28,8 +28,6 @@
 
 ### 接続コンテナ（IP割り当て）
 ```
-172.27.0.2  : watchme-scheduler-prod
-172.27.0.3  : (旧)api-transcriber - 削除済み
 172.27.0.4  : watchme-api-manager-prod
 172.27.0.5  : opensmile-aggregator
 172.27.0.6  : watchme-vault-api
@@ -37,10 +35,11 @@
 172.27.0.8  : api-gpt-v1
 172.27.0.9  : watchme-web-prod
 172.27.0.10 : vibe-transcriber-v2
-172.27.0.11 : sed-api (旧: api_sed_v1-sed_api-1)
+172.27.0.11 : sed-api
 172.27.0.12 : opensmile-api
 172.27.0.13 : watchme-admin
 172.27.0.14 : api-sed-aggregator
+172.27.0.15 : watchme-avatar-uploader
 ```
 
 ## 📡 サービス一覧

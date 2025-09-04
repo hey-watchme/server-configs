@@ -1,5 +1,23 @@
 # WatchMe Server 変更履歴
 
+## 2025年9月4日（23:30 JST）
+
+### ネットワーク統合とsystemd設定修正
+- **watchme-api-manager systemd修正**:
+  - docker-compose.all.yml → docker-compose.prod.ymlに修正
+  - 8/30から発生していた"No such file or directory"エラーを解決
+  - サービス正常起動を確認
+
+- **Dockerネットワーク完全統合**:
+  - レガシーネットワーク4個を削除（8個→4個に削減）
+    - api_sed_v1_default
+    - watchme-api-manager_watchme-network
+    - watchme-docker_watchme-network
+    - watchme-vault-api-docker_vault-network
+  - watchme-docker/docker-compose.prod.yml修正（driver: bridge → external: true）
+  - 全12サービスがwatchme-network単一ネットワークに統合完了
+  - メモリ使用量削減と管理シンプル化を達成
+
 ## 2025年9月3日（17:20 JST更新）
 
 ### systemdサービスの完全移行 - 4つのrestart:noサービス修正
