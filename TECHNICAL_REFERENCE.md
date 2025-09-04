@@ -47,7 +47,7 @@
 
 | サービス | エンドポイント | ポート | systemd | ECRリポジトリ/ローカル | デプロイ方式 | 備考 |
 |---------|--------------|--------|---------|------------------------|------------|------|
-| **Gateway API** | `https://api.hey-watch.me/` | 8000 | watchme-vault-api | ローカル | Docker | ECRリポジトリなし |
+| **Gateway API** | `https://api.hey-watch.me/` | 8000 | watchme-vault-api | watchme-api-vault | ECR | ✅ 2025-09-04移行済み |
 | **API Manager UI** | `https://api.hey-watch.me/manager/` | 9001 | watchme-api-manager | watchme-api-manager | ？ | ECRリポジトリあり、確認必要 |
 | **Scheduler** | `https://api.hey-watch.me/scheduler/` | 8015 | watchme-api-manager | watchme-api-manager-scheduler | ？ | ECRリポジトリあり、確認必要 |
 | **Web Dashboard** | `https://dashboard.hey-watch.me/` | 3001 | watchme-web-app | watchme-web | ECR | ✅ 5週間前から稼働中 |
@@ -259,20 +259,18 @@ curl -I https://api.hey-watch.me/
 | **Emotion Aggregator** | watchme-api-opensmile-aggregator | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-opensmile-aggregator:latest |
 | **Prompt Generator** | watchme-api-vibe-aggregator | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-vibe-aggregator:latest |
 | **Web Dashboard** | watchme-web | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-web:latest |
+| **Gateway API** | watchme-api-vault | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-vault:latest |
 
 ### ECR移行状況サマリー
-#### ✅ 移行済み（10サービス）
+#### ✅ 移行済み（11サービス）
 - Admin Panel, Avatar Uploader, Azure Speech, Prompt Generator
 - Psychology Scorer, Behavior Detection, Emotion Features, Emotion Aggregator
 - Web Dashboard
-- Behavior Aggregator（2025-09-04追加）
+- Behavior Aggregator, Gateway API（2025-09-04追加）
 
 #### ❌ 未移行（リポジトリあり）（2サービス）
 - **API Manager UI** - リポジトリ: watchme-api-manager
 - **Scheduler** - リポジトリ: watchme-api-manager-scheduler
-
-#### ❌ 未移行（リポジトリなし）（1サービス）
-- **Gateway API** (watchme-vault-api) - ECRリポジトリ作成必要
 
 ### 未使用ECRリポジトリ
 - watchme-api-transcriber（旧バージョン、v2が稼働中）
