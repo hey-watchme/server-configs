@@ -54,7 +54,7 @@
 | **Admin Panel** | `https://admin.hey-watch.me/` | 9000 | watchme-admin | watchme/admin | ECR |
 | **Avatar Uploader** | (内部) | 8014 | watchme-avatar-uploader | watchme-api-avatar-uploader | ECR + systemd |
 | **Azure Speech** | `/vibe-transcriber-v2/` | 8013 | vibe-transcriber-v2 | watchme-api-transcriber-v2 | ECR |
-| **Prompt Generator** | `/vibe-aggregator/` | 8009 | mood-chart-api | watchme-api-whisper-prompt | Docker |
+| **Prompt Generator** | `/vibe-aggregator/` | 8009 | mood-chart-api | watchme-api-vibe-aggregator | ECR |
 | **Psychology Scorer** | `/vibe-scorer/` | 8002 | api-gpt-v1 | watchme-api-vibe-scorer | ECR |
 | **Behavior Detection** | `/behavior-features/` | 8004 | watchme-behavior-yamnet | watchme-api-behavior-features | ECR |
 | **Behavior Aggregator** | `/behavior-aggregator/` | 8010 | api-sed-aggregator | watchme-behavior-yamnet-aggregator | Docker |
@@ -256,11 +256,11 @@ curl -I https://api.hey-watch.me/
 | **Behavior Detection** | watchme-api-behavior-features | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-behavior-features:latest |
 | **Emotion Features** | watchme-opensmile-api | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-opensmile-api:latest |
 | **Emotion Aggregator** | watchme-api-opensmile-aggregator | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-opensmile-aggregator:latest |
+| **Prompt Generator** | watchme-api-vibe-aggregator | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-vibe-aggregator:latest |
 
 ### ECR未移行サービス
 - **Gateway API** (watchme-vault-api)
 - **API Manager UI** (watchme-api-manager) 
 - **Scheduler** (watchme-api-manager)
 - **Web Dashboard** (watchme-web-app)
-- **Prompt Generator** (mood-chart-api)
 - **Behavior Aggregator** (api-sed-aggregator)
