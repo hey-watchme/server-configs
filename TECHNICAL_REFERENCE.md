@@ -1,6 +1,6 @@
 # WatchMe 技術仕様書
 
-最終更新: 2025年9月3日 17:20 JST
+最終更新: 2025年9月4日 17:30 JST
 
 ## 🏗️ システムアーキテクチャ
 
@@ -37,7 +37,7 @@
 172.27.0.8  : api-gpt-v1
 172.27.0.9  : watchme-web-prod
 172.27.0.10 : vibe-transcriber-v2
-172.27.0.11 : api_sed_v1-sed_api-1
+172.27.0.11 : sed-api (旧: api_sed_v1-sed_api-1)
 172.27.0.12 : opensmile-api
 172.27.0.13 : watchme-admin
 172.27.0.14 : api-sed-aggregator
@@ -55,11 +55,11 @@
 | **Avatar Uploader** | (内部) | 8014 | watchme-avatar-uploader | watchme-api-avatar-uploader | ECR + systemd |
 | **Azure Speech** | `/vibe-transcriber-v2/` | 8013 | vibe-transcriber-v2 | watchme-api-transcriber-v2 | ECR |
 | **Prompt Generator** | `/vibe-aggregator/` | 8009 | mood-chart-api | watchme-api-whisper-prompt | Docker |
-| **Psychology Scorer** | `/vibe-scorer/` | 8002 | api-gpt-v1 | watchme-api-whisper-gpt | Docker |
-| **Behavior Detection** | `/behavior-features/` | 8004 | watchme-behavior-yamnet | watchme-behavior-yamnet | Docker |
+| **Psychology Scorer** | `/vibe-scorer/` | 8002 | api-gpt-v1 | watchme-api-vibe-scorer | ECR |
+| **Behavior Detection** | `/behavior-features/` | 8004 | watchme-behavior-yamnet | watchme-api-behavior-features | ECR |
 | **Behavior Aggregator** | `/behavior-aggregator/` | 8010 | api-sed-aggregator | watchme-behavior-yamnet-aggregator | Docker |
-| **Emotion Features** | `/emotion-features/` | 8011 | opensmile-api | opensmile | Docker |
-| **Emotion Aggregator** | `/emotion-aggregator/` | 8012 | opensmile-aggregator | watchme-opensmile-aggregator | Docker |
+| **Emotion Features** | `/emotion-features/` | 8011 | opensmile-api | watchme-opensmile-api | ECR |
+| **Emotion Aggregator** | `/emotion-aggregator/` | 8012 | opensmile-aggregator | watchme-api-opensmile-aggregator | ECR |
 
 ## 🔄 コンテナ間通信エンドポイント
 
@@ -70,7 +70,7 @@
 | Azure Speech | `vibe-transcriber-v2` | 8013 | `/fetch-and-transcribe` | POST |
 | Prompt Generator | `api_gen_prompt_mood_chart` | 8009 | `/generate-mood-prompt-supabase` | GET |
 | Psychology Scorer | `api-gpt-v1` | 8002 | `/analyze-vibegraph-supabase` | POST |
-| Behavior Detection | `api_sed_v1-sed_api-1` | 8004 | `/fetch-and-process-paths` | POST |
+| Behavior Detection | `sed-api` | 8004 | `/fetch-and-process-paths` | POST |
 | Behavior Aggregator | `api-sed-aggregator` | 8010 | `/analysis/sed` | POST |
 | Emotion Features | `opensmile-api` | 8011 | `/process/emotion-features` | POST |
 | Emotion Aggregator | `opensmile-aggregator` | 8012 | `/analyze/opensmile-aggregator` | POST |
@@ -244,3 +244,23 @@ curl -I https://api.hey-watch.me/
 5. **設定の一元管理**
    - 変更は必ずGit経由
    - 直接編集禁止
+
+## 🐳 ECRリポジトリ一覧
+
+| サービス名 | ECRリポジトリ | イメージURI |
+|-----------|-------------|------------|
+| **Admin Panel** | watchme-admin | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-admin:latest |
+| **Avatar Uploader** | watchme-avatar-uploader | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-avatar-uploader:latest |
+| **Azure Speech** | watchme-api-transcriber-v2 | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-transcriber-v2:latest |
+| **Psychology Scorer** | watchme-api-vibe-scorer | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-vibe-scorer:latest |
+| **Behavior Detection** | watchme-api-behavior-features | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-behavior-features:latest |
+| **Emotion Features** | watchme-opensmile-api | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-opensmile-api:latest |
+| **Emotion Aggregator** | watchme-api-opensmile-aggregator | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-opensmile-aggregator:latest |
+
+### ECR未移行サービス
+- **Gateway API** (watchme-vault-api)
+- **API Manager UI** (watchme-api-manager) 
+- **Scheduler** (watchme-api-manager)
+- **Web Dashboard** (watchme-web-app)
+- **Prompt Generator** (mood-chart-api)
+- **Behavior Aggregator** (api-sed-aggregator)
