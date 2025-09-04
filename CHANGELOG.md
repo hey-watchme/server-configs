@@ -1,12 +1,25 @@
 # WatchMe Server 変更履歴
 
-## 2025年9月4日（23:30 JST）
+## 2025年9月4日（23:45 JST更新）
 
-### ネットワーク統合とsystemd設定修正
+### スケジューラー緊急復旧とドキュメント改善
+- **watchme-scheduler緊急復旧**:
+  - 誤った修正によりスケジューラーが約30分間停止
+  - 原因: systemd設定をdocker-compose.prod.ymlに変更（API Managerのみ起動）
+  - 解決: docker-compose.all.ymlに戻し、ネットワーク設定も修正（external: true）
+  - 現在は両サービス（API Manager + Scheduler）正常稼働中
+
+- **ドキュメント大幅改善**:
+  - API Manager READMEにデプロイ時の重要注意事項を追記
+  - docker-compose.all.yml使用の必要性を強調
+  - トラブルシューティングに「スケジューラーが起動しない」を最優先項目として追加
+  - FAQ追加: API ManagerとSchedulerの管理方法を明記
+
+### ネットワーク統合とsystemd設定修正（23:30 JST）
 - **watchme-api-manager systemd修正**:
-  - docker-compose.all.yml → docker-compose.prod.ymlに修正
+  - ~~docker-compose.all.yml → docker-compose.prod.ymlに修正~~ ※誤った修正、後に戻した
+  - 最終的にdocker-compose.all.ymlが正しい設定
   - 8/30から発生していた"No such file or directory"エラーを解決
-  - サービス正常起動を確認
 
 - **Dockerネットワーク完全統合**:
   - レガシーネットワーク4個を削除（8個→4個に削減）

@@ -627,6 +627,19 @@ networks:
 python3 /home/ubuntu/watchme-server-configs/scripts/network_monitor.py --fix
 ```
 
+### Q: API ManagerとSchedulerはどのように管理されている？
+
+**A: 現在は1つのdocker-compose.all.ymlで両方を管理しています。**
+- **API Manager (UI)**: ポート9001で稼働
+- **Scheduler**: ポート8015で稼働
+- **重要**: systemdは`docker-compose.all.yml`を使用（両方起動）
+- **注意**: `docker-compose.prod.yml`は使用しない（API Managerのみ起動してしまう）
+
+**今後の改善案**（検討中）:
+- 2つのサービスを独立したディレクトリに分離
+- それぞれ独自のdocker-compose.prod.ymlを持つ
+- systemdサービスも2つに分離
+
 ### Q: このリポジトリの設定ファイルをそのまま本番にコピーすればいい？
 
 **A: いいえ、直接コピーはできません。**
@@ -690,6 +703,28 @@ sudo cp /etc/nginx/sites-available/api.hey-watch.me.backup.[最新のタイム�
 
 # テストとリロード
 sudo nginx -t && sudo systemctl reload nginx
+```
+
+### Q: スケジューラーが動かなくなった！
+
+**A: よくある原因と解決方法：**
+
+**原因1: docker-compose.prod.ymlを使ってしまった**
+```bash
+# 診断: スケジューラーコンテナが存在しない
+docker ps | grep scheduler
+# 何も表示されない場合
+
+# 解決方法:
+cd /home/ubuntu/watchme-api-manager
+docker-compose -f docker-compose.all.yml up -d
+```
+
+**原因2: ネットワーク設定の誤り**
+```bash
+# docker-compose.all.ymlの最後を確認
+tail -5 docker-compose.all.yml
+# external: trueであることを確認（driver: bridgeはNG）
 ```
 
 ### Q: どのポートが使われているか確認したい
