@@ -48,8 +48,8 @@
 | サービス | エンドポイント | ポート | systemd | ECRリポジトリ/ローカル | デプロイ方式 | 備考 |
 |---------|--------------|--------|---------|------------------------|------------|------|
 | **Gateway API** | `https://api.hey-watch.me/` | 8000 | watchme-vault-api | watchme-api-vault | ECR | ✅ 2025-09-04移行済み |
-| **API Manager UI** | `https://api.hey-watch.me/manager/` | 9001 | watchme-api-manager | watchme-api-manager | ？ | ECRリポジトリあり、確認必要 |
-| **Scheduler** | `https://api.hey-watch.me/scheduler/` | 8015 | watchme-api-manager | watchme-api-manager-scheduler | ？ | ECRリポジトリあり、確認必要 |
+| **API Manager UI** | `https://api.hey-watch.me/manager/` | 9001 | watchme-api-manager | watchme-api-manager | ECR | ✅ 2025-09-04移行済み |
+| **Scheduler** | `https://api.hey-watch.me/scheduler/` | 8015 | watchme-api-manager | watchme-api-manager-scheduler | ECR | ✅ 2025-09-04移行済み |
 | **Web Dashboard** | `https://dashboard.hey-watch.me/` | 3001 | watchme-web-app | watchme-web | ECR | ✅ 5週間前から稼働中 |
 | **Admin Panel** | `https://admin.hey-watch.me/` | 9000 | watchme-admin | watchme-admin | ECR | ✅ 稼働中 |
 | **Avatar Uploader** | (内部) | 8014 | watchme-avatar-uploader | watchme-api-avatar-uploader | ECR | ✅ systemd経由 |
@@ -260,17 +260,15 @@ curl -I https://api.hey-watch.me/
 | **Prompt Generator** | watchme-api-vibe-aggregator | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-vibe-aggregator:latest |
 | **Web Dashboard** | watchme-web | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-web:latest |
 | **Gateway API** | watchme-api-vault | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-vault:latest |
+| **API Manager UI** | watchme-api-manager | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-manager:latest |
+| **Scheduler** | watchme-api-manager-scheduler | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-manager-scheduler:latest |
 
 ### ECR移行状況サマリー
-#### ✅ 移行済み（11サービス）
+#### ✅ 移行済み（13サービス - 全サービス移行完了！）
 - Admin Panel, Avatar Uploader, Azure Speech, Prompt Generator
 - Psychology Scorer, Behavior Detection, Emotion Features, Emotion Aggregator
 - Web Dashboard
-- Behavior Aggregator, Gateway API（2025-09-04追加）
-
-#### ❌ 未移行（リポジトリあり）（2サービス）
-- **API Manager UI** - リポジトリ: watchme-api-manager
-- **Scheduler** - リポジトリ: watchme-api-manager-scheduler
+- Behavior Aggregator, Gateway API, API Manager UI, Scheduler（2025-09-04追加）
 
 ### 未使用ECRリポジトリ
 - watchme-api-transcriber（旧バージョン、v2が稼働中）
