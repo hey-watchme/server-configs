@@ -57,7 +57,7 @@
 | **Prompt Generator** | `/vibe-aggregator/` | 8009 | mood-chart-api | watchme-api-vibe-aggregator | ECR | ✅ 稼働中 |
 | **Psychology Scorer** | `/vibe-scorer/` | 8002 | api-gpt-v1 | watchme-api-vibe-scorer | ECR | ✅ 2025-09-04移行済み |
 | **Behavior Detection** | `/behavior-features/` | 8004 | watchme-behavior-yamnet | watchme-api-behavior-features | ECR | ✅ 2025-09-04移行済み |
-| **Behavior Aggregator** | `/behavior-aggregator/` | 8010 | api-sed-aggregator | watchme-api-behavior-aggregator | Docker | ❌ リポジトリあり、未移行 |
+| **Behavior Aggregator** | `/behavior-aggregator/` | 8010 | api-sed-aggregator | watchme-api-behavior-aggregator | ECR | ✅ 2025-09-04移行済み |
 | **Emotion Features** | `/emotion-features/` | 8011 | opensmile-api | watchme-opensmile-api | ECR | ✅ 2025-09-04移行済み |
 | **Emotion Aggregator** | `/emotion-aggregator/` | 8012 | opensmile-aggregator | watchme-api-opensmile-aggregator | ECR | ✅ 2025-09-04移行済み |
 
@@ -254,19 +254,20 @@ curl -I https://api.hey-watch.me/
 | **Azure Speech** | watchme-api-transcriber-v2 | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-transcriber-v2:latest |
 | **Psychology Scorer** | watchme-api-vibe-scorer | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-vibe-scorer:latest |
 | **Behavior Detection** | watchme-api-behavior-features | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-behavior-features:latest |
+| **Behavior Aggregator** | watchme-api-behavior-aggregator | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-behavior-aggregator:latest |
 | **Emotion Features** | watchme-opensmile-api | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-opensmile-api:latest |
 | **Emotion Aggregator** | watchme-api-opensmile-aggregator | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-opensmile-aggregator:latest |
 | **Prompt Generator** | watchme-api-vibe-aggregator | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-vibe-aggregator:latest |
 | **Web Dashboard** | watchme-web | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-web:latest |
 
 ### ECR移行状況サマリー
-#### ✅ 移行済み（9サービス）
+#### ✅ 移行済み（10サービス）
 - Admin Panel, Avatar Uploader, Azure Speech, Prompt Generator
 - Psychology Scorer, Behavior Detection, Emotion Features, Emotion Aggregator
 - Web Dashboard
+- Behavior Aggregator（2025-09-04追加）
 
-#### ❌ 未移行（リポジトリあり）（3サービス）
-- **Behavior Aggregator** (api-sed-aggregator) - リポジトリ: watchme-api-behavior-aggregator
+#### ❌ 未移行（リポジトリあり）（2サービス）
 - **API Manager UI** - リポジトリ: watchme-api-manager
 - **Scheduler** - リポジトリ: watchme-api-manager-scheduler
 
