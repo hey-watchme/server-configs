@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  api_gen_prompt_mood_chart:
+    image: 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-vibe-aggregator:latest
+    container_name: api_gen_prompt_mood_chart
+    ports:
+      - "127.0.0.1:8009:8009"
+    env_file:
+      - /home/ubuntu/watchme-api-vibe-aggregator/.env
+    networks:
+      - watchme-network
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8009/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  watchme-network:
+    external: true

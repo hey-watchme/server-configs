@@ -1,18 +1,27 @@
 [Unit]
-Description=Mood Chart Prompt Generator API
-After=docker.service
-Requires=docker.service
+Description=Mood Chart Prompt Generator API (Vibe Aggregator)
+After=docker.service watchme-infrastructure.service
+Requires=docker.service watchme-infrastructure.service
 
 [Service]
 Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/watchme-api-vibe-aggregator
+TimeoutStartSec=0
 Restart=always
 RestartSec=10
-WorkingDirectory=/home/ubuntu/api_gen-prompt_mood-chart_v1
-ExecStart=/usr/bin/docker-compose up
-ExecStop=/usr/bin/docker-compose down
-StandardOutput=append:/home/ubuntu/api_gen-prompt_mood-chart_v1/service.log
-StandardError=append:/home/ubuntu/api_gen-prompt_mood-chart_v1/service-error.log
+
+# ECRログイン（必要に応じて）
+ExecStartPre=-/bin/bash -c 'aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS --password-stdin 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com'
+
+# 最新イメージをプル
+ExecStartPre=-/usr/local/bin/docker-compose -f /home/ubuntu/watchme-server-configs/docker-compose-files/mood-chart-api-docker-compose.prod.yml pull
+
+# Docker Composeを使用して起動
+ExecStartPre=-/usr/local/bin/docker-compose -f /home/ubuntu/watchme-server-configs/docker-compose-files/mood-chart-api-docker-compose.prod.yml down
+ExecStart=/usr/local/bin/docker-compose -f /home/ubuntu/watchme-server-configs/docker-compose-files/mood-chart-api-docker-compose.prod.yml up
+ExecStop=/usr/local/bin/docker-compose -f /home/ubuntu/watchme-server-configs/docker-compose-files/mood-chart-api-docker-compose.prod.yml down
 
 [Install]
 WantedBy=multi-user.target
-EOF < /dev/null
