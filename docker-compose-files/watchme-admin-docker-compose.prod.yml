@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  admin:
+    image: 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-admin:latest
+    container_name: watchme-admin
+    ports:
+      - "127.0.0.1:9000:9000"  # セキュリティ向上のためlocalhostのみにバインド
+    environment:
+      - PORT=9000
+    env_file:
+      - /home/ubuntu/admin/.env
+    volumes:
+      - /home/ubuntu/admin/logs:/app/logs
+    networks:
+      - watchme-network
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  watchme-network:
+    external: true
