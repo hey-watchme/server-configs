@@ -1,5 +1,46 @@
 # WatchMe Server 変更履歴
 
+## 2025年9月5日（18:00 JST更新）
+
+### systemd管理の完全統一とシステムクリーンアップ
+
+#### サービス管理の改善
+- **mood-chart-api.service修正完了**:
+  - サービスファイル最終行の不正文字（`EOF < /dev/null`）を削除
+  - docker-compose-files/mood-chart-api-docker-compose.prod.yml を新規作成
+  - ECRベースの統一管理に移行、systemd自動起動を実現
+
+- **watchme-infrastructure.service設定修正**:
+  - [Unit]セクションの誤った RequiredBy 設定を削除
+  - systemd警告メッセージを解消
+
+- **watchme-admin.service ECR移行完了**:
+  - docker-compose-files/watchme-admin-docker-compose.prod.yml を作成
+  - セキュリティ向上: ポートバインドを 0.0.0.0:9000 から 127.0.0.1:9000 に変更
+  - Type=simple に変更して正しいプロセス管理を実現
+
+- **watchme-web-app.service ECR移行完了**:
+  - docker-compose-files/watchme-web-docker-compose.prod.yml を作成
+  - /home/ubuntu/watchme-docker の既存設定を活用
+  - ボリュームマウントでデータとアバターを永続化
+
+#### システムクリーンアップ（6GB削減）
+- **実施前**: ディスク使用率 69%（20GB/29GB）
+- **実施後**: ディスク使用率 50%（14GB/29GB）
+- **削減内容**:
+  - 重複Dockerイメージ 7個（3.5GB）
+  - 未使用Dockerボリューム 2個
+  - バックアップディレクトリ 5個
+  - Python仮想環境（venv）8個
+  - 古いAPIディレクトリ 3個
+  - 各種アーカイブファイル
+
+#### システム最終状態
+- 全13サービスがsystemd管理下で正常稼働
+- サーバー再起動時の自動起動を保証
+- 全ポートが127.0.0.1にバインド（セキュリティ向上）
+- watchme-networkで全サービスが統一通信
+
 ## 2025年9月4日（23:45 JST更新）
 
 ### スケジューラー緊急復旧とドキュメント改善

@@ -81,18 +81,31 @@
 ```
 watchme-server-configs/
 ├── docker-compose.infra.yml    # ネットワークインフラ定義
-├── docker-compose-files/        # 🆕 各サービスのdocker-compose設定
+├── docker-compose-files/        # 各サービスのdocker-compose設定
+│   ├── api-gpt-v1-docker-compose.prod.yml
+│   ├── api-sed-aggregator-docker-compose.prod.yml
+│   ├── mood-chart-api-docker-compose.prod.yml
 │   ├── opensmile-api-docker-compose.prod.yml
 │   ├── opensmile-aggregator-docker-compose.prod.yml
-│   ├── api-sed-aggregator-docker-compose.prod.yml
-│   └── vibe-transcriber-v2-docker-compose.prod.yml
-├── systemd/                     # systemdサービスファイル
+│   ├── sed-api-docker-compose.prod.yml
+│   ├── vibe-transcriber-v2-docker-compose.prod.yml
+│   ├── watchme-admin-docker-compose.prod.yml
+│   └── watchme-web-docker-compose.prod.yml
+├── systemd/                     # systemdサービスファイル（全13サービス）
 │   ├── watchme-infrastructure.service  # インフラ管理サービス
-│   ├── opensmile-api.service          # 🆕 systemd管理
-│   ├── opensmile-aggregator.service   # 🆕 systemd管理
-│   ├── api-sed-aggregator.service     # 🆕 systemd管理
-│   ├── vibe-transcriber-v2.service    # 🆕 systemd管理
-│   └── ...
+│   ├── api-gpt-v1.service
+│   ├── api-sed-aggregator.service
+│   ├── mood-chart-api.service
+│   ├── opensmile-api.service
+│   ├── opensmile-aggregator.service
+│   ├── vibe-transcriber-v2.service
+│   ├── watchme-admin.service
+│   ├── watchme-api-manager.service
+│   ├── watchme-avatar-uploader.service
+│   ├── watchme-behavior-yamnet.service
+│   ├── watchme-vault-api.service
+│   ├── watchme-web-app.service
+│   └── watchme-docker.service
 ├── sites-available/             # Nginx設定ファイル
 │   └── api.hey-watch.me
 ├── scripts/                     # 管理・監視スクリプト
@@ -116,23 +129,30 @@ watchme-server-configs/
 - **管理者**: watchme-infrastructure service
 - **作成日**: 2025年8月6日
 
-### 現在の接続状況（2025年9月4日更新）
+### 現在の接続状況（2025年9月5日更新）
 
-#### ✅ 接続済みコンテナ（12個）
+#### ✅ 接続済みコンテナ（13個） - 全サービス統合完了
 ```
 watchme-api-manager-prod     (172.27.0.4)  # API管理UI
-opensmile-aggregator         (172.27.0.5)  # 感情スコア集計
-watchme-vault-api            (172.27.0.6)  # Gateway API
-api_gen_prompt_mood_chart    (172.27.0.7)  # Vibe Aggregator
-api-gpt-v1                   (172.27.0.8)  # スコアリング
-watchme-web-prod             (172.27.0.9)  # Webダッシュボード ✅ ネットワーク統合完了
-vibe-transcriber-v2          (172.27.0.10) # Azure Speech
-sed-api                      (172.27.0.11) # 音声イベント検出
-opensmile-api                (172.27.0.12) # 音声特徴量抽出
-watchme-admin                (172.27.0.13) # 管理画面
-api-sed-aggregator           (172.27.0.14) # 音声イベント集計
-watchme-avatar-uploader      (172.27.0.15) # アバターアップロード
+watchme-scheduler-prod       (172.27.0.5)  # スケジューラー
+opensmile-aggregator         (172.27.0.6)  # 感情スコア集計
+watchme-vault-api            (172.27.0.7)  # Gateway API
+api_gen_prompt_mood_chart    (172.27.0.8)  # Vibe Aggregator
+api-gpt-v1                   (172.27.0.9)  # スコアリング
+watchme-web-prod             (172.27.0.10) # Webダッシュボード
+vibe-transcriber-v2          (172.27.0.11) # Azure Speech
+sed-api                      (172.27.0.12) # 音声イベント検出
+opensmile-api                (172.27.0.13) # 音声特徴量抽出
+watchme-admin                (172.27.0.14) # 管理画面
+api-sed-aggregator           (172.27.0.15) # 音声イベント集計
+watchme-avatar-uploader      (172.27.0.16) # アバターアップロード
 ```
+
+#### 💡 システム状態（2025年9月5日時点）
+- **全13サービスがsystemd管理下で稼働**
+- **サーバー再起動時の自動起動を保証**
+- **全ポートが127.0.0.1にバインド（セキュリティ向上）**
+- **ディスク使用率: 50%（14GB/29GB）** - クリーンアップで6GB削減
 
 ### 段階的移行計画
 
