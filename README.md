@@ -4,7 +4,8 @@
 
 ## ⚡ クイックスタート
 
-**デプロイが必要な場合** → [OPERATIONS_GUIDE.md](./OPERATIONS_GUIDE.md)  
+**アプリケーションをデプロイする場合** → [OPERATIONS_GUIDE.md](./OPERATIONS_GUIDE.md#1-アプリケーションのデプロイ手順)  
+**サーバー構成を変更する場合** → [OPERATIONS_GUIDE.md](./OPERATIONS_GUIDE.md#2-サーバー構成の変更手順)  
 **技術詳細を調べる場合** → [TECHNICAL_REFERENCE.md](./TECHNICAL_REFERENCE.md)  
 **変更履歴を確認する場合** → [CHANGELOG.md](./CHANGELOG.md)
 
