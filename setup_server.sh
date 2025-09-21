@@ -90,13 +90,67 @@ if systemctl list-unit-files | grep -q 'watchme-infrastructure.service'; then
     echo "Enabling and starting watchme-infrastructure.service..."
     sudo systemctl enable --now watchme-infrastructure.service
     echo "Waiting a moment for the infrastructure to settle..."
-    sleep 3
-    sudo systemctl status watchme-infrastructure.service --no-pager
+    sleep 10
+    sudo systemctl status watchme-infrastructure.service --no-pager || true
 else
     echo "WARNING: watchme-infrastructure.service not found. Please ensure it exists."
 fi
 
+# --- Enable All WatchMe Services ---
+echo ""
+echo "--> Enabling all WatchMe services for auto-start on boot..."
+
+# 全てのwatchmeサービスをリスト化
+WATCHME_SERVICES=(
+    "watchme-vault-api"
+    "watchme-api-manager"
+    "watchme-web-app"
+    "watchme-admin"
+    "watchme-avatar-uploader"
+    "watchme-behavior-yamnet"
+    "watchme-docker"
+    "api-gpt-v1"
+    "api-sed-aggregator"
+    "mood-chart-api"
+    "opensmile-api"
+    "opensmile-aggregator"
+    "superb-api"
+    "vibe-transcriber-v2"
+)
+
+# 各サービスを有効化（起動はしない）
+for service in "${WATCHME_SERVICES[@]}"; do
+    if systemctl list-unit-files | grep -q "${service}.service"; then
+        echo "Enabling ${service}.service for auto-start..."
+        sudo systemctl enable "${service}.service" 2>/dev/null || true
+    else
+        echo "  - ${service}.service not found, skipping..."
+    fi
+done
+
+# --- Start Critical Services ---
+echo ""
+echo "--> Starting critical services..."
+
+# 重要なサービスのみ起動
+CRITICAL_SERVICES=(
+    "watchme-vault-api"
+    "watchme-api-manager"
+    "watchme-web-app"
+)
+
+for service in "${CRITICAL_SERVICES[@]}"; do
+    if systemctl list-unit-files | grep -q "${service}.service"; then
+        echo "Starting ${service}.service..."
+        sudo systemctl start "${service}.service" 2>/dev/null || true
+        sleep 2
+    fi
+done
+
 echo ""
 echo "=== Setup Finished Successfully! ==="
-echo "NOTE: This script enables the base infrastructure."
-echo "You may need to enable other specific services individually using 'sudo systemctl enable --now <service-name>'"
+echo "All services have been enabled for auto-start on server reboot."
+echo "Critical services have been started."
+echo ""
+echo "To check service status: sudo systemctl status watchme-*.service"
+echo "To start all services: for s in watchme-*.service api-*.service mood-*.service opensmile-*.service vibe-*.service; do sudo systemctl start \$s; done"

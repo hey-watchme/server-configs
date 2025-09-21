@@ -49,7 +49,7 @@ server {
         }
     }
 
-    # Sound Event Detection API (behavior-features)
+    # AST API (behavior-features) - 新APIに移行済み
     # Sound Event Detection Aggregator API (behavior-aggregator)
     location /behavior-aggregator/ {
         proxy_pass http://localhost:8010/;
@@ -69,7 +69,7 @@ server {
         }
     }
 
-    # OpenSMILE API (emotion-features)
+    # SUPERB API (emotion-features) - 新APIに移行済み
 
     # OpenSMILE Aggregator API (emotion-aggregator)
     location /emotion-aggregator/ {
@@ -90,7 +90,7 @@ server {
         }
     }
     location /emotion-features/ {
-        proxy_pass http://localhost:8011/;
+        proxy_pass http://localhost:8018/;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -145,7 +145,7 @@ server {
         }
     }
     location /behavior-features/ {
-        proxy_pass http://localhost:8004/;
+        proxy_pass http://localhost:8017/;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

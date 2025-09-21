@@ -4,19 +4,19 @@
 
 ## 🏗️ システムアーキテクチャ
 
-### AWS EC2仕様
-- **インスタンスタイプ**: t4g.small
+### AWS EC2仕様 （更新: 2025-09-19）
+- **インスタンスタイプ**: t4g.large (一時的アップグレード、以前t4g.small)
 - **CPU**: 2 vCPU (AWS Graviton2)
-- **メモリ**: 2.0GB RAM (実使用: 1.8GB)
+- **メモリ**: 8.0GB RAM (実使用: 7.8GB) ← 大幅増加
 - **ストレージ**: 30GB gp3 SSD
 - **リージョン**: ap-southeast-2 (Sydney)
 - **IPアドレス**: 3.24.16.82
 
-### リソース制約
-- **メモリ使用率**: ~78% (1.4GB/1.8GB)
-- **Swap使用率**: ~65% (1.3GB/2.0GB)
-- **利用可能メモリ**: 400MB未満
-- **注意**: 新しいサービス追加時はメモリ制限必須
+### リソース状況 （t4g.largeアップグレード後）
+- **メモリ使用率**: 未確認 (t4g.small時: ~78%)
+- **Swap使用率**: 未確認 (t4g.small時: ~65%)
+- **利用可能メモリ**: 6GB以上 (大幅改善)
+- **注意**: 将来t4g.smallに戻す可能性あり、リソース管理は継続必要
 
 ## 🌐 ネットワーク設計
 
@@ -55,9 +55,9 @@
 | **Azure Speech** | `/vibe-transcriber-v2/` | 8013 | vibe-transcriber-v2 | watchme-api-transcriber-v2 | ECR | ✅ 稼働中 |
 | **Prompt Generator** | `/vibe-aggregator/` | 8009 | mood-chart-api | watchme-api-vibe-aggregator | ECR | ✅ 稼働中 |
 | **Psychology Scorer** | `/vibe-scorer/` | 8002 | api-gpt-v1 | watchme-api-vibe-scorer | ECR | ✅ 2025-09-04移行済み |
-| **Behavior Detection** | `/behavior-features/` | 8004 | watchme-behavior-yamnet | watchme-api-behavior-features | ECR | ✅ 2025-09-04移行済み |
+| **Behavior Detection** | `/behavior-features/` | 8017 | watchme-behavior-ast | watchme-api-ast | ECR | ✅ 2025-09-19移行済み |
 | **Behavior Aggregator** | `/behavior-aggregator/` | 8010 | api-sed-aggregator | watchme-api-behavior-aggregator | ECR | ✅ 2025-09-04移行済み |
-| **Emotion Features** | `/emotion-features/` | 8011 | opensmile-api | watchme-opensmile-api | ECR | ✅ 2025-09-04移行済み |
+| **Emotion Features** | `/emotion-features/` | 8018 | watchme-emotion-superb | watchme-api-superb | ECR | ✅ 2025-09-19移行済み |
 | **Emotion Aggregator** | `/emotion-aggregator/` | 8012 | opensmile-aggregator | watchme-api-opensmile-aggregator | ECR | ✅ 2025-09-04移行済み |
 
 ## 🔄 コンテナ間通信エンドポイント
@@ -66,12 +66,12 @@
 
 | API | コンテナ名 | ポート | エンドポイント | メソッド |
 |-----|-----------|--------|---------------|----------|
-| Azure Speech | `vibe-transcriber-v2` | 8013 | `/fetch-and-transcribe` | POST |
-| Prompt Generator | `api_gen_prompt_mood_chart` | 8009 | `/generate-mood-prompt-supabase` | GET |
-| Psychology Scorer | `api-gpt-v1` | 8002 | `/analyze-vibegraph-supabase` | POST |
-| Behavior Detection | `sed-api` | 8004 | `/fetch-and-process-paths` | POST |
-| Behavior Aggregator | `api-sed-aggregator` | 8010 | `/analysis/sed` | POST |
-| Emotion Features | `opensmile-api` | 8011 | `/process/emotion-features` | POST |
+| Azure Speech         | `vibe-transcriber-v2` | 8013 | `/fetch-and-transcribe`         | POST     |
+| Prompt Generator     | `api_gen_prompt_mood_chart` | 8009 | `/generate-mood-prompt-supabase` | GET      |
+| Psychology Scorer    | `api-gpt-v1`          | 8002 | `/analyze-vibegraph-supabase`   | POST     |
+| Behavior Detection   | `ast-api`             | 8017 | `/fetch-and-process-paths`      | POST     |  # sed-apiから移行
+| Behavior Aggregator  | `api-sed-aggregator`  | 8010 | `/analysis/sed`                 | POST     |
+| Emotion Features     | `superb-api`          | 8018 | `/process/emotion-features`     | POST     |  # opensmile-apiから移行
 | Emotion Aggregator | `opensmile-aggregator` | 8012 | `/analyze/opensmile-aggregator` | POST |
 
 ## 🚨 トラブルシューティング
