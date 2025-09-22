@@ -301,7 +301,7 @@ def trigger_processing_pipeline(file_path, device_id, date, time_slot):
                         print(f"Starting Vibe Scorer (ChatGPT analysis) for {device_id}/{date}/{time_slot}...")
                         try:
                             vibe_scorer_response = requests.post(
-                                f"{API_BASE_URL}/analyze-timeblock",
+                                f"{API_BASE_URL}/vibe-scorer/analyze-timeblock",
                                 json={
                                     "prompt": prompt,
                                     "device_id": device_id,

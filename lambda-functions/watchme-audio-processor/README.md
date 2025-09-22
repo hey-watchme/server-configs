@@ -37,7 +37,8 @@
 | --- | --- | --- |
 | `API_BASE_URL` | `https://api.hey-watch.me` | 各種分析APIのベースURL。 |
 
-### 変更履歴 (2025-01-22 v4) ✨
+### 変更履歴 (2025-01-22 v4.1) ✨
+- **エンドポイント修正**: Vibe Scorerのエンドポイントを`/vibe-scorer/analyze-timeblock`に修正
 - **完全自動化を実現**: Vibe Aggregator完了後、自動的にVibe Scorer（ChatGPT分析）を起動
 - **タイムアウト統一**: 全APIのタイムアウトを180秒（3分）に統一
 - **処理フローの完成**: 音声アップロード → ChatGPT分析 → ダッシュボード表示まで全自動
