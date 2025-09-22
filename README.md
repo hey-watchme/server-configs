@@ -245,6 +245,7 @@ location /emotion-features/ {
 
 | ドキュメント | 内容 | 読者 |
 |------------|------|------|
+| **[PROCESSING_ARCHITECTURE.md](./PROCESSING_ARCHITECTURE.md)** | 🆕 音声処理の全体フロー、API依存関係、データの流れ | 開発者・設計者 |
 | **[OPERATIONS_GUIDE.md](./OPERATIONS_GUIDE.md)** | デプロイ手順、トラブルシューティング、日常運用 | 開発者・運用担当 |
 | **[TECHNICAL_REFERENCE.md](./TECHNICAL_REFERENCE.md)** | システム仕様、ネットワーク設計、API一覧 | エンジニア |
 | **[CHANGELOG.md](./CHANGELOG.md)** | 全変更履歴（時系列） | 全員 |
