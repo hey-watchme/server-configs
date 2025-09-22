@@ -97,6 +97,7 @@ def trigger_processing_pipeline(file_path, device_id, date, time_slot):
     
     # 1. Azure Speech API (音声書き起こし)
     # vibe-transcriber-v2 エンドポイントを使用
+    azure_success = False
     try:
         print(f"Calling Azure Speech API for transcription...")
         transcribe_response = requests.post(
@@ -104,15 +105,16 @@ def trigger_processing_pipeline(file_path, device_id, date, time_slot):
             json={
                 "file_paths": [file_path]
             },
-            timeout=60  # Azureは時間かかる場合があるため長めに
+            timeout=180  # 3分まで待機（暫定処理）
         )
+        azure_success = transcribe_response.status_code == 200
         results['transcription'] = {
             'status_code': transcribe_response.status_code,
-            'success': transcribe_response.status_code == 200
+            'success': azure_success
         }
         
         # 文字起こし結果を取得（後続の処理で使用する場合）
-        if transcribe_response.status_code == 200:
+        if azure_success:
             try:
                 response_data = transcribe_response.json()
                 print(f"Azure Speech API response: {response_data}")
@@ -135,6 +137,7 @@ def trigger_processing_pipeline(file_path, device_id, date, time_slot):
     # 音響分析と感情分析を同時実行
     
     # AST API (音響イベント検出)
+    ast_success = False
     try:
         print(f"Calling AST API for audio event detection...")
         ast_response = requests.post(
@@ -142,11 +145,12 @@ def trigger_processing_pipeline(file_path, device_id, date, time_slot):
             json={
                 "file_paths": [file_path]
             },
-            timeout=45
+            timeout=180  # 3分まで待機（暫定処理）
         )
+        ast_success = ast_response.status_code == 200
         results['ast_behavior'] = {
             'status_code': ast_response.status_code,
-            'success': ast_response.status_code == 200
+            'success': ast_success
         }
         
         # AST処理が成功したら、SED Aggregatorを自動起動
@@ -197,6 +201,7 @@ def trigger_processing_pipeline(file_path, device_id, date, time_slot):
         results['ast_behavior'] = {'error': str(e), 'success': False}
     
     # SUPERB API (感情認識)
+    superb_success = False
     try:
         print(f"Calling SUPERB API for emotion recognition...")
         superb_response = requests.post(
@@ -204,17 +209,107 @@ def trigger_processing_pipeline(file_path, device_id, date, time_slot):
             json={
                 "file_paths": [file_path]
             },
-            timeout=45
+            timeout=180  # 3分まで待機（暫定処理）
         )
+        superb_success = superb_response.status_code == 200
         results['superb_emotion'] = {
             'status_code': superb_response.status_code,
-            'success': superb_response.status_code == 200
+            'success': superb_success
         }
+        
+        # SUPERB処理が成功したら、Emotion Aggregatorを自動起動
+        if superb_response.status_code == 200:
+            print(f"SUPERB API successful. Starting Emotion Aggregator for {device_id}/{date}...")
+            try:
+                emotion_aggregator_response = requests.post(
+                    f"{API_BASE_URL}/emotion-aggregator/analyze/opensmile-aggregator",
+                    json={
+                        "device_id": device_id,
+                        "date": date
+                    },
+                    timeout=10  # タスク開始の確認のみなので短時間
+                )
+                
+                if emotion_aggregator_response.status_code == 200:
+                    response_data = emotion_aggregator_response.json()
+                    task_id = response_data.get('task_id')
+                    print(f"Emotion Aggregator started successfully. Task ID: {task_id}")
+                    results['emotion_aggregator'] = {
+                        'status_code': emotion_aggregator_response.status_code,
+                        'success': True,
+                        'task_id': task_id,
+                        'message': response_data.get('message', 'Started')
+                    }
+                else:
+                    print(f"Emotion Aggregator failed to start: {emotion_aggregator_response.status_code}")
+                    results['emotion_aggregator'] = {
+                        'status_code': emotion_aggregator_response.status_code,
+                        'success': False,
+                        'error': f'HTTP {emotion_aggregator_response.status_code}'
+                    }
+                    
+            except requests.Timeout:
+                print("Emotion Aggregator timeout")
+                results['emotion_aggregator'] = {'error': 'Timeout', 'success': False}
+            except Exception as e:
+                print(f"Emotion Aggregator error: {str(e)}")
+                results['emotion_aggregator'] = {'error': str(e), 'success': False}
+        else:
+            print("SUPERB API failed, skipping Emotion Aggregator")
+            
     except requests.Timeout:
         print("SUPERB API timeout")
         results['superb_emotion'] = {'error': 'Timeout', 'success': False}
     except Exception as e:
         print(f"SUPERB API error: {str(e)}")
         results['superb_emotion'] = {'error': str(e), 'success': False}
+    
+    # 3. Vibe Aggregator (プロンプト生成)
+    # 3つの基礎APIがすべて成功した場合のみ実行
+    if azure_success and ast_success and superb_success:
+        print(f"All 3 APIs successful. Starting Vibe Aggregator for timeblock prompt generation...")
+        try:
+            # Vibe AggregatorはGETメソッドを使用
+            vibe_aggregator_response = requests.get(
+                f"{API_BASE_URL}/vibe-aggregator/generate-timeblock-prompt",
+                params={
+                    "device_id": device_id,
+                    "date": date,
+                    "time_block": time_slot
+                },
+                timeout=30  # プロンプト生成は通常短時間
+            )
+            
+            if vibe_aggregator_response.status_code == 200:
+                print(f"Vibe Aggregator successful for {device_id}/{date}/{time_slot}")
+                results['vibe_aggregator'] = {
+                    'status_code': vibe_aggregator_response.status_code,
+                    'success': True,
+                    'message': 'Timeblock prompt generated and saved to dashboard table'
+                }
+                
+                # Vibe Aggregatorが成功したら、次にVibe Scorerを呼び出すこともできる
+                # ただし、今回はプロンプト生成までとする
+                
+            else:
+                print(f"Vibe Aggregator failed: {vibe_aggregator_response.status_code}")
+                results['vibe_aggregator'] = {
+                    'status_code': vibe_aggregator_response.status_code,
+                    'success': False,
+                    'error': f'HTTP {vibe_aggregator_response.status_code}'
+                }
+                
+        except requests.Timeout:
+            print("Vibe Aggregator timeout")
+            results['vibe_aggregator'] = {'error': 'Timeout', 'success': False}
+        except Exception as e:
+            print(f"Vibe Aggregator error: {str(e)}")
+            results['vibe_aggregator'] = {'error': str(e), 'success': False}
+    else:
+        print(f"Skipping Vibe Aggregator - Prerequisites not met: Azure={azure_success}, AST={ast_success}, SUPERB={superb_success}")
+        results['vibe_aggregator'] = {
+            'skipped': True,
+            'reason': f'Prerequisites not met: Azure={azure_success}, AST={ast_success}, SUPERB={superb_success}'
+        }
     
     return results
