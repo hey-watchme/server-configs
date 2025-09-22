@@ -9,13 +9,18 @@
 ## 2. 処理フロー (Workflow)
 
 1.  iOSアプリから録音された音声ファイル（`.wav`）が `s3://watchme-vault/files/` 以下にアップロードされます。
+    - iPhoneデバイスの場合、S3パスは `files/iphone_{device_id}/YYYY-MM-DD/HH-MM/audio.wav` となります
 2.  S3が `ObjectCreated` イベントを検知し、このLambda関数を自動的にトリガーします。
 3.  Lambda関数は、イベント情報からアップロードされたファイルのバケット名とキー（パス）を取得します。
-4.  取得したファイルパスを元に、以下の各種分析APIを順次呼び出します。
-    - **文字起こしAPI** (Whisper)
-    - **行動分析API** (AST)
-    - **感情分析API** (SUPERB)
-5.  （将来実装）各APIからの分析結果を集約し、Supabaseのデータベースに保存します。
+4.  デバイスIDを判定し、処理対象かどうかを確認します：
+    - `iphone_`プレフィックス付きのデバイスID → iPhoneデバイスとして処理
+    - `TEST_DEVICES`環境変数に含まれるデバイスID → テストデバイスとして処理
+    - その他 → スキップ（オブザーバーデバイスは従来通りcron処理）
+5.  取得したファイルパスを元に、以下の各種分析APIを順次呼び出します：
+    - **Azure Speech API** (vibe-transcriber-v2) - 音声文字起こし
+    - **AST API** (behavior-features) - 音響イベント検出
+    - **SUPERB API** (emotion-features) - 感情認識
+6.  各APIの処理結果はそれぞれのAPIで直接Supabaseデータベースに保存されます。
 
 ## 3. 依存関係 (Dependencies)
 
@@ -29,15 +34,18 @@
 | キー | 値の例 | 説明 |
 | --- | --- | --- |
 | `API_BASE_URL` | `https://api.hey-watch.me` | 各種分析APIのベースURL。 |
-| `SUPABASE_URL` | `https://xxxxx.supabase.co` | Supabaseプロジェクトの URL（devicesテーブル参照用）。 |
-| `SUPABASE_KEY` | `eyJhbGci...` | SupabaseのAnon Key（devicesテーブル参照用）。 |
+| `IPHONE_PREFIX` | `iphone_` | iPhoneデバイスを識別するためのプレフィックス。 |
 | `ENABLE_ALL_DEVICES` | `false` | `true`にすると、すべてのデバイスを処理対象とする。コスト管理のため通常は`false`。 |
 | `TEST_DEVICES` | `test_device_001,demo_device` | `ENABLE_ALL_DEVICES`が`false`の時に、処理を許可するデバイスIDのリスト（カンマ区切り）。 |
 
+### 変更履歴 (2025-09-22)
+- **デバッグ用ログ追加**: Azure Speech APIのレスポンス詳細をログ出力するように修正
+- **エラーハンドリング改善**: APIレスポンスのパースエラー時に詳細情報を記録
+- **Vibe Scorer API削除**: 使用されていないコードを削除
+
 ### 変更履歴 (2025-09-21)
-- **device_typeベースの判定に変更**: device_idにプレフィックスを付ける方式から、Supabaseのdevicesテーブルのdevice_typeフィールドで判定する方式に変更
-- **IPHONE_PREFIX環境変数を廃止**: 不要になったため削除
-- **Supabase連携を追加**: devicesテーブルから`device_type='ios'`のデバイスを自動判定
+- **プレフィックスベースの判定を採用**: iPhoneデバイスは`iphone_`プレフィックスで識別
+- **Supabase依存の一時回避**: pydantic_coreエラーのため、device_typeベースの判定は保留
 
 ## 5. デプロイ手順 (Deployment)
 

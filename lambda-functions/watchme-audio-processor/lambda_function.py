@@ -126,10 +126,15 @@ def trigger_processing_pipeline(file_path, device_id, date, time_slot):
         # 文字起こし結果を取得（後続の処理で使用する場合）
         if transcribe_response.status_code == 200:
             try:
-                transcription_text = transcribe_response.json().get('text', '')
+                response_data = transcribe_response.json()
+                print(f"Azure Speech API response: {response_data}")
+                transcription_text = response_data.get('text', '')
                 results['transcription']['has_text'] = bool(transcription_text)
-            except:
-                pass
+                results['transcription']['response'] = response_data
+            except Exception as e:
+                print(f"Error parsing Azure response: {str(e)}")
+                print(f"Response text: {transcribe_response.text}")
+                results['transcription']['parse_error'] = str(e)
                 
     except requests.Timeout:
         print("Transcription API timeout")
@@ -182,28 +187,5 @@ def trigger_processing_pipeline(file_path, device_id, date, time_slot):
     except Exception as e:
         print(f"SUPERB API error: {str(e)}")
         results['superb_emotion'] = {'error': str(e), 'success': False}
-    
-    # 3. Vibe Aggregator/Scorer (必要に応じて)
-    # 文字起こしが成功した場合のみ実行
-    # if results.get('transcription', {}).get('success'):
-    #     try:
-    #         print(f"Calling Vibe Scorer API...")
-    #         vibe_response = requests.post(
-    #             f"{API_BASE_URL}/vibe-scorer/",
-    #             json={
-    #                 "file_path": file_path,
-    #                 "device_id": device_id,
-    #                 "date": date,
-    #                 "time_slot": time_slot
-    #             },
-    #             timeout=30
-    #         )
-    #         results['vibe_scorer'] = {
-    #             'status_code': vibe_response.status_code,
-    #             'success': vibe_response.status_code == 200
-    #         }
-    #     except Exception as e:
-    #         print(f"Vibe Scorer API error: {str(e)}")
-    #         results['vibe_scorer'] = {'error': str(e), 'success': False}
     
     return results
