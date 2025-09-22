@@ -58,31 +58,70 @@
 
 Lambda関数のコードを更新する際は、以下の手順でデプロイパッケージを作成し、アップロードします。
 
+### ⚠️ 超重要：ビルド時の注意事項
+
+**絶対にDockerを使用したビルドスクリプトを使わないでください！**
+Dockerコンテナ内でビルドすると、ローカルの変更が反映されない問題が発生します。
+
+### 正しいビルド手順
+
 1.  **ローカルでコードを修正**
     - このディレクトリにある `lambda_function.py` を編集します。
 
-2.  **パッケージの作成**
-    - 以下のコマンドを実行して、コードと依存ライブラリを `function.zip` にまとめます。
+2.  **build.shスクリプトを使用**（推奨）
     ```bash
-    # このディレクトリ (watchme-audio-processor) に移動
+    # このディレクトリに移動
     cd /path/to/watchme-audio-processor
+    
+    # ビルドスクリプトを実行
+    ./build.sh
+    ```
+    
+    このスクリプトは以下を実行します：
+    - 古いビルドファイルを削除
+    - **ローカルの** `lambda_function.py` をコピー
+    - 依存関係をインストール
+    - ZIPファイルを作成
 
-    # ビルド用の一時ディレクトリを作成
-    mkdir -p build
-
-    # 依存ライブラリをインストール
-    pip install -r requirements.txt -t ./build/
-
-    # コード本体をコピー
-    cp lambda_function.py ./build/
-
-    # zipファイルを作成
+3.  **手動ビルド**（build.shが動作しない場合）
+    ```bash
+    # クリーンアップ
+    rm -rf build function.zip
+    
+    # ビルドディレクトリ作成
+    mkdir build
+    
+    # 重要：ローカルのファイルをコピー
+    cp lambda_function.py build/
+    
+    # 依存関係インストール
+    pip3 install --target ./build requests --quiet
+    
+    # ZIP作成
     cd build
     zip -r ../function.zip .
     cd ..
     ```
 
-3.  **AWSコンソールからアップロード**
+4.  **変更が反映されているか必ず確認**
+    ```bash
+    # ZIPファイル内のコードを確認
+    unzip -p function.zip lambda_function.py | grep "追加したコード"
+    ```
+
+5.  **AWSコンソールからアップロード**
     - AWS Lambdaの `watchme-audio-processor` 関数のページを開きます。
     - 「コードソース」セクションの「アップロード元」から「.zipファイル」を選択します。
-    - 作成した `function.zip` をアップロードし、「保存」または「デプロイ」をクリックします。
+    - 作成した `function.zip` をアップロードし、「保存」をクリックします。
+
+### 🚨 トラブルシューティング
+
+**「no change」と表示される場合：**
+- ブラウザキャッシュをクリア（Ctrl+F5）
+- Lambda関数のコードエディタで直接変更を確認
+- 環境変数を一時的に変更して強制再デプロイ
+
+**変更が反映されない場合：**
+1. CloudWatchログで実行されているコードを確認
+2. ZIPファイル内のコードが最新か確認
+3. Lambda関数のバージョンが更新されているか確認

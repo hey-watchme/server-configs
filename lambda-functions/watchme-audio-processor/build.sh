@@ -1,19 +1,27 @@
 #!/bin/bash
 
-# Dockerを使用してLambda用のパッケージを作成
-echo "Building Lambda package with Docker..."
+# ビルドディレクトリをクリーンアップ
+echo "🧹 Cleaning build directory..."
+rm -rf build function.zip
 
-# Pythonの公式Lambdaイメージを使用してビルド
-docker run --rm \
-  -v "$PWD":/var/task \
-  -w /var/task \
-  public.ecr.aws/lambda/python:3.11 \
-  bash -c "
-    pip install --target ./build requests supabase &&
-    cp lambda_function.py ./build/ &&
-    cd build &&
-    zip -r ../function.zip . -q
-  "
+# ビルドディレクトリを作成
+mkdir -p build
+
+echo "📦 Building Lambda package..."
+
+# 重要：ローカルのlambda_function.pyをビルドディレクトリにコピー
+echo "📝 Copying lambda_function.py from local directory..."
+cp lambda_function.py build/
+
+# 依存関係をインストール（requestsのみ必要）
+echo "📚 Installing dependencies..."
+pip3 install --target ./build requests --quiet
+
+# ZIPファイルを作成
+echo "🗜️ Creating function.zip..."
+cd build
+zip -r ../function.zip . -q
+cd ..
 
 if [ -f function.zip ]; then
   echo "✅ function.zip created successfully"
