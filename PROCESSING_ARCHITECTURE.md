@@ -93,13 +93,27 @@ graph TD
   - バーストイベント（感情の急変点）
 - **保存先**: `dashboard`、`dashboard_summary`テーブル
 
-## 🔧 実装上の課題と解決案
+## 🔧 実装状況
+
+### ✅ 実装済み（2025-09-22）
+
+#### AST → SED Aggregator連携
+- Lambda関数内で**イベント駆動型処理**を実装
+- AST API処理完了を検知して、自動的にSED Aggregatorを起動
+- 実装方法：
+  ```python
+  # AST API処理（同期的 - 完了を待つ）
+  if ast_response.status_code == 200:
+      # AST処理完了を確認
+      # SED Aggregatorを自動起動（非同期 - タスクIDのみ取得）
+      sed_response = requests.post("/behavior-aggregator/analysis/sed", ...)
+  ```
 
 ### 現在の課題
 
 1. **依存関係の管理**
    - Vibe分析は他のすべての処理完了が必要
-   - 現在は各APIが独立して動作し、完了通知がない
+   - ~~現在は各APIが独立して動作し、完了通知がない~~ → AST/SEDは連携実装済み
 
 2. **エラーハンドリング**
    - 一部のAPIが失敗した場合の処理が不明確

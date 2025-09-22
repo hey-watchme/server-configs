@@ -148,6 +148,47 @@ def trigger_processing_pipeline(file_path, device_id, date, time_slot):
             'status_code': ast_response.status_code,
             'success': ast_response.status_code == 200
         }
+        
+        # AST処理が成功したら、SED Aggregatorを自動起動
+        if ast_response.status_code == 200:
+            print(f"AST API successful. Starting SED Aggregator for {device_id}/{date}...")
+            try:
+                sed_aggregator_response = requests.post(
+                    f"{API_BASE_URL}/behavior-aggregator/analysis/sed",
+                    json={
+                        "device_id": device_id,
+                        "date": date
+                    },
+                    timeout=10  # タスク開始の確認のみなので短時間
+                )
+                
+                if sed_aggregator_response.status_code == 200:
+                    response_data = sed_aggregator_response.json()
+                    task_id = response_data.get('task_id')
+                    print(f"SED Aggregator started successfully. Task ID: {task_id}")
+                    results['sed_aggregator'] = {
+                        'status_code': sed_aggregator_response.status_code,
+                        'success': True,
+                        'task_id': task_id,
+                        'message': response_data.get('message', 'Started')
+                    }
+                else:
+                    print(f"SED Aggregator failed to start: {sed_aggregator_response.status_code}")
+                    results['sed_aggregator'] = {
+                        'status_code': sed_aggregator_response.status_code,
+                        'success': False,
+                        'error': f'HTTP {sed_aggregator_response.status_code}'
+                    }
+                    
+            except requests.Timeout:
+                print("SED Aggregator timeout")
+                results['sed_aggregator'] = {'error': 'Timeout', 'success': False}
+            except Exception as e:
+                print(f"SED Aggregator error: {str(e)}")
+                results['sed_aggregator'] = {'error': str(e), 'success': False}
+        else:
+            print("AST API failed, skipping SED Aggregator")
+            
     except requests.Timeout:
         print("AST API timeout")
         results['ast_behavior'] = {'error': 'Timeout', 'success': False}

@@ -13,11 +13,14 @@
 2.  S3が `ObjectCreated` イベントを検知し、このLambda関数を自動的にトリガーします。
 3.  Lambda関数は、イベント情報からアップロードされたファイルのバケット名とキー（パス）を取得します。
 4.  **すべてのデバイスを一律処理対象とします**（iPhone、オブザーバー、その他すべて）
-5.  取得したファイルパスを元に、以下の各種分析APIを順次呼び出します：
+5.  取得したファイルパスを元に、以下の各種分析APIを呼び出します：
     - **Azure Speech API** (vibe-transcriber-v2) - 音声文字起こし
     - **AST API** (behavior-features) - 音響イベント検出
     - **SUPERB API** (emotion-features) - 感情認識
-6.  各APIの処理結果はそれぞれのAPIで直接Supabaseデータベースに保存されます。
+6.  **イベント駆動型の処理連鎖**:
+    - AST APIの処理が完了すると、自動的に**SED Aggregator API**を起動
+    - SED Aggregatorは非同期でバックグラウンド実行（Lambda関数は完了を待たない）
+7.  各APIの処理結果はそれぞれのAPIで直接Supabaseデータベースに保存されます。
 
 ## 3. 依存関係 (Dependencies)
 
@@ -31,6 +34,11 @@
 | キー | 値の例 | 説明 |
 | --- | --- | --- |
 | `API_BASE_URL` | `https://api.hey-watch.me` | 各種分析APIのベースURL。 |
+
+### 変更履歴 (2025-09-22 v3)
+- **イベント駆動型処理の実装**: AST API処理完了後、自動的にSED Aggregatorを起動
+- **処理の連鎖**: AST (音響イベント検出) → SED Aggregator (行動パターン集計) の自動連携
+- **非同期タスク管理**: SED Aggregatorのタスクは非同期で実行、task_idのみ取得
 
 ### 変更履歴 (2025-09-22 v2)
 - **すべてのデバイスを一律処理**: iPhoneプレフィックス判定を削除し、S3にアップロードされたすべてのオーディオファイルを処理対象に変更
