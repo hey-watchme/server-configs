@@ -7,9 +7,10 @@ from datetime import datetime
 
 # 環境変数
 API_BASE_URL = os.environ.get('API_BASE_URL', 'https://api.hey-watch.me')
-IPHONE_PREFIX = os.environ.get('IPHONE_PREFIX', 'iphone_')
-ENABLE_ALL_DEVICES = os.environ.get('ENABLE_ALL_DEVICES', 'false').lower() == 'true'
-TEST_DEVICES = os.environ.get('TEST_DEVICES', '').split(',')
+# 以下の環境変数は不要になったがコメントアウトで残す（履歴用）
+# IPHONE_PREFIX = os.environ.get('IPHONE_PREFIX', 'iphone_')
+# ENABLE_ALL_DEVICES = os.environ.get('ENABLE_ALL_DEVICES', 'false').lower() == 'true'
+# TEST_DEVICES = os.environ.get('TEST_DEVICES', '').split(',')
 
 def lambda_handler(event, context):
     """
@@ -84,22 +85,9 @@ def lambda_handler(event, context):
 def should_process(device_id):
     """処理対象かどうかを判定"""
     
-    # 全デバイス処理モード（テスト用）
-    if ENABLE_ALL_DEVICES:
-        print(f"All devices enabled, processing {device_id}")
-        return True
-    
-    # iPhoneデバイスのみ処理
-    if device_id.startswith(IPHONE_PREFIX):
-        print(f"iPhone device detected: {device_id}")
-        return True
-    
-    # 環境変数で指定されたテストデバイス
-    if device_id in TEST_DEVICES:
-        print(f"Test device detected: {device_id}")
-        return True
-    
-    return False
+    # S3に来たすべてのオーディオファイルを一律処理
+    print(f"Processing all audio files - device_id: {device_id}")
+    return True
 
 
 def trigger_processing_pipeline(file_path, device_id, date, time_slot):

@@ -8,14 +8,11 @@
 
 ## 2. 処理フロー (Workflow)
 
-1.  iOSアプリから録音された音声ファイル（`.wav`）が `s3://watchme-vault/files/` 以下にアップロードされます。
-    - iPhoneデバイスの場合、S3パスは `files/iphone_{device_id}/YYYY-MM-DD/HH-MM/audio.wav` となります
+1.  各デバイスから録音された音声ファイル（`.wav`）が `s3://watchme-vault/files/` 以下にアップロードされます。
+    - S3パスは `files/{device_id}/YYYY-MM-DD/HH-MM/audio.wav` となります
 2.  S3が `ObjectCreated` イベントを検知し、このLambda関数を自動的にトリガーします。
 3.  Lambda関数は、イベント情報からアップロードされたファイルのバケット名とキー（パス）を取得します。
-4.  デバイスIDを判定し、処理対象かどうかを確認します：
-    - `iphone_`プレフィックス付きのデバイスID → iPhoneデバイスとして処理
-    - `TEST_DEVICES`環境変数に含まれるデバイスID → テストデバイスとして処理
-    - その他 → スキップ（オブザーバーデバイスは従来通りcron処理）
+4.  **すべてのデバイスを一律処理対象とします**（iPhone、オブザーバー、その他すべて）
 5.  取得したファイルパスを元に、以下の各種分析APIを順次呼び出します：
     - **Azure Speech API** (vibe-transcriber-v2) - 音声文字起こし
     - **AST API** (behavior-features) - 音響イベント検出
@@ -34,9 +31,11 @@
 | キー | 値の例 | 説明 |
 | --- | --- | --- |
 | `API_BASE_URL` | `https://api.hey-watch.me` | 各種分析APIのベースURL。 |
-| `IPHONE_PREFIX` | `iphone_` | iPhoneデバイスを識別するためのプレフィックス。 |
-| `ENABLE_ALL_DEVICES` | `false` | `true`にすると、すべてのデバイスを処理対象とする。コスト管理のため通常は`false`。 |
-| `TEST_DEVICES` | `test_device_001,demo_device` | `ENABLE_ALL_DEVICES`が`false`の時に、処理を許可するデバイスIDのリスト（カンマ区切り）。 |
+
+### 変更履歴 (2025-09-22 v2)
+- **すべてのデバイスを一律処理**: iPhoneプレフィックス判定を削除し、S3にアップロードされたすべてのオーディオファイルを処理対象に変更
+- **環境変数の削除**: `IPHONE_PREFIX`, `ENABLE_ALL_DEVICES`, `TEST_DEVICES` を削除
+- **iOSアプリ連携修正**: プレフィックスなしの純粋なdevice_idを使用するよう変更
 
 ### 変更履歴 (2025-09-22)
 - **デバッグ用ログ追加**: Azure Speech APIのレスポンス詳細をログ出力するように修正
