@@ -6,21 +6,23 @@
 
 従来は1時間ごとのスケジュール実行（cron）だったため、ユーザーが結果を確認するまでに大きな遅延が発生していました。この関数は、S3バケットへの音声ファイルアップロードをトリガーとして即座に実行されることで、ニア・リアルタイムな分析体験を実現します。
 
-## 2. 処理フロー (Workflow)
+## 2. 処理フロー (Workflow) - 完全自動化済み ✅
 
 1.  各デバイスから録音された音声ファイル（`.wav`）が `s3://watchme-vault/files/` 以下にアップロードされます。
     - S3パスは `files/{device_id}/YYYY-MM-DD/HH-MM/audio.wav` となります
 2.  S3が `ObjectCreated` イベントを検知し、このLambda関数を自動的にトリガーします。
 3.  Lambda関数は、イベント情報からアップロードされたファイルのバケット名とキー（パス）を取得します。
 4.  **すべてのデバイスを一律処理対象とします**（iPhone、オブザーバー、その他すべて）
-5.  取得したファイルパスを元に、以下の各種分析APIを呼び出します：
+5.  取得したファイルパスを元に、以下の各種分析APIを並列実行します：
     - **Azure Speech API** (vibe-transcriber-v2) - 音声文字起こし
-    - **AST API** (behavior-features) - 音響イベント検出
+    - **AST API** (behavior-features) - 音響イベント検出  
     - **SUPERB API** (emotion-features) - 感情認識
-6.  **イベント駆動型の処理連鎖**:
-    - AST APIの処理が完了すると、自動的に**SED Aggregator API**を起動
-    - SED Aggregatorは非同期でバックグラウンド実行（Lambda関数は完了を待たない）
-7.  各APIの処理結果はそれぞれのAPIで直接Supabaseデータベースに保存されます。
+6.  **イベント駆動型の処理連鎖（完全自動化）**:
+    - AST API完了 → **SED Aggregator**（行動パターン集計）を自動起動
+    - SUPERB API完了 → **Emotion Aggregator**（感情スコア集計）を自動起動
+    - 3つのAPI全て完了 → **Vibe Aggregator**（プロンプト生成）を自動起動
+    - Vibe Aggregator完了 → **Vibe Scorer**（ChatGPT分析）を自動起動 ✨NEW
+7.  最終的に分析結果が`dashboard`テーブルに自動保存され、ダッシュボードに即座に反映されます。
 
 ## 3. 依存関係 (Dependencies)
 
@@ -34,6 +36,11 @@
 | キー | 値の例 | 説明 |
 | --- | --- | --- |
 | `API_BASE_URL` | `https://api.hey-watch.me` | 各種分析APIのベースURL。 |
+
+### 変更履歴 (2025-01-22 v4) ✨
+- **完全自動化を実現**: Vibe Aggregator完了後、自動的にVibe Scorer（ChatGPT分析）を起動
+- **タイムアウト統一**: 全APIのタイムアウトを180秒（3分）に統一
+- **処理フローの完成**: 音声アップロード → ChatGPT分析 → ダッシュボード表示まで全自動
 
 ### 変更履歴 (2025-09-22 v3)
 - **イベント駆動型処理の実装**: AST API処理完了後、自動的にSED Aggregatorを起動
@@ -109,10 +116,21 @@ Dockerコンテナ内でビルドすると、ローカルの変更が反映さ�
     unzip -p function.zip lambda_function.py | grep "追加したコード"
     ```
 
-5.  **AWSコンソールからアップロード**
-    - AWS Lambdaの `watchme-audio-processor` 関数のページを開きます。
-    - 「コードソース」セクションの「アップロード元」から「.zipファイル」を選択します。
-    - 作成した `function.zip` をアップロードし、「保存」をクリックします。
+5.  **デプロイ方法（2つの選択肢）**
+
+    **方法1: AWS CLI経由（推奨）** 🚀
+    ```bash
+    # コマンドライン1行でデプロイ完了
+    aws lambda update-function-code \
+      --function-name watchme-audio-processor \
+      --zip-file fileb://function.zip \
+      --region ap-southeast-2
+    ```
+    
+    **方法2: AWSコンソール経由**
+    - AWS Lambdaの `watchme-audio-processor` 関数のページを開きます
+    - 「コードソース」セクションの「アップロード元」から「.zipファイル」を選択
+    - 作成した `function.zip` をアップロードし、「保存」をクリック
 
 ### 🚨 トラブルシューティング
 

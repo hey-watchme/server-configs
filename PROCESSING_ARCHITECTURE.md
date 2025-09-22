@@ -8,55 +8,124 @@ WatchMeプラットフォームは、音声データから**3つの分析軸**�
 2. **行動（Behavior）** - 音響イベントから推定される行動パターン
 3. **感情（Emotion）** - 8つの基本感情の分析
 
+## 🎯 2つの処理モード
+
+### 1. タイムブロック処理（1日48回）
+- **頻度**: 30分ごと（48回/日）
+- **トリガー**: オブザーバーデバイスが60秒録音してS3にアップロード
+- **目的**: 個別の30分単位の心理状態分析
+- **出力**: dashboardテーブルに30分単位のデータ保存
+
+### 2. 累積分析処理（リアルタイム更新）
+- **頻度オプション**:
+  - **案1**: 1時間ごとの定期実行（24回/日）
+  - **案2**: タイムブロック処理完了ごと（48回/日）※推奨
+- **目的**: ダッシュボードに常に最新の統合分析を表示
+- **処理内容**: その時点（例：12時）までの全タイムブロック（0時〜12時）を統合分析
+- **ユーザー体験**: アプリで自分で録音した場合、数分後には結果をグラフに反映
+- **出力**: dashboard_summaryテーブルに最新サマリー保存
+
 ## 🔄 処理フロー全体図
 
-### 📊 2段階処理システム
+### 📊 タイムブロック処理フロー（30分ごと・1日48回）
+
+※現在はVibe Aggregator（プロンプト生成）まで自動化、Vibe Scorer（ChatGPT分析）は手動
 
 ```mermaid
 graph TD
-    A[音声ファイルアップロード] --> B[S3 Storage]
+    A[オブザーバー: 60秒録音] --> B[S3 Upload]
     B --> C[Lambda Function起動]
     
-    C --> D[第1段階: 並列処理開始]
+    C --> D[第1段階: 基礎分析・並列処理]
     
-    D --> E[Azure Speech API<br/>音声文字起こし<br/>⚡同期]
-    D --> F[AST API<br/>音響イベント検出<br/>⚡同期]
-    D --> G[SUPERB API<br/>感情認識<br/>⚡同期]
+    D --> E[Azure Speech API<br/>音声文字起こし<br/>⚡同期・3分待機]
+    D --> F[AST API<br/>音響イベント検出<br/>⚡同期・3分待機]
+    D --> G[SUPERB API<br/>感情認識<br/>⚡同期・3分待機]
     
-    F --> I[SED Aggregator<br/>行動パターン集計<br/>⚙️非同期]
-    G --> J[Emotion Aggregator<br/>感情スコア集計<br/>⚙️非同期]
+    F --> I[SED Aggregator<br/>行動パターン集計<br/>⚙️非同期・並走]
+    G --> J[Emotion Aggregator<br/>感情スコア集計<br/>⚙️非同期・並走]
     
-    E --> W{3つのAPI完了待ち}
-    I --> W
-    J --> W
+    E --> W{3つの同期API完了待ち}
+    F --> W
+    G --> W
     
     W --> K[Vibe Aggregator<br/>タイムブロック<br/>プロンプト生成]
     
-    K --> L1[Vibe Scorer<br/>ChatGPT分析<br/>タイムブロック]
-    L1 --> T[dashboardテーブル<br/>タイムブロック単位保存]
+    K --> L[Vibe Scorer<br/>ChatGPT分析<br/>タイムブロック]
+    L --> T[dashboardテーブル<br/>30分単位データ保存]
     
-    T --> N[全タイムブロック完了待ち]
-    N --> O[Vibe Aggregator<br/>日次統合<br/>プロンプト生成]
-    O --> L2[Vibe Scorer<br/>ChatGPT分析<br/>日次統合]
-    L2 --> M[dashboard_summary<br/>日次結果保存]
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style T fill:#9f9,stroke:#333,stroke-width:2px
 ```
 
-### 🎯 処理レベルの説明
+### 📈 累積分析処理フロー（随時更新）
 
-#### レベル1: タイムブロック処理（30分単位）
-1. **基礎分析**（3つのAPI並列実行）
-   - Azure Speech: 文字起こし → **vibe_whisper**テーブル
-   - AST: 音響イベント検出 → **behavior_yamnet**テーブル
-   - SUPERB: 感情認識 → **emotion_opensmile**テーブル
+```mermaid
+graph TD
+    TB[タイムブロック処理完了] --> TR{実行タイミング}
+    
+    TR -->|案1: 1時間ごと| H[定期実行<br/>24回/日]
+    TR -->|案2: 即座に<br/>※推奨| R[リアルタイム<br/>48回/日]
+    
+    H --> VA[Vibe Aggregator<br/>累積版]
+    R --> VA
+    
+    VA --> Q[全タイムブロック取得<br/>0時〜現在時刻]
+    Q --> P[統合プロンプト生成<br/>時系列データ含む]
+    P --> VS[Vibe Scorer<br/>ChatGPT統合分析]
+    
+    VS --> S[分析結果生成]
+    S --> S1[時間帯別サマリー<br/>午前/午後の様子]
+    S --> S2[感情推移グラフ<br/>データポイント]
+    S --> S3[バーストイベント<br/>急変点検出]
+    
+    S1 --> DS[dashboard_summary<br/>最新状態を上書き保存]
+    S2 --> DS
+    S3 --> DS
+    
+    DS --> UI[ダッシュボード<br/>リアルタイム表示]
+    
+    style TB fill:#ff9,stroke:#333,stroke-width:2px
+    style UI fill:#9ff,stroke:#333,stroke-width:2px
+```
 
-2. **タイムブロック統合**
-   - Vibe Aggregator: 上記3つのテーブルからデータ取得してプロンプト生成
-   - Vibe Scorer: ChatGPTでタイムブロック分析 → dashboardテーブル
+### 🎯 処理の詳細説明
 
-#### レベル2: 日次処理（1日統合）
-1. **日次統合**
-   - Vibe Aggregator: 48個のタイムブロックを統合してプロンプト生成
-   - Vibe Scorer: ChatGPTで日次分析 → dashboard_summaryテーブル
+## 🔄 タイムブロック処理の詳細
+
+#### 第1段階: 基礎分析（3つのAPI並列実行）
+- **Azure Speech API**: 文字起こし → **vibe_whisper**テーブル
+- **AST API**: 音響イベント検出 → **behavior_yamnet**テーブル  
+- **SUPERB API**: 感情認識 → **emotion_opensmile**テーブル
+
+#### 第2段階: データ集計（非同期・並走）
+- **SED Aggregator**: ASTの結果から行動パターンを集計 → **behavior_summary**テーブル
+- **Emotion Aggregator**: SUPERBの結果から感情スコアを集計 → **emotion_opensmile_summary**テーブル
+
+#### 第3段階: タイムブロック気分分析
+**3つの同期API完了を合図として実行：**
+- **Vibe Aggregator（タイムブロック版）**: 3つの基礎分析結果からChatGPT用プロンプト生成
+- **Vibe Scorer（タイムブロック版）**: ChatGPTで30分単位の分析 → **dashboard**テーブル
+
+## 📈 累積分析処理の詳細
+
+#### トリガー方式の選択
+1. **定期実行方式（1時間ごと）**
+   - メリット：システム負荷が予測可能
+   - デメリット：最大1時間の遅延
+
+2. **リアルタイム方式（タイムブロック完了ごと）** ※推奨
+   - メリット：ユーザーが録音後数分で結果確認可能
+   - デメリット：処理頻度が高い（1日48回）
+
+#### 処理内容
+1. **データ収集**: その日の0時から現在時刻までの全タイムブロック取得
+2. **プロンプト生成**: 時系列データを含む統合プロンプト作成
+3. **ChatGPT分析**: 
+   - 時間帯別の傾向（午前中の様子、午後の変化など）
+   - 感情の推移パターン
+   - 特筆すべきイベント（バースト）の検出
+4. **結果保存**: dashboard_summaryテーブルを最新状態に更新
 
 ## 📋 詳細な処理ステップ
 
@@ -80,7 +149,7 @@ graph TD
 - **出力**: 感情スコア（Joy, Fear, Anger, Trust, Disgust, Sadness, Surprise, Anticipation）
 - **保存先**: `emotion_features`テーブル
 
-### 2️⃣ 第二段階：データ集計（並列処理）
+### 2️⃣ 第二段階：データ集計（非同期・第3段階と並走）
 
 #### Speech Aggregator
 - **入力**: Whisper APIの結果
@@ -99,15 +168,17 @@ graph TD
 - **出力**: 時間帯別の感情推移
 - **保存先**: `emotion_opensmile_summary`テーブル
 
-### 3️⃣ 第三段階：気分分析（すべてに依存）
+### 3️⃣ 第三段階：タイムブロック気分分析（3つの同期API完了で起動）
 
 #### Vibe Aggregator (`api_gen-prompt_mood-chart_v1`)
 - **入力**: 
-  - 文字起こし結果（Speech Aggregator）
-  - 行動パターン（SED Aggregator）
-  - 感情スコア（Emotion Aggregator）
-- **処理**: ChatGPT用のプロンプトを生成
+  - 文字起こし結果（vibe_whisperテーブル）
+  - 音響イベント（behavior_yamnetテーブル）
+  - 感情スコア（emotion_opensmileテーブル）
+- **処理**: ChatGPT用のプロンプトを生成（**同期処理**）
 - **出力**: 統合されたコンテキスト付きプロンプト
+- **エンドポイント**: `/generate-timeblock-prompt`（GET）
+- **注意**: SED/Emotion Aggregatorの結果は待たない（これらは日次集計用として並走）
 
 #### Vibe Scorer (`api_gpt_v1`)
 - **入力**: Vibe Aggregatorで生成されたプロンプト
@@ -116,11 +187,14 @@ graph TD
   - 気分スコア（-100〜+100）
   - サマリーテキスト
   - バーストイベント（感情の急変点）
-- **保存先**: `dashboard`、`dashboard_summary`テーブル
+- **保存先**: `dashboard`テーブル
+- **エンドポイント**: 
+  - `/analyze-timeblock`（POST）- タイムブロック分析
+  - `/analyze-dashboard-summary`（POST）- 累積分析
 
 ## 🔧 実装状況
 
-### ✅ 実装済み（2025-09-22）
+### ✅ 実装済み（2025-01-22更新）
 
 #### 1. AST → SED Aggregator連携
 - Lambda関数内で**イベント駆動型処理**を実装
@@ -133,7 +207,7 @@ graph TD
       # SED Aggregatorを自動起動（非同期 - タスクIDのみ取得）
       sed_response = requests.post("/behavior-aggregator/analysis/sed", ...)
   ```
-- **ステータス**: Lambdaコード更新済み（AWS未デプロイ）
+- **ステータス**: 実装済み・稼働中
 
 #### 2. SUPERB → Emotion Aggregator連携
 - Lambda関数内で**イベント駆動型処理**を実装
@@ -146,60 +220,86 @@ graph TD
       # Emotion Aggregatorを自動起動（非同期 - タスクIDのみ取得）
       emotion_response = requests.post("/emotion-aggregator/analyze/opensmile-aggregator", ...)
   ```
-- **ステータス**: Lambdaコード更新済み（AWS未デプロイ）
+- **ステータス**: 実装済み・稼働中
 
-### 🚧 次の実装タスク：Vibe分析の自動起動
+#### 3. 3つの同期API完了 → Vibe Aggregator連携
+- Lambda関数内で**3つのAPI完了を検知**して起動
+- Azure Speech、AST、SUPERBがすべて成功した場合にVibe Aggregatorを実行
+- 実装方法：
+  ```python
+  # 3つの基礎APIがすべて成功した場合のみ実行
+  if azure_success and ast_success and superb_success:
+      # Vibe Aggregator（プロンプト生成）- 同期的に完了を待つ
+      vibe_response = requests.get("/vibe-aggregator/generate-timeblock-prompt", timeout=30)
+  ```
+- **ステータス**: 実装済み・稼働中
+- **次のステップ**: Vibe Scorerの自動起動を追加
 
-#### 現在の状況
-- 3つの基礎分析（Speech、AST、SUPERB）はすべて実装済み
-- 2つのAggregator（SED、Emotion）も自動起動実装済み
-- Vibe分析（Aggregator → Scorer）の自動起動が未実装
+### 🚧 次の実装タスク
 
-### 🔴 重要な依存関係の課題
+#### 優先度1: Vibe Scorer の自動起動
+- 現在: Vibe Aggregator（プロンプト生成）までは自動実行、Vibe Scorer（ChatGPT分析）は手動
+- 目標: Vibe Aggregator完了後に自動でVibe Scorerを起動
+- **実装方法**：
+  - Vibe Aggregatorは**同期的**に動作するため、完了検知が容易
+  - Lambda関数内でAggregator完了後、プロンプトを取得してScorerを呼び出し
 
-#### タイムブロック処理の依存関係
+#### 優先度2: 累積分析の自動化
+- 現在: 手動またはバッチ実行
+- 目標: タイムブロック完了ごとの自動実行
+- 実装方法:
+  - Lambda関数にタイムブロック完了後の累積分析トリガーを追加
+  - または別のLambda関数として実装し、DynamoDBで状態管理
 
-**実装可能な案（3つの同期API完了で起動）**：
+### ✅ 解決済みの依存関係
+
+#### タイムブロック処理の依存関係（実装済み）
+
+**現在の実装**：
 ```
 Azure Speech API (同期) → vibe_whisper ────────┐
                                                │
 AST API (同期) → behavior_yamnet ──────────────┼──→ Vibe Aggregator
-                                               │    （3つのテーブル参照）
+         ↓                                     │    （3つのテーブル参照）
+    SED Aggregator（非同期・並走）               │
+                                               │
 SUPERB API (同期) → emotion_opensmile ─────────┘
+         ↓
+    Emotion Aggregator（非同期・並走）
 ```
 
-**この実装のポイント**：
-- 3つの同期APIの完了はLambdaで検知可能
-- Vibe Aggregatorは上記3テーブルからデータ取得
-- SED/Emotion Aggregatorは別途非同期で実行（日次集計用）
+**実装のポイント**：
+- 3つの同期APIの完了はLambdaで検知して、Vibe Aggregatorを起動
+- SED/Emotion Aggregatorは各APIの成功後に非同期で起動（日次集計用）
+- タイムブロック処理と日次集計処理が並走する効率的な設計
 
-### 現在の課題
+### 現在の課題と対策
 
-1. **依存関係の管理**
-   - タイムブロック処理：
-     - Azure Speech → vibe_whisperテーブル
-     - AST → behavior_yamnetテーブル
-     - SUPERB → emotion_opensmileテーブル
-     - 3つの同期API完了でVibe Aggregator起動可能
-   - 日次処理は別途実行（SED/Emotion Aggregatorの結果を使用）
+#### 1. **累積分析のトリガー方式**
+- **課題**: ユーザー体験 vs システム負荷のバランス
+- **対策案**: 
+  - 通常時：1時間ごとの定期実行
+  - ユーザー録音時：即座に累積分析を実行（イベントドリブン）
 
-2. **2段階処理の調整**
-   - タイムブロック単位：個別の30分データ処理
-   - 日次統合：48個のタイムブロックの統合処理
-   - 各段階の完了タイミングの管理が複雑
+#### 2. **処理時間とタイムアウト**
+- **課題**: 長い音声ファイルの処理がLambdaタイムアウト（3分）を超える
+- **現在の対策**: タイムアウトしてもEC2側で処理継続
+- **将来の対策**: Step FunctionsやSQSでの非同期化
 
-3. **エラーハンドリング**
-   - 一部のAPIが失敗した場合の処理が不明確
-   - リトライメカニズムが統一されていない
+#### 3. **エラーハンドリング**
+- **課題**: 一部のAPIが失敗した場合の処理
+- **対策案**: 
+  - 必須API（Azure Speech）失敗時：処理中断
+  - 補助API（AST/SUPERB）失敗時：部分的な分析で継続
 
-### 推奨される解決案
+### 実装アプローチ
 
-#### 暫定処理（実装済み）
+#### 現在の実装（稼働中）
 - すべてのAPIタイムアウトを3分（180秒）に設定
-- 95%のケースは正常に処理完了を検知
-- 長い音声ファイルはタイムアウトするが、EC2側では処理継続
+- タイムブロック処理は完全自動化
+- 累積分析は手動または別トリガーで実行
 
-#### 本格的解決策（今後実装）
+#### 次期実装（優先度順）
 
 **1. SQSを使用したイベント駆動アーキテクチャ**：
 ```
@@ -385,8 +485,8 @@ S3 → Lambda → SQS Queue → 各API
 | SUPERB API | 8018 | ✅稼働中 | ✅実装済み | → Emotion自動起動 |
 | SED Aggregator | 8010 | ✅稼働中 | ✅自動起動実装 | デプロイ待ち |
 | Emotion Aggregator | 8012 | ✅稼働中 | ✅自動起動実装 | デプロイ待ち |
-| Vibe Aggregator | 8009 | ✅稼働中 | 🔴未連携 | 依存関係の実装待ち |
-| Vibe Scorer | 8002 | ✅稼働中 | 🔴未連携 | Vibeから起動される |
+| Vibe Aggregator | 8009 | ✅稼働中 | ✅自動起動実装 | 同期処理で完了検知可 |
+| Vibe Scorer | 8002 | ✅稼働中 | 🔴未連携 | Aggregatorから起動予定 |
 
 ### 重要ファイルの場所
 | ファイル/ディレクトリ | パス | 状態 |
@@ -402,10 +502,20 @@ S3 → Lambda → SQS Queue → 各API
 - `function.zip`の内容を必ず確認してからアップロード
 - 各APIのタイムアウト設定に注意（特に非同期呼び出し）
 
-### 現在の状況（2025-09-22更新）
-- **実装済み**: 
-  - AST → SED Aggregator連携（AWS未デプロイ）
-  - SUPERB → Emotion Aggregator連携（AWS未デプロイ）
-- **次の作業**: Vibe分析の自動起動実装
-- **デプロイ待ち**: 更新済みfunction.zipのAWSへのアップロード
-- **最終目標**: すべての前処理完了後にVibe分析を自動起動
+### 現在の状況（2025-01-22更新）
+
+#### ✅ タイムブロック処理（部分自動化）
+- AST → SED Aggregator連携 ✓
+- SUPERB → Emotion Aggregator連携 ✓
+- 3つの同期API完了 → Vibe Aggregator連携 ✓
+- **Vibe Aggregator → Vibe Scorer連携 ×（未実装）**
+
+#### 🚧 累積分析処理（実装予定）
+- **現状**: 手動実行またはバッチ処理
+- **目標**: タイムブロック完了ごとの自動実行
+- **効果**: ユーザーが録音後数分でダッシュボードに反映
+
+#### 🎯 最終目標
+- タイムブロック処理と累積分析の完全自動化
+- ユーザー録音から数分でリアルタイムグラフ更新
+- 1日の心理状態を継続的に可視化

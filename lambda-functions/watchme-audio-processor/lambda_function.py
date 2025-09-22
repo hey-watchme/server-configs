@@ -277,19 +277,87 @@ def trigger_processing_pipeline(file_path, device_id, date, time_slot):
                     "date": date,
                     "time_block": time_slot
                 },
-                timeout=30  # プロンプト生成は通常短時間
+                timeout=180  # 3分（すべてのAPIで統一）
             )
             
             if vibe_aggregator_response.status_code == 200:
                 print(f"Vibe Aggregator successful for {device_id}/{date}/{time_slot}")
-                results['vibe_aggregator'] = {
-                    'status_code': vibe_aggregator_response.status_code,
-                    'success': True,
-                    'message': 'Timeblock prompt generated and saved to dashboard table'
-                }
                 
-                # Vibe Aggregatorが成功したら、次にVibe Scorerを呼び出すこともできる
-                # ただし、今回はプロンプト生成までとする
+                # レスポンスからプロンプトを取得
+                try:
+                    aggregator_data = vibe_aggregator_response.json()
+                    prompt = aggregator_data.get('prompt', '')
+                    
+                    if prompt:
+                        print(f"Prompt successfully generated. Length: {len(prompt)} chars")
+                        results['vibe_aggregator'] = {
+                            'status_code': vibe_aggregator_response.status_code,
+                            'success': True,
+                            'message': 'Timeblock prompt generated successfully',
+                            'prompt_length': len(prompt)
+                        }
+                        
+                        # 4. Vibe Scorer (ChatGPT分析) を自動起動
+                        print(f"Starting Vibe Scorer (ChatGPT analysis) for {device_id}/{date}/{time_slot}...")
+                        try:
+                            vibe_scorer_response = requests.post(
+                                f"{API_BASE_URL}/analyze-timeblock",
+                                json={
+                                    "prompt": prompt,
+                                    "device_id": device_id,
+                                    "date": date,
+                                    "time_block": time_slot
+                                },
+                                timeout=180  # 3分（すべてのAPIで統一）
+                            )
+                            
+                            if vibe_scorer_response.status_code == 200:
+                                scorer_data = vibe_scorer_response.json()
+                                print(f"Vibe Scorer successful. Analysis completed and saved to dashboard.")
+                                results['vibe_scorer'] = {
+                                    'status_code': vibe_scorer_response.status_code,
+                                    'success': True,
+                                    'message': 'ChatGPT analysis completed and saved to dashboard',
+                                    'vibe_score': scorer_data.get('analysis_result', {}).get('vibe_score'),
+                                    'database_save': scorer_data.get('database_save', False)
+                                }
+                            else:
+                                print(f"Vibe Scorer failed: {vibe_scorer_response.status_code}")
+                                results['vibe_scorer'] = {
+                                    'status_code': vibe_scorer_response.status_code,
+                                    'success': False,
+                                    'error': f'HTTP {vibe_scorer_response.status_code}'
+                                }
+                                
+                        except requests.Timeout:
+                            print("Vibe Scorer timeout")
+                            results['vibe_scorer'] = {'error': 'Timeout', 'success': False}
+                        except Exception as e:
+                            print(f"Vibe Scorer error: {str(e)}")
+                            results['vibe_scorer'] = {'error': str(e), 'success': False}
+                    else:
+                        print("Warning: Empty prompt received from Vibe Aggregator")
+                        results['vibe_aggregator'] = {
+                            'status_code': vibe_aggregator_response.status_code,
+                            'success': False,
+                            'error': 'Empty prompt generated'
+                        }
+                        results['vibe_scorer'] = {
+                            'skipped': True,
+                            'reason': 'No prompt available from Vibe Aggregator'
+                        }
+                        
+                except Exception as e:
+                    print(f"Error parsing Vibe Aggregator response: {str(e)}")
+                    results['vibe_aggregator'] = {
+                        'status_code': vibe_aggregator_response.status_code,
+                        'success': False,
+                        'parse_error': str(e)
+                    }
+                    results['vibe_scorer'] = {
+                        'skipped': True,
+                        'reason': 'Failed to parse Vibe Aggregator response'
+                    }
                 
             else:
                 print(f"Vibe Aggregator failed: {vibe_aggregator_response.status_code}")
