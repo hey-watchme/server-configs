@@ -1,1 +1,1 @@
-requests
+# SQSトリガーLambdaはboto3のみ（AWSに含まれているので実際には不要）

@@ -1,25 +1,46 @@
 # WatchMe サーバー設定リポジトリ
 
+## 📊 システム概要
+
 このリポジトリは、WatchMeプラットフォームのEC2サーバーで稼働する **インフラストラクチャ**、**Nginx**、**systemd** の設定を一元管理します。
 
-## ⚡ クイックスタート
+### 🎯 3つの管理領域
 
-**アプリケーションをデプロイする場合** → [OPERATIONS_GUIDE.md](./OPERATIONS_GUIDE.md#1-アプリケーションのデプロイ手順)  
-**サーバー構成を変更する場合** → [OPERATIONS_GUIDE.md](./OPERATIONS_GUIDE.md#2-サーバー構成の変更手順)  
-**技術詳細を調べる場合** → [TECHNICAL_REFERENCE.md](./TECHNICAL_REFERENCE.md)  
-**変更履歴を確認する場合** → [CHANGELOG.md](./CHANGELOG.md)
+| 管理領域 | 内容 | 設定場所 |
+|---------|------|----------|
+| **インフラストラクチャ** | Dockerネットワーク、リソース管理 | docker-compose.infra.yml |
+| **リバースプロキシ** | Nginx設定、ルーティング | sites-available/ |
+| **プロセス管理** | systemdサービス、自動起動 | systemd/ |
 
-## 🔄 重要：音声処理API移行作業（2025年9月19日）
+### 🔧 2つの環境
 
-### 移行の背景
-- **SED API（YamNet）** → **AST API**へ移行
-  - 理由：より高精度な527種類の音響イベント検出が可能
-  - Transformerベースの最新アーキテクチャ
-- **OpenSMILE API** → **SUPERB API**へ移行
-  - 理由：wav2vec2ベースでより高速・高精度
-  - OpenSMILE互換インターフェースを維持
+| 環境 | リージョン | 状態 | 用途 |
+|------|-----------|------|------|
+| **現行環境** | ap-southeast-2 (シドニー) | 稼働中 | 開発・テスト |
+| **移行予定** | ap-northeast-1 (東京) | 準備中 | 本番運用 |
 
-### ⚠️ 正しいポート割り当て（重要）
+### ⚡ クイックアクセス
+
+| 目的 | ドキュメント | 内容 |
+|------|-------------|------|
+| **デプロイ手順** | [OPERATIONS_GUIDE.md](./OPERATIONS_GUIDE.md#1-アプリケーションのデプロイ手順) | アプリのデプロイ方法 |
+| **設定変更** | [OPERATIONS_GUIDE.md](./OPERATIONS_GUIDE.md#2-サーバー構成の変更手順) | サーバー設定の変更 |
+| **技術仕様** | [TECHNICAL_REFERENCE.md](./TECHNICAL_REFERENCE.md) | 詳細な技術情報 |
+| **処理フロー** | [PROCESSING_ARCHITECTURE.md](./PROCESSING_ARCHITECTURE.md) | 音声処理の全体像 |
+| **変更履歴** | [CHANGELOG.md](./CHANGELOG.md) | 全変更の記録 |
+
+---
+
+## 🔄 API移行状況
+
+### 音声処理API世代交代（2025年9月19日完了）
+
+| 旧API | → | 新API | 改善点 |
+|-------|---|-------|--------|
+| **SED API**<br>(YamNet) | → | **AST API**<br>(Transformer) | 527種類の音響イベント検出<br>高精度化 |
+| **OpenSMILE API** | → | **SUPERB API**<br>(wav2vec2) | 処理速度向上<br>互換性維持 |
+
+### ポート割り当て一覧
 
 | API名 | 正しいポート | 用途 | Nginxパス | ECRリポジトリ |
 |-------|------------|------|----------|--------------|
@@ -122,15 +143,18 @@ location /emotion-features/ {
    - AST: `curl http://localhost:8017/health`
    - SUPERB: `curl http://localhost:8018/health`
 
-## 🚨 重要：リージョン移行予定（商用利用開始前に実施必須）
+## 🌏 リージョン移行計画
 
-### 現在の状況と移行の必要性
-- **現在**: ap-southeast-2 (シドニー) リージョンで稼働中
-- **目標**: ap-northeast-1 (東京) リージョンへ移行
-- **理由**: 日本ユーザー向けのレイテンシー改善（150-200ms → 20-30ms）
-- **優先度**: **高** - 商用利用開始前に必ず実施
+### 移行概要
 
-### パフォーマンスへの影響
+| 項目 | 現在（シドニー） | 移行後（東京） | 改善度 |
+|------|----------------|--------------|--------|
+| **リージョン** | ap-southeast-2 | ap-northeast-1 | - |
+| **レイテンシー** | 150-200ms | 20-30ms | 85%削減 |
+| **優先度** | - | 高（商用前必須） | - |
+| **実施時期** | - | 2025年9月中推奨 | - |
+
+### パフォーマンス比較
 | 操作 | シドニー（現在） | 東京（移行後） | 体感差 |
 |-----|----------------|--------------|--------|
 | API応答 | 250ms | 30ms | ワンテンポの差 |
@@ -179,9 +203,9 @@ location /emotion-features/ {
 - SUPERB APIは内部・外部ともに8018を使用
 - この設定で統一されています
 
-## 🖥️ サーバーインフラ構成 【重要】
+## 🖥️ インフラストラクチャ
 
-### AWS EC2インスタンス仕様
+### EC2インスタンス仕様
 - **インスタンスタイプ**: t4g.large (一時的にアップグレード済み、以前はt4g.small)
 - **CPU**: 2 vCPU (AWS Graviton2 Processor - Neoverse-N1)
 - **メモリ**: 8.0GB RAM (実使用可能: 7.8GB)
@@ -190,7 +214,7 @@ location /emotion-features/ {
 - **リージョン**: ap-southeast-2 (Sydney)
 - **更新日**: 2025-09-19 (t4g.smallからt4g.largeへアップグレード)
 
-### ⚠️ **リソース状況（t4g.largeへアップグレード後）**
+### 📋 リソース使用状況（t4g.large）
 
 **メモリ状況（大幅改善）**:
 - **総メモリ**: 7.8GB (OS込み)
@@ -226,9 +250,9 @@ location /emotion-features/ {
    docker image prune -a -f
    ```
 
-## ⚠️ 重要な理解事項
+## 🔐 リポジトリの役割と制約
 
-**このリポジトリの役割：**
+### ✅ できること
 - ✅ **Dockerネットワークインフラの一元管理** ← NEW!
 - ✅ Nginx/systemd設定ファイルのテンプレートと変更履歴の管理
 - ✅ ネットワーク監視・自動修復スクリプトの提供 ← NEW!
@@ -236,12 +260,14 @@ location /emotion-features/ {
 - ✅ **インフラリソース管理と制約情報** ← NEW!
 - ❌ **本番サーバーへの自動デプロイ機能はありません**
 
-**本番環境への反映方法：**
+### 🔄 本番環境への反映フロー
 1. このリポジトリで設定を変更し、Pull Requestでレビュー
 2. マージ後、**手動で**本番サーバーの設定ファイルを更新
 3. 本番サーバー上の設定は `/home/ubuntu/watchme-server-configs/` に配置
 
-## 📚 ドキュメント構成
+## 📚 ドキュメント体系
+
+### 主要ドキュメント
 
 | ドキュメント | 内容 | 読者 |
 |------------|------|------|
@@ -292,30 +318,22 @@ watchme-server-configs/
 
 ---
 
-## 🌐 ネットワークインフラストラクチャ管理【NEW!】
+## 🌐 ネットワークインフラ構成
 
-### watchme-networkの概要
+### 🔗 watchme-network構成
 
-**watchme-network** は、全マイクロサービスが相互通信するための共有Dockerネットワークです。
+全マイクロサービスが相互通信するための共有Dockerネットワークです。
 
-- **サブネット**: 172.27.0.0/16
-- **ゲートウェイ**: 172.27.0.1
-- **管理者**: watchme-infrastructure service
-- **作成日**: 2025年8月6日
+| 設定項目 | 値 | 説明 |
+|---------|-----|------|
+| **ネットワーク名** | watchme-network | 共有ネットワーク |
 
-### 現在の接続状況（2025年9月19日更新）
+| **サブネット** | 172.27.0.0/16 | IPアドレス範囲 |
+| **ゲートウェイ** | 172.27.0.1 | デフォルトゲートウェイ |
+| **管理サービス** | watchme-infrastructure | systemdサービス |
+| **作成日** | 2025-08-06 | - |
 
-#### ⚠️ 重要：音声処理APIの置き換え（2025年9月19日）
-
-**従来のAPI（廃止予定）:**
-- `sed-api` (ポート8004) → **AST APIに置き換え**
-- `opensmile-api` (ポート8011) → **SUPERB APIに置き換え**
-
-**新しいAPI構成:**
-- **AST API** (ポート8017): Audio Spectrogram Transformer - 527種類の音響イベント検出
-- **SUPERB API** (ポート8018): wav2vec2ベースの感情認識 - OpenSMILE互換
-
-#### ✅ 接続済みコンテナ（15個） - 新API追加後の構成
+### 📡 接続コンテナ一覧（2025年9月19日更新）
 ```
 watchme-api-manager-prod     (172.27.0.4)  # API管理UI
 watchme-scheduler-prod       (172.27.0.5)  # スケジューラー
@@ -336,30 +354,23 @@ sed-api                      (172.27.0.12) # 旧音声イベント検出 → AST
 opensmile-api                (172.27.0.13) # 旧音声特徴量抽出 → SUPERB APIへ移行
 ```
 
-#### 💡 システム状態（2025年9月5日時点）
-- **全13サービスがsystemd管理下で稼働**
-- **サーバー再起動時の自動起動を保証**
-- **全ポートが127.0.0.1にバインド（セキュリティ向上）**
-- **ディスク使用率: 50%（14GB/29GB）** - クリーンアップで6GB削減
+### 📋 システム状態
 
-### 段階的移行計画
+| 項目 | 状態 | 詳細 |
+|------|------|------|
+| **稼働サービス** | 15サービス | systemd管理下 |
+| **自動起動** | 有効 | サーバー再起動時 |
+| **ポートバインド** | 127.0.0.1 | セキュリティ向上 |
+| **ディスク使用率** | 50% (14GB/29GB) | 余裕あり |
 
-#### Phase 1: インフラ整備（✅ 完了）
-- docker-compose.infra.yml作成
-- 監視スクリプト配置
-- systemdサービス定義
+### 📦 移行完了状況
 
-#### Phase 2: 問題修正（✅ 完了）
-- api_gen_prompt_mood_chart を watchme-network に接続
-- watchme-vault-api を自動修復
-
-#### Phase 3: systemd移行（✅ 2025/09/03 完了）
-- opensmile-api: systemd管理に移行完了
-- opensmile-aggregator: systemd管理に移行完了
-- api-sed-aggregator: systemd管理に移行完了
-- vibe-transcriber-v2: systemd新規作成・移行完了
-
-#### Phase 4: ネットワーク統合（✅ 2025/09/04 完了）
+| フェーズ | 完了日 | 内容 |
+|---------|---------|------|
+| **Phase 1: インフラ整備** | ✅ 2025-08-06 | docker-compose.infra.yml, 監視スクリプト |
+| **Phase 2: 問題修正** | ✅ 2025-08-20 | APIのwatchme-network接続 |
+| **Phase 3: systemd移行** | ✅ 2025-09-03 | 全13サービスのsystemd管理 |
+| **Phase 4: ネットワーク統合** | ✅ 2025-09-04 | レガシーネットワーク削除 |
 
 **実施内容**:
 - レガシーネットワーク4個を削除
@@ -373,7 +384,7 @@ opensmile-api                (172.27.0.13) # 旧音声特徴量抽出 → SUPERB
 - ✅ `/home/ubuntu/watchme-docker/docker-compose.prod.yml` - external: trueに修正済み
 - ✅ watchme-api-manager systemd設定 - docker-compose.all.yml → docker-compose.prod.ymlに修正
 
-### インフラ管理コマンド
+### 🔧 管理コマンド
 
 ```bash
 # ネットワーク状態の確認
@@ -389,13 +400,17 @@ python3 /home/ubuntu/watchme-server-configs/scripts/network_monitor.py --fix
 python3 /home/ubuntu/watchme-server-configs/scripts/network_monitor.py --json
 ```
 
-### 自動監視設定（推奨）
+### 🤖 自動監視設定
 
 ```bash
 # Cronジョブ設定（5分ごとに自動チェック）
 crontab -e
 */5 * * * * /home/ubuntu/watchme-server-configs/scripts/check-infrastructure.sh
 ```
+
+---
+
+*最終更新: 2025年9月23日*
 
 ---
 

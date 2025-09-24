@@ -6,14 +6,10 @@ from urllib.parse import unquote_plus
 # 環境変数
 SQS_QUEUE_URL = os.environ.get('SQS_QUEUE_URL', '')
 
-# 注: このLambda関数はSQSトリガー専用になりました
-# 実際の処理はwatchme-audio-workerが実行します
-
 def lambda_handler(event, context):
     """
     S3イベントを受信してSQSキューに送信する軽量Lambda
     処理時間: 1-2秒
-    旧名: watchme-audio-processor（互換性のため名前は維持）
     """
     
     print(f"Received S3 event: {json.dumps(event)}")
