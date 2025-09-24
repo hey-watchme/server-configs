@@ -7,6 +7,10 @@ from datetime import datetime
 
 # 環境変数
 API_BASE_URL = os.environ.get('API_BASE_URL', 'https://api.hey-watch.me')
+DASHBOARD_SUMMARY_QUEUE_URL = os.environ.get('DASHBOARD_SUMMARY_QUEUE_URL', 'https://sqs.ap-southeast-2.amazonaws.com/975050024946/watchme-dashboard-summary-queue')
+
+# SQSクライアント
+sqs = boto3.client('sqs', region_name='ap-southeast-2')
 
 def lambda_handler(event, context):
     """
@@ -37,6 +41,10 @@ def lambda_handler(event, context):
             
             # 結果をログに出力
             print(f"Processing results: {json.dumps(results)}")
+            
+            # Vibe Scorerが成功した場合、累積分析キューにメッセージを送信
+            if results.get('vibe_scorer', {}).get('success'):
+                trigger_dashboard_summary(device_id, date, time_slot)
             
             # 成功したメッセージは自動的にSQSから削除される
             
@@ -323,3 +331,38 @@ def trigger_processing_pipeline(file_path, device_id, date, time_slot):
         }
     
     return results
+
+
+def trigger_dashboard_summary(device_id, date, time_slot):
+    """
+    累積分析処理をトリガーするためにSQSキューにメッセージを送信
+    """
+    try:
+        print(f"Triggering dashboard summary for {device_id}/{date}")
+        
+        # 累積分析用のメッセージを作成
+        message = {
+            'device_id': device_id,
+            'date': date,
+            'time_slot': time_slot,
+            'timestamp': datetime.utcnow().isoformat(),
+            'source': 'watchme-audio-worker',
+            'trigger_reason': 'timeblock_completed'
+        }
+        
+        # SQSにメッセージを送信
+        response = sqs.send_message(
+            QueueUrl=DASHBOARD_SUMMARY_QUEUE_URL,
+            MessageBody=json.dumps(message)
+        )
+        
+        print(f"Dashboard summary triggered successfully")
+        print(f"SQS MessageId: {response['MessageId']}")
+        print(f"Queue URL: {DASHBOARD_SUMMARY_QUEUE_URL}")
+        
+        return True
+        
+    except Exception as e:
+        print(f"Error triggering dashboard summary: {str(e)}")
+        # エラーが発生してもメイン処理は継続
+        return False
