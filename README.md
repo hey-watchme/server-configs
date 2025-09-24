@@ -31,6 +31,99 @@
 
 ---
 
+## ⏱️ Nginxプロキシタイムアウト設定（2025年9月24日更新）
+
+### 概要
+
+Nginxがリバースプロキシとして各APIにリクエストを転送する際の**待機時間の上限**を管理しています。
+この設定が適切でないと、処理は成功しているのに504エラーが返される問題が発生します。
+
+### 現在の設定値
+
+| API | パス | タイムアウト | 平均処理時間 | 用途 |
+|-----|------|------------|-------------|------|
+| **AST API** | /behavior-features/ | **180秒** | 60-90秒 | 音響イベント検出（大規模モデル） |
+| **SUPERB API** | /emotion-features/ | **180秒** | 30-60秒 | 感情認識処理 |
+| **Azure Speech** | /vibe-transcriber-v2/ | **180秒** | 15-30秒 | 音声文字起こし |
+| **Vibe Aggregator** | /vibe-aggregator/ | 60秒（デフォルト） | 5-10秒 | プロンプト生成 |
+| **Vibe Scorer** | /vibe-scorer/ | 60秒（デフォルト） | 10-15秒 | ChatGPT分析 |
+| **その他のAPI** | - | 60秒（デフォルト） | < 10秒 | 軽量処理 |
+
+### タイムアウトの種類と役割
+
+```nginx
+location /behavior-features/ {
+    proxy_pass http://localhost:8017/;
+    
+    # 3種類のタイムアウト設定
+    proxy_connect_timeout 180s;  # 接続確立までの待機時間
+    proxy_send_timeout 180s;     # リクエスト送信の待機時間
+    proxy_read_timeout 180s;     # レスポンス受信の待機時間（最も重要）
+}
+```
+
+### なぜタイムアウト設定が必要か
+
+1. **リソース保護**: 無限待機によるNginxワーカープロセスの枯渇を防ぐ
+2. **障害検知**: バックエンドの異常を適切なタイミングで検出
+3. **一貫性の確保**: Lambda(180秒) → Nginx(180秒) → API の連鎖を保つ
+
+### トラブルシューティング
+
+#### 症状: 504 Gateway Timeout エラー
+
+**原因**: Nginxのタイムアウトが処理時間より短い
+
+```
+実際の処理時間: 90秒
+Nginxタイムアウト: 60秒（デフォルト）
+結果: 60秒で504エラー（処理は継続中）
+```
+
+**解決方法**: 該当APIのlocationブロックにタイムアウト設定を追加
+
+```nginx
+# 例: 新しいAPIで長時間処理が必要な場合
+location /new-heavy-api/ {
+    proxy_pass http://localhost:8020/;
+    # ... 他の設定 ...
+    
+    # タイムアウトを延長
+    proxy_read_timeout 300s;    # 5分まで待機
+    proxy_connect_timeout 30s;  # 接続は30秒
+    proxy_send_timeout 60s;     # 送信は60秒
+}
+```
+
+### 設定変更時の注意事項
+
+1. **影響範囲の確認**
+   - 必要なAPIのみタイムアウトを延長（全体への影響を避ける）
+   - クライアント側のタイムアウトも確認（Lambda、ブラウザ等）
+
+2. **適切な値の選定**
+   - 平均処理時間の2-3倍を目安に設定
+   - 過度に長い設定はリソース浪費につながる
+
+3. **変更の適用手順**
+   ```bash
+   # 1. このリポジトリで設定を変更
+   # 2. GitHubにプッシュ
+   # 3. 本番サーバーで適用
+   ssh ubuntu@[SERVER_IP]
+   cd /home/ubuntu/watchme-server-configs
+   git pull origin main
+   ./setup_server.sh
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
+
+### 関連ドキュメント
+
+- [PROCESSING_ARCHITECTURE.md](./PROCESSING_ARCHITECTURE.md) - 各APIの処理時間詳細
+- [TECHNICAL_REFERENCE.md](./TECHNICAL_REFERENCE.md) - システム全体の技術仕様
+
+---
+
 ## 🔄 API移行状況
 
 ### 音声処理API世代交代（2025年9月19日完了）

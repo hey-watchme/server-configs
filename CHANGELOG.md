@@ -1,5 +1,40 @@
 # WatchMe Server 変更履歴
 
+## 2025年9月24日
+
+### Nginxプロキシタイムアウト設定の追加
+
+#### 問題の背景
+- **症状**: AST API（音響イベント検出）が504 Gateway Timeoutエラーを頻発
+- **原因**: Nginxのデフォルトタイムアウト（60秒）が処理時間（60-90秒）より短い
+- **影響**: 処理は成功しているがクライアントにエラーが返される
+
+#### 実施内容
+**sites-available/api.hey-watch.me に以下のタイムアウト設定を追加：**
+
+1. **AST API (/behavior-features/)**
+   - proxy_read_timeout: 60秒 → 180秒
+   - proxy_connect_timeout: 60秒 → 180秒
+   - proxy_send_timeout: 60秒 → 180秒
+
+2. **SUPERB API (/emotion-features/)**
+   - 同様に180秒のタイムアウトを設定
+
+3. **Azure Speech API (/vibe-transcriber-v2/)**
+   - 同様に180秒のタイムアウトを設定
+
+#### 結果
+- AST APIの504エラーが解消
+- SED Aggregator、Vibe Aggregatorが正常に動作
+- 音声処理パイプライン全体の安定性向上
+
+#### 今後の指針
+- 新規APIは平均処理時間の2-3倍でタイムアウトを設定
+- 軽量処理APIはデフォルト60秒のまま維持
+- 詳細は README.md の「Nginxプロキシタイムアウト設定」セクション参照
+
+---
+
 ## 2025年9月5日（18:00 JST更新）
 
 ### systemd管理の完全統一とシステムクリーンアップ
