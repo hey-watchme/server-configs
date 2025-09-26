@@ -74,8 +74,7 @@ def call_dashboard_analysis_api(device_id, date, prompt):
             f"{API_BASE_URL}/vibe-scorer/analyze-dashboard-summary",
             json={
                 "device_id": device_id,
-                "date": date,
-                "prompt": prompt
+                "date": date
             },
             timeout=180
         )
