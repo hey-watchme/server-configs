@@ -228,6 +228,32 @@ echo "SUPABASE_URL=${SUPABASE_URL}" > .env
 echo "SUPABASE_KEY=${SUPABASE_KEY}" >> .env
 ```
 
+### ⚠️ YAMLとヒアドキュメントの罠（2025年9月29日追記）
+
+**問題：** GitHub ActionsのYAML内でヒアドキュメントを使用する際、YAMLのインデントルールとシェルのヒアドキュメントルールが衝突する
+
+**症状：** 
+- `You have an error in your yaml syntax on line XXX` エラーが繰り返し発生
+- インデントを修正しても別のエラーが発生する無限ループ
+
+**原因：**
+1. YAMLルール: `run: |`ブロック内のすべての行は同じインデントが必要
+2. シェルルール: ヒアドキュメントの終了文字は行頭にある必要がある（と思われがち）
+
+**解決策：YAMLブロック内では終了文字もインデントする**
+```yaml
+run: |
+  ssh ${EC2_USER}@${EC2_HOST} << ENDSSH
+    cd /home/ubuntu/api-name
+    echo "KEY=${VALUE}" > .env
+  ENDSSH  # ← YAMLブロックに合わせてインデント（8スペース）
+```
+
+**重要な学習：**
+- GitHub ActionsのYAML内では、ヒアドキュメントの終了文字も**YAMLブロックのインデントに合わせる**
+- これは通常のシェルスクリプトとは異なる動作
+- 混乱を避けたい場合は、echoコマンドの直接使用を推奨
+
 **重要な原則：**
 - 環境変数の値をリモートサーバーに渡す際は、変数展開が正しく行われることを確認
 - セキュリティを保ちながら、値が正しく伝播することを両立させる
@@ -296,6 +322,43 @@ services:
 - 環境変数が正しく設定される
 - 「Invalid API key」エラーが発生しない
 - 全APIが同じパターンで動作
+
+## トラブルシューティングチェックリスト（2025年9月29日追加）
+
+### デプロイが失敗する場合の確認事項
+
+#### 1. コミットとプッシュの確認
+```bash
+# ローカルとリモートの同期確認
+git status
+git fetch origin && git diff origin/main --stat
+
+# 最新コミットがGitHubに反映されているか
+git log --oneline -1
+git log --oneline origin/main -1
+```
+
+#### 2. ECRイメージの更新確認
+```bash
+# 最新イメージがECRにあるか確認
+aws ecr describe-images \
+  --repository-name watchme-api-sed-aggregator \
+  --region ap-southeast-2 \
+  --query 'sort_by(imageDetails,& imagePushedAt)[-1].[imageTags[0],imagePushedAt]' \
+  --output text
+```
+
+#### 3. 必須ステップの実装確認
+```bash
+# ECR削除ステップがあるか
+grep -n "Delete old images from ECR" .github/workflows/deploy-to-ecr.yml
+
+# docker system pruneが使われているか
+grep -n "docker system prune" .github/workflows/deploy-to-ecr.yml
+
+# リポジトリ名が統一されているか
+grep -h "ECR_REPOSITORY\|image:" *.yml *.sh .github/workflows/*.yml | grep -o "watchme-api-[a-z-]*" | sort -u
+```
 
 ## デバッグガイド
 
