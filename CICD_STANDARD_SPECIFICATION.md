@@ -48,6 +48,7 @@ SUPABASE_KEY            # Supabase APIキー
 - シェルスクリプトでは、変数の展開タイミングをコントロールすることが重要
 - ヒアドキュメントの区切り文字をクォートすると、変数は展開されずに文字列として扱われる
 - SSH経由でリモートサーバーに値を渡す場合、適切な展開タイミングの制御が必要
+- **重要**: ヒアドキュメントのインデントに注意！インデントされたEOFは認識されません
 
 ```yaml
 - name: Create/Update .env file on EC2
@@ -59,11 +60,30 @@ SUPABASE_KEY            # Supabase APIキー
   run: |
     ssh ${EC2_USER}@${EC2_HOST} << ENDSSH
       cd /home/ubuntu/{api-name}
-      cat > .env << EOF
-    SUPABASE_URL=${SUPABASE_URL}
-    SUPABASE_KEY=${SUPABASE_KEY}
-    EOF
+      
+      # 方法1: echoコマンドで直接書き込み（推奨）
+      echo "SUPABASE_URL=${SUPABASE_URL}" > .env
+      echo "SUPABASE_KEY=${SUPABASE_KEY}" >> .env
+      
+      # 方法2: ヒアドキュメントを使用（インデントに注意）
+      # cat > .env << EOF
+      # SUPABASE_URL=${SUPABASE_URL}
+      # SUPABASE_KEY=${SUPABASE_KEY}
+      # EOF
     ENDSSH
+```
+
+**⚠️ よくある間違い:**
+```yaml
+# ❌ 間違い: インデントされたEOFは終了マーカーとして認識されない
+cat > .env << EOF
+  SUPABASE_URL=${SUPABASE_URL}
+  SUPABASE_KEY=${SUPABASE_KEY}
+  EOF  # <- インデントされているため認識されない
+
+# ✅ 正解: echoコマンドを使用（推奨）
+echo "SUPABASE_URL=${SUPABASE_URL}" > .env
+echo "SUPABASE_KEY=${SUPABASE_KEY}" >> .env
 ```
 
 **重要な原則：**
@@ -144,13 +164,25 @@ services:
 
 **診断方法：**
 1. EC2上の.envファイルの内容を確認
-2. 変数名が文字列として保存されていないか確認（例：`${SUPABASE_KEY}`という文字列）
-3. コンテナ内の環境変数を確認
+   ```bash
+   ssh ubuntu@EC2_HOST "cat /home/ubuntu/api-name/.env"
+   # 期待値: SUPABASE_KEY=eyJhbGci... (実際のキー)
+   # 問題: SUPABASE_KEY=${SUPABASE_KEY} (変数が展開されていない)
+   ```
 
-**根本原因：**
-- 環境変数の展開タイミングが不適切
-- シェルスクリプトの記法による変数展開の抑制
-- SSH経由での値の伝播の失敗
+2. コンテナ内の環境変数を確認
+   ```bash
+   docker exec container-name env | grep SUPABASE
+   # 問題例: SUPABASE_KEY=your-supabase-key-here
+   ```
+
+**根本原因と解決策：**
+
+| 原因 | 症状 | 解決策 |
+|------|------|--------|
+| ヒアドキュメントのインデント問題 | .envに`${SUPABASE_KEY}`が書き込まれる | echoコマンドを使用 |
+| .envファイルのパス不一致 | 環境変数が読み込まれない | docker-compose.ymlとrun-prod.shで同じパスを使用 |
+| Dockerイメージにデフォルト値がハードコード | 常に同じエラー | Dockerfileに環境変数を含めない |
 
 ## セキュリティ考慮事項
 - 認証情報はGitHub Secretsでのみ管理
