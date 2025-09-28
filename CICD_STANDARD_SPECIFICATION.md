@@ -3,6 +3,48 @@
 ## 概要
 全WatchMe APIで統一するCI/CDプロセスの標準仕様
 
+## ⚠️ 必ず最初に読むこと - CI/CD導入前チェックリスト
+
+### 新規CI/CD導入時は以下を必ず確認
+
+#### 1. ローカルでの動作確認（CI/CD前に必須）
+```bash
+# ローカルでDockerイメージをクリーンビルド
+docker build --no-cache -f Dockerfile.prod -t test-image .
+
+# ビルドしたイメージで動作確認
+docker run --env-file .env.local test-image
+
+# 問題なければCI/CDに進む
+```
+
+#### 2. 既存の残骸をクリーンアップ
+```bash
+# EC2上の古いイメージを削除
+ssh ubuntu@EC2_HOST 'docker system prune -a -f'
+
+# ECRの古いイメージも削除
+aws ecr batch-delete-image --repository-name REPO_NAME --image-ids imageTag=latest
+```
+
+#### 3. 段階的デプロイ
+```bash
+# 最初は手動でテスト
+./deploy-ecr.sh  # 手動でECRにプッシュ
+ssh ubuntu@EC2_HOST  # 手動で動作確認
+
+# 動作確認後、CI/CDを有効化
+```
+
+### よくある失敗パターン（これをやると3時間無駄にする）
+
+| やりがちなミス | 結果 | 正しい対処 |
+|------------|------|----------|
+| いきなりCI/CDを実装 | 10回以上のfix commits | まずローカルで確認 |
+| キャッシュを信用 | 古いコードが動き続ける | 常に--no-cache |
+| 環境変数を手動修正 | 次回デプロイで元に戻る | CI/CDで管理 |
+| エラーログを見ない | 同じエラーの繰り返し | 最初のエラーで止める |
+
 ## CI/CDの基本原則
 
 ### 🎯 CI/CDの価値
@@ -300,6 +342,39 @@ docker rmi $(docker images -q 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/
 | ヒアドキュメントのインデント問題 | .envに`${SUPABASE_KEY}`が書き込まれる | echoコマンドを使用 |
 | .envファイルのパス不一致 | 環境変数が読み込まれない | docker-compose.ymlとrun-prod.shで同じパスを使用 |
 | Dockerイメージにデフォルト値がハードコード | 常に同じエラー | Dockerfileに環境変数を含めない |
+
+## デバッグ手順（問題が起きたら最初にやること）
+
+### 1. 現状確認コマンド集
+```bash
+# どのイメージが動いているか
+ssh ubuntu@EC2_HOST 'docker ps --no-trunc'
+
+# イメージのビルド日時を確認
+ssh ubuntu@EC2_HOST 'docker images --no-trunc'
+
+# コンテナ内の実際のコードを確認
+ssh ubuntu@EC2_HOST 'docker exec CONTAINER_NAME cat /app/main.py | head -20'
+
+# 環境変数が正しいか
+ssh ubuntu@EC2_HOST 'docker exec CONTAINER_NAME env | grep -E "SUPABASE|AWS"'
+
+# 最新のエラーログ
+ssh ubuntu@EC2_HOST 'docker logs CONTAINER_NAME --tail 100 | grep -i error'
+```
+
+### 2. 問題の切り分け
+1. **ローカルで再現するか？** → コードの問題
+2. **手動デプロイで動くか？** → CI/CDの問題
+3. **キャッシュクリアで直るか？** → キャッシュの問題
+
+### 3. 最終手段：完全リセット
+```bash
+# すべてをクリーンにして最初からやり直す
+docker system prune -a -f
+aws ecr batch-delete-image --repository-name REPO --image-ids imageTag=latest
+git reset --hard HEAD
+```
 
 ## セキュリティ考慮事項
 - 認証情報はGitHub Secretsでのみ管理
