@@ -64,10 +64,55 @@ docker network create watchme-network 2>/dev/null || true
 
 ### 必須ステップ
 ```yaml
-# ステップ1: ECRにDockerイメージをプッシュ
-# ステップ2: EC2に.envファイルを作成/更新
-# ステップ3: デプロイスクリプトをEC2に自動更新
-# ステップ4: docker-composeでコンテナ再起動
+# ステップ1: 古いDockerイメージを削除（クリーンビルドのため）
+# ステップ2: Dockerイメージをクリーンビルド（--no-cache必須）
+# ステップ3: ECRにDockerイメージをプッシュ
+# ステップ4: EC2に.envファイルを作成/更新
+# ステップ5: docker-composeでコンテナ再起動
+```
+
+### ⚠️ 重要：クリーンビルドの必須化
+
+**すべてのデプロイで必ずクリーンビルドを実行すること**
+
+```yaml
+# ❌ 間違い：キャッシュを使うビルド（問題の原因）
+docker buildx build --platform linux/arm64 --push
+
+# ✅ 正解：クリーンビルド（キャッシュを使わない）
+docker buildx build --platform linux/arm64 --no-cache --push
+```
+
+**理由：**
+- キャッシュが原因で古いコードがイメージに含まれる
+- デプロイは成功するが、古いコードが動作する
+- 問題の特定に何時間もかかる
+
+### Dockerイメージビルドの標準テンプレート
+
+```yaml
+- name: Delete old images from ECR (optional but recommended)
+  run: |
+    # 古いlatestタグを削除（エラーは無視）
+    aws ecr batch-delete-image \
+      --region ${{ env.AWS_REGION }} \
+      --repository-name ${{ env.ECR_REPOSITORY }} \
+      --image-ids imageTag=latest || true
+
+- name: Build, tag, and push image to Amazon ECR
+  env:
+    ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+    IMAGE_TAG: ${{ github.sha }}
+  run: |
+    # 必ず --no-cache オプションを使用
+    docker buildx build \
+      --platform linux/arm64 \
+      --no-cache \
+      --push \
+      -f Dockerfile.prod \
+      -t $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG \
+      -t $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:latest \
+      .
 ```
 
 ### 環境変数作成ステップ（重要）
@@ -108,23 +153,23 @@ docker network create watchme-network 2>/dev/null || true
       # EOF
     ENDSSH
 
-- name: Update deploy scripts on EC2
-  env:
-    EC2_HOST: ${{ secrets.EC2_HOST }}
-    EC2_USER: ${{ secrets.EC2_USER }}
-  run: |
-    echo "📦 Updating deploy scripts on EC2..."
-    
-    # Checkoutステップで取得したファイルをEC2にコピー
-    scp -o StrictHostKeyChecking=no \
-      ./run-prod.sh \
-      ./docker-compose.prod.yml \
-      ${EC2_USER}@${EC2_HOST}:/home/ubuntu/{api-name}/
-    
-    # 実行権限を付与
-    ssh ${EC2_USER}@${EC2_HOST} "chmod +x /home/ubuntu/{api-name}/run-prod.sh"
-    
-    echo "✅ Deploy scripts updated successfully"
+### デプロイスクリプトの自動更新（オプション）
+
+**注意：** デプロイスクリプトを自動更新する場合は、`deploy`ジョブでコードをチェックアウトする必要があります。
+`deploy-to-ec2`ジョブでのみチェックアウトすると、古いイメージと新しいスクリプトの不整合が発生します。
+
+```yaml
+# ❌ 間違い：deploy-to-ec2ジョブでのみチェックアウト
+deploy-to-ec2:
+  steps:
+    - uses: actions/checkout@v4  # ここでチェックアウトは遅い
+    - name: Update scripts...
+
+# ✅ 正解：deployジョブでもチェックアウト
+deploy:
+  steps:
+    - uses: actions/checkout@v4  # 最初にチェックアウト
+    - name: Build image...       # 最新コードでビルド
 ```
 
 **⚠️ よくある間違い:**
@@ -212,6 +257,24 @@ services:
 ## トラブルシューティング
 
 ### よくある問題と解決方法
+
+#### Dockerイメージが更新されない / 古いコードが動き続ける
+**症状：** 
+- デプロイは成功するが、変更が反映されない
+- summary_rankingが空になるなど、予期しない動作
+
+**原因：**
+- Dockerビルド時のキャッシュが古いコードを使用
+- ECRの古いイメージが使用されている
+
+**解決策：**
+1. ワークフローに`--no-cache`オプションを追加
+2. ECRの古いイメージを削除
+3. EC2上のローカルイメージも削除
+```bash
+# EC2上で実行
+docker rmi $(docker images -q 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-sed-aggregator)
+```
 
 #### 「Invalid API key」エラーが解決しない
 **症状：** GitHub Actions成功後も環境変数エラーが続く
