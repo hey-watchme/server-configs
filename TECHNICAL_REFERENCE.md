@@ -189,6 +189,8 @@ sudo systemctl restart watchme-api-manager.service
 
 ## 🔧 設定変更手順
 
+> **📘 CI/CDプロセス**: GitHub ActionsによるCI/CDプロセスの詳細は[CI/CD標準仕様書](./CICD_STANDARD_SPECIFICATION.md)を参照
+
 ### systemd設定変更
 
 ```bash

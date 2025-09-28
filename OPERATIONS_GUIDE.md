@@ -20,6 +20,8 @@
 
 ### ワークフロー
 
+> **📘 CI/CD詳細**: GitHub ActionsによるCI/CDプロセスの詳細は[CI/CD標準仕様書](./CICD_STANDARD_SPECIFICATION.md)を参照
+
 1.  **CI/CDの完了確認:**
     対象APIのGitリポジトリで、CI/CD（GitHub Actions）が完了し、新しいバージョンタグが付いたDockerイメージがECRにプッシュされたことを確認します。
 
