@@ -56,7 +56,7 @@
 | **Prompt Generator** | `/vibe-aggregator/` | 8009 | mood-chart-api | watchme-api-vibe-aggregator | ECR | ✅ 稼働中 |
 | **Psychology Scorer** | `/vibe-scorer/` | 8002 | api-gpt-v1 | watchme-api-vibe-scorer | ECR | ✅ 2025-09-04移行済み |
 | **Behavior Detection** | `/behavior-features/` | 8017 | watchme-behavior-ast | watchme-api-ast | ECR | ✅ 2025-09-19移行済み |
-| **Behavior Aggregator** | `/behavior-aggregator/` | 8010 | api-sed-aggregator | watchme-api-behavior-aggregator | ECR | ✅ 2025-09-04移行済み |
+| **SED Aggregator** | `/behavior-aggregator/` | 8010 | api-sed-aggregator | watchme-api-sed-aggregator | ECR | ✅ 2025-09-04移行済み |
 | **Emotion Features** | `/emotion-features/` | 8018 | watchme-emotion-superb | watchme-api-superb | ECR | ✅ 2025-09-19移行済み |
 | **Emotion Aggregator** | `/emotion-aggregator/` | 8012 | opensmile-aggregator | watchme-api-opensmile-aggregator | ECR | ✅ 2025-09-04移行済み |
 
@@ -255,7 +255,7 @@ curl -I https://api.hey-watch.me/
 | **Azure Speech** | watchme-api-transcriber-v2 | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-transcriber-v2:latest |
 | **Psychology Scorer** | watchme-api-vibe-scorer | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-vibe-scorer:latest |
 | **Behavior Detection** | watchme-api-behavior-features | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-behavior-features:latest |
-| **Behavior Aggregator** | watchme-api-behavior-aggregator | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-behavior-aggregator:latest |
+| **SED Aggregator** | watchme-api-sed-aggregator | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-sed-aggregator:latest |
 | **Emotion Features** | watchme-opensmile-api | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-opensmile-api:latest |
 | **Emotion Aggregator** | watchme-api-opensmile-aggregator | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-opensmile-aggregator:latest |
 | **Prompt Generator** | watchme-api-vibe-aggregator | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-vibe-aggregator:latest |

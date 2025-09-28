@@ -3,47 +3,32 @@
 ## 概要
 全WatchMe APIで統一するCI/CDプロセスの標準仕様
 
-## ⚠️ 必ず最初に読むこと - CI/CD導入前チェックリスト
+## ⚠️ CI/CD実装の前提条件
 
-### 新規CI/CD導入時は以下を必ず確認
+### 実装前の必須確認事項
 
-#### 1. ローカルでの動作確認（CI/CD前に必須）
+#### ステップ1: ローカル動作確認
 ```bash
-# ローカルでDockerイメージをクリーンビルド
+# Dockerイメージのクリーンビルドと動作確認
 docker build --no-cache -f Dockerfile.prod -t test-image .
-
-# ビルドしたイメージで動作確認
 docker run --env-file .env.local test-image
 
-# 問題なければCI/CDに進む
+# 動作確認できたらCI/CDへ進む
 ```
 
-#### 2. 既存の残骸をクリーンアップ
+#### ステップ2: 既存環境のクリーンアップ
 ```bash
-# EC2上の古いイメージを削除
+# EC2とECRの古いイメージを削除
 ssh ubuntu@EC2_HOST 'docker system prune -a -f'
-
-# ECRの古いイメージも削除
 aws ecr batch-delete-image --repository-name REPO_NAME --image-ids imageTag=latest
 ```
 
-#### 3. 段階的デプロイ
+#### ステップ3: 設定の一貫性確認
 ```bash
-# 最初は手動でテスト
-./deploy-ecr.sh  # 手動でECRにプッシュ
-ssh ubuntu@EC2_HOST  # 手動で動作確認
-
-# 動作確認後、CI/CDを有効化
+# リポジトリ名の統一確認（最重要）
+grep -h "ECR_REPOSITORY\|image:" *.yml *.sh .github/workflows/*.yml | grep -o "watchme-api-[a-z-]*" | sort -u
+# 出力が1行だけであることを確認
 ```
-
-### よくある失敗パターン（これをやると3時間無駄にする）
-
-| やりがちなミス | 結果 | 正しい対処 |
-|------------|------|----------|
-| いきなりCI/CDを実装 | 10回以上のfix commits | まずローカルで確認 |
-| キャッシュを信用 | 古いコードが動き続ける | 常に--no-cache |
-| 環境変数を手動修正 | 次回デプロイで元に戻る | CI/CDで管理 |
-| エラーログを見ない | 同じエラーの繰り返し | 最初のエラーで止める |
 
 ## CI/CDの基本原則
 
@@ -113,22 +98,38 @@ docker network create watchme-network 2>/dev/null || true
 # ステップ5: docker-composeでコンテナ再起動
 ```
 
-### ⚠️ 重要：クリーンビルドの必須化
+### ⚠️ 重要：必須要件チェックリスト
 
-**すべてのデプロイで必ずクリーンビルドを実行すること**
+CI/CDを正しく動作させるために、以下の3つの要件を必ず満たすこと：
 
+#### 1. クリーンビルドの保証
 ```yaml
-# ❌ 間違い：キャッシュを使うビルド（問題の原因）
-docker buildx build --platform linux/arm64 --push
-
-# ✅ 正解：クリーンビルド（キャッシュを使わない）
-docker buildx build --platform linux/arm64 --no-cache --push
+# CI/CDワークフローで必須
+docker buildx build \
+  --platform linux/arm64 \
+  --no-cache \              # ← 必須：キャッシュを無効化
+  --push
 ```
 
-**理由：**
-- キャッシュが原因で古いコードがイメージに含まれる
-- デプロイは成功するが、古いコードが動作する
-- 問題の特定に何時間もかかる
+#### 2. リポジトリ名の完全一致
+以下の4箇所で同一のECRリポジトリ名を使用すること：
+- `.github/workflows/deploy-to-ecr.yml` のECR_REPOSITORY
+- `docker-compose.prod.yml` のimage
+- `deploy-ecr.sh` のECR_REPOSITORY 
+- `run-prod.sh` のECR_REPOSITORY
+
+```bash
+# 検証コマンド：すべて同じ名前が表示されること
+grep -h "ECR_REPOSITORY\|image:" *.yml *.sh .github/workflows/*.yml | grep -o "watchme-api-[a-z-]*" | sort -u
+```
+
+#### 3. 環境変数の正しい展開
+GitHub Secretsの値が確実にEC2に渡されること：
+```yaml
+# 推奨：echoコマンドで確実に展開
+echo "SUPABASE_URL=${SUPABASE_URL}" > .env
+echo "SUPABASE_KEY=${SUPABASE_KEY}" >> .env
+```
 
 ### Dockerイメージビルドの標準テンプレート
 
@@ -296,85 +297,53 @@ services:
 - 「Invalid API key」エラーが発生しない
 - 全APIが同じパターンで動作
 
-## トラブルシューティング
+## デバッグガイド
 
-### よくある問題と解決方法
+### 問題診断の体系的アプローチ
 
-#### Dockerイメージが更新されない / 古いコードが動き続ける
-**症状：** 
-- デプロイは成功するが、変更が反映されない
-- summary_rankingが空になるなど、予期しない動作
-
-**原因：**
-- Dockerビルド時のキャッシュが古いコードを使用
-- ECRの古いイメージが使用されている
-
-**解決策：**
-1. ワークフローに`--no-cache`オプションを追加
-2. ECRの古いイメージを削除
-3. EC2上のローカルイメージも削除
+#### レベル1: 基本診断（5分で確認）
 ```bash
-# EC2上で実行
-docker rmi $(docker images -q 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-sed-aggregator)
+# 1. 設定の一貫性
+grep -h "ECR_REPOSITORY\|image:" *.yml *.sh .github/workflows/*.yml | grep -o "watchme-api-[a-z-]*" | sort -u
+# → 出力が1行のみであることを確認
+
+# 2. 環境変数の状態
+ssh ubuntu@EC2_HOST 'cat /home/ubuntu/api-name/.env | grep -c "=\$"'
+# → 0が返ることを確認（変数展開されていない$が残っていない）
+
+# 3. 実行中のイメージ
+ssh ubuntu@EC2_HOST 'docker ps --format "table {{.Image}}\t{{.Status}}"'
+# → 正しいECRリポジトリのイメージが動いていることを確認
 ```
 
-#### 「Invalid API key」エラーが解決しない
-**症状：** GitHub Actions成功後も環境変数エラーが続く
-
-**診断方法：**
-1. EC2上の.envファイルの内容を確認
-   ```bash
-   ssh ubuntu@EC2_HOST "cat /home/ubuntu/api-name/.env"
-   # 期待値: SUPABASE_KEY=eyJhbGci... (実際のキー)
-   # 問題: SUPABASE_KEY=${SUPABASE_KEY} (変数が展開されていない)
-   ```
-
-2. コンテナ内の環境変数を確認
-   ```bash
-   docker exec container-name env | grep SUPABASE
-   # 問題例: SUPABASE_KEY=your-supabase-key-here
-   ```
-
-**根本原因と解決策：**
-
-| 原因 | 症状 | 解決策 |
-|------|------|--------|
-| ヒアドキュメントのインデント問題 | .envに`${SUPABASE_KEY}`が書き込まれる | echoコマンドを使用 |
-| .envファイルのパス不一致 | 環境変数が読み込まれない | docker-compose.ymlとrun-prod.shで同じパスを使用 |
-| Dockerイメージにデフォルト値がハードコード | 常に同じエラー | Dockerfileに環境変数を含めない |
-
-## デバッグ手順（問題が起きたら最初にやること）
-
-### 1. 現状確認コマンド集
+#### レベル2: 詳細診断（問題が解決しない場合）
 ```bash
-# どのイメージが動いているか
-ssh ubuntu@EC2_HOST 'docker ps --no-trunc'
+# イメージの詳細確認
+ssh ubuntu@EC2_HOST 'docker inspect $(docker ps -q) | jq ".[0].Config.Env"'
 
-# イメージのビルド日時を確認
-ssh ubuntu@EC2_HOST 'docker images --no-trunc'
+# コンテナ内のコード確認
+ssh ubuntu@EC2_HOST 'docker exec $(docker ps -q) cat /app/main.py | head -20'
 
-# コンテナ内の実際のコードを確認
-ssh ubuntu@EC2_HOST 'docker exec CONTAINER_NAME cat /app/main.py | head -20'
-
-# 環境変数が正しいか
-ssh ubuntu@EC2_HOST 'docker exec CONTAINER_NAME env | grep -E "SUPABASE|AWS"'
-
-# 最新のエラーログ
-ssh ubuntu@EC2_HOST 'docker logs CONTAINER_NAME --tail 100 | grep -i error'
+# 最新ログの確認
+ssh ubuntu@EC2_HOST 'docker logs $(docker ps -q) --tail 50'
 ```
 
-### 2. 問題の切り分け
-1. **ローカルで再現するか？** → コードの問題
-2. **手動デプロイで動くか？** → CI/CDの問題
-3. **キャッシュクリアで直るか？** → キャッシュの問題
-
-### 3. 最終手段：完全リセット
+#### レベル3: 完全リセット（最終手段）
 ```bash
-# すべてをクリーンにして最初からやり直す
-docker system prune -a -f
-aws ecr batch-delete-image --repository-name REPO --image-ids imageTag=latest
-git reset --hard HEAD
+# すべてをクリーンにして再構築
+ssh ubuntu@EC2_HOST 'docker-compose down && docker system prune -a -f'
+aws ecr batch-delete-image --repository-name REPO_NAME --image-ids imageTag=latest
+# その後、CI/CDを再実行
 ```
+
+### 問題パターンと対処法
+
+| 症状 | 確認コマンド | 対処法 |
+|-----|------------|-------|
+| デプロイ成功するが動作しない | `grep -o "watchme-api-[a-z-]*" *.yml *.sh \| sort -u` | リポジトリ名を統一 |
+| 環境変数エラー | `cat .env \| grep "\$"` | echoコマンドで環境変数作成 |
+| 古いコードが動く | `docker images --no-trunc` | --no-cacheオプション追加 |
+| 手動では動くがCI/CDで壊れる | 上記すべて | 設定ファイルの完全一致を確認 |
 
 ## セキュリティ考慮事項
 - 認証情報はGitHub Secretsでのみ管理

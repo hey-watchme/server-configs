@@ -2,12 +2,12 @@ version: '3.8'
 
 services:
   api-sed-aggregator:
-    image: api-sed-aggregator:latest
+    image: 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-sed-aggregator:latest
     container_name: api-sed-aggregator
     ports:
       - "127.0.0.1:8010:8010"
     env_file:
-      - /home/ubuntu/watchme-behavior-yamnet-aggregator/.env
+      - /home/ubuntu/api-sed-aggregator/.env
     networks:
       - watchme-network
     restart: always

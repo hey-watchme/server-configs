@@ -31,7 +31,7 @@ REPOS=(
   "watchme-api-vibe-scorer"
   "watchme-api-vibe-aggregator"
   "watchme-api-behavior-features"
-  "watchme-api-behavior-aggregator"
+  "watchme-api-sed-aggregator"
   "watchme-opensmile-api"
   "watchme-api-opensmile-aggregator"
   "watchme-api-superb"
