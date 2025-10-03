@@ -1,0 +1,24 @@
+[Unit]
+Description=WatchMe Demo Data Generator API (ECR)
+After=docker.service watchme-infrastructure.service
+Requires=docker.service watchme-infrastructure.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/demo-generator
+TimeoutStartSec=0
+
+# コンテナ準備
+ExecStartPre=-/usr/bin/docker-compose -f docker-compose.prod.yml down
+
+# コンテナ起動
+ExecStart=/usr/bin/docker-compose -f docker-compose.prod.yml up
+ExecStop=/usr/bin/docker-compose -f docker-compose.prod.yml down
+
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
