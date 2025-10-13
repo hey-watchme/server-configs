@@ -560,7 +560,7 @@ Reactなどのフレームワークでは、ビルド設定（例: `vite.config.
 1.  **リポジトリをクローン**
     ```bash
     # EC2サーバーにSSH接続
-    ssh -i ~/watchme-key.pem ubuntu@3.24.16.82
+    ssh -i /Users/kaya.matsumoto/watchme-key.pem ubuntu@3.24.16.82
 
     # 適切な場所にリポジトリをクローン
     cd /home/ubuntu
@@ -590,7 +590,7 @@ Reactなどのフレームワークでは、ビルド設定（例: `vite.config.
 2.  **本番サーバーで変更を反映**
     ```bash
     # EC2サーバーにSSH接続
-    ssh -i ~/watchme-key.pem ubuntu@3.24.16.82
+    ssh -i /Users/kaya.matsumoto/watchme-key.pem ubuntu@3.24.16.82
 
     # リポジトリのディレクトリに移動
     cd /home/ubuntu/watchme-server-configs
