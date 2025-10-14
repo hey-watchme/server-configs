@@ -8,7 +8,7 @@ from datetime import datetime
 API_BASE_URL = os.environ.get('API_BASE_URL', 'https://api.hey-watch.me')
 SUPABASE_URL = os.environ.get('SUPABASE_URL', 'https://qvtlwotzuzbavrzqhyvt.supabase.co')
 SUPABASE_KEY = os.environ.get('SUPABASE_KEY', '')
-SNS_PLATFORM_APP_ARN = 'arn:aws:sns:ap-southeast-2:754724220380:app/APNS/watchme-ios-app'
+SNS_PLATFORM_APP_ARN = 'arn:aws:sns:ap-southeast-2:754724220380:app/APNS_SANDBOX/watchme-ios-app-sandbox'
 
 # SNSクライアント
 sns_client = boto3.client('sns', region_name='ap-southeast-2')
@@ -225,19 +225,16 @@ def send_push_notification(device_id, date):
 
         print(f"[PUSH] SNS Endpoint ARN: {endpoint_arn}")
 
-        # 3. サイレント通知ペイロードを作成
+        # 3. テスト用：通常の通知ペイロード（バナー表示）
         message = {
             'APNS_SANDBOX': json.dumps({
                 'aps': {
-                    'content-available': 1  # サイレント通知
-                },
-                'device_id': device_id,
-                'date': date,
-                'action': 'refresh_dashboard'
-            }),
-            'APNS': json.dumps({
-                'aps': {
-                    'content-available': 1  # サイレント通知
+                    'alert': {
+                        'title': 'データ更新完了',
+                        'body': '新しい分析結果が利用可能です'
+                    },
+                    'sound': 'default',
+                    'content-available': 1
                 },
                 'device_id': device_id,
                 'date': date,
@@ -246,14 +243,40 @@ def send_push_notification(device_id, date):
         }
 
         # 4. プッシュ通知を送信
-        response = sns_client.publish(
-            TargetArn=endpoint_arn,
-            Message=json.dumps(message),
-            MessageStructure='json'
-        )
+        try:
+            response = sns_client.publish(
+                TargetArn=endpoint_arn,
+                Message=json.dumps(message),
+                MessageStructure='json'
+            )
 
-        print(f"[PUSH] ✅ Push notification sent successfully: {response['MessageId']}")
-        return True
+            print(f"[PUSH] ✅ Push notification sent successfully: {response['MessageId']}")
+            return True
+
+        except sns_client.exceptions.EndpointDisabledException:
+            # Endpointが無効化されている場合、再有効化してリトライ
+            print(f"[PUSH] Endpoint is disabled. Re-enabling...")
+
+            try:
+                sns_client.set_endpoint_attributes(
+                    EndpointArn=endpoint_arn,
+                    Attributes={'Enabled': 'true'}
+                )
+                print(f"[PUSH] Endpoint re-enabled successfully")
+
+                # リトライ
+                response = sns_client.publish(
+                    TargetArn=endpoint_arn,
+                    Message=json.dumps(message),
+                    MessageStructure='json'
+                )
+
+                print(f"[PUSH] ✅ Push notification sent successfully (after re-enable): {response['MessageId']}")
+                return True
+
+            except Exception as retry_error:
+                print(f"[PUSH] ❌ Failed to re-enable or send after re-enable: {str(retry_error)}")
+                return False
 
     except Exception as e:
         print(f"[PUSH] ❌ Failed to send push notification: {str(e)}")
