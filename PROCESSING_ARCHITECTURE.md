@@ -104,9 +104,11 @@ graph LR
         F --> G[Lambda Worker<br/>dashboard-analysis-worker]
         G --> H[Dashboard Analysis API<br/>ChatGPT分析]
     end
-    
-    subgraph "データ更新"
+
+    subgraph "データ更新・通知"
         H --> I[dashboard_summary<br/>テーブル更新]
+        I --> J[プッシュ通知送信<br/>SNS → APNs]
+        J --> K[通知先デバイス<br/>iPhoneアプリ]
     end
 ```
 
@@ -134,7 +136,7 @@ graph LR
 | **watchme-audio-processor** | S3イベント受信→SQS送信 | 1-2秒 | 10秒 | S3イベント |
 | **watchme-audio-worker** | 音声処理実行→累積分析トリガー | 1-3分 | 15分 | SQSキュー |
 | **watchme-dashboard-summary-worker** | プロンプト生成処理 | 10-20秒 | 15分 | SQSキュー |
-| **watchme-dashboard-analysis-worker** | ChatGPT分析処理 | 10-30秒 | 15分 | SQSキュー |
+| **watchme-dashboard-analysis-worker** | ChatGPT分析処理＋プッシュ通知送信 | 10-30秒 | 15分 | SQSキュー |
 
 ### SQSキュー構成（2025年9月25日更新）
 
@@ -230,6 +232,14 @@ graph LR
 - [x] SQSによる信頼性の高い処理
 - [x] Lambda関数による自動スケーリング
 
+#### プッシュ通知システム（2025年10月15日実装）
+- [x] **AWS SNS + APNs統合**
+- [x] 累積分析完了時の自動通知送信
+- [x] 通知先デバイス（iPhone）へのリアルタイム通知
+- [x] フォアグラウンド時のトーストバナー表示
+- [x] バックグラウンド時のサイレント通知
+- [x] データ自動再取得機能
+
 ### 🎯 今後の改善計画
 
 #### Phase 1: Step Functions導入（優先度: 中）
@@ -301,22 +311,30 @@ graph LR
 | 用語 | 説明 |
 |------|------|
 | **タイムブロック** | 30分単位の時間区切り（例: 09-00, 09-30） |
-| **オブザーバーデバイス** | ユーザーの音声を収集するIoTデバイス |
+| **観測対象デバイス** または **録音デバイス** | 音声データを収集するデバイス（例：Apple Watch） |
+| **通知先デバイス** または **iPhoneデバイス** | プッシュ通知を受信するユーザーのiPhone（1ユーザーにつき1台） |
+| **オブザーバーデバイス** | （旧用語）観測対象デバイスと同義 |
 | **バーストイベント** | 感情の急激な変化点 |
 | **Aggregator** | 生データを集計・整形するサービス |
 | **Scorer** | ChatGPTを使用した高度な分析サービス |
+| **APNsトークン** | 通知先デバイス（iPhone）を一意に識別するトークン |
 
 ---
 
-*最終更新: 2025年9月25日*
+*最終更新: 2025年10月15日*
 
 ## 📋 更新履歴
 
-- **2025年9月25日**: 
+- **2025年10月15日**:
+  - **プッシュ通知システム実装完了**（AWS SNS + APNs）
+  - dashboard-analysis-worker関数にプッシュ通知送信機能を追加
+  - 用語定義の標準化：「観測対象デバイス」「通知先デバイス」を明確化
+  - 累積分析完了時の通知フローを追加
+- **2025年9月25日**:
   - 累積分析処理をイベント駆動型に移行、新規Lambda関数追加
-  - **Dashboard Summary APIをステータスに関係なく処理するよう修正**
-  - **Vibe Scorer APIがdashboardテーブルに`status: 'completed'`を設定するよう修正**
-  - **ステータスの運用方針を明確化（処理の記録用であり、処理対象の選別には使わない）**
+  - Dashboard Summary APIをステータスに関係なく処理するよう修正
+  - Vibe Scorer APIがdashboardテーブルに`status: 'completed'`を設定するよう修正
+  - ステータスの運用方針を明確化（処理の記録用であり、処理対象の選別には使わない）
 - **2025年9月24日**: SQSを使った2段階処理に改善、Lambda関数を分離
 - **2025年9月23日**: Azure Speech API (vibe-transcriber-v2)にSupabase upsertリトライ処理追加
 - **2025年1月**: 初版作成

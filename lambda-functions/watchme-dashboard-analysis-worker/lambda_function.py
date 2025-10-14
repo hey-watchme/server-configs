@@ -51,12 +51,18 @@ def lambda_handler(event, context):
                 # 成功ログ
                 log_success_metrics(device_id, date, time_slot, analysis_result)
 
-                # プッシュ通知を送信
-                send_push_notification(device_id, date)
-                
             else:
                 print(f"Dashboard analysis API failed: {analysis_result.get('error', 'Unknown error')}")
-                # エラーの場合、SQSのリトライ機能により自動的に再試行される
+
+            # API成功/失敗に関わらず、プッシュ通知を送信
+            # （アプリ側でデータを再取得させる）
+            try:
+                send_push_notification(device_id, date)
+            except Exception as push_error:
+                print(f"[PUSH] ⚠️ Push notification failed, but continuing: {str(push_error)}")
+
+            # API失敗時はSQSのリトライを有効にする
+            if not analysis_result['success']:
                 raise Exception(f"Dashboard analysis failed: {analysis_result.get('error')}")
             
         except Exception as e:
@@ -207,8 +213,8 @@ def send_push_notification(device_id, date):
     try:
         print(f"[PUSH] Starting push notification for device: {device_id}, date: {date}")
 
-        # 1. Supabaseからデバイストークンを取得
-        apns_token = get_device_apns_token(device_id)
+        # 1. SupabaseからユーザーのAPNsトークンを取得
+        apns_token = get_user_apns_token(device_id)
 
         if not apns_token:
             print(f"[PUSH] No APNs token found for device: {device_id}")
@@ -283,9 +289,10 @@ def send_push_notification(device_id, date):
         return False
 
 
-def get_device_apns_token(device_id):
+def get_user_apns_token(device_id):
     """
-    SupabaseからデバイスのAPNsトークンを取得
+    device_idからユーザーIDを取得し、そのユーザーのAPNsトークンを取得
+    2段階クエリで確実に取得
     """
     try:
         headers = {
@@ -293,39 +300,90 @@ def get_device_apns_token(device_id):
             'Authorization': f'Bearer {SUPABASE_KEY}'
         }
 
+        # Step 1: device_idからuser_idのリストを取得（roleに関係なく全ユーザー）
+        print(f"[PUSH] Step 1: Getting all user_ids for device: {device_id}")
         response = requests.get(
-            f"{SUPABASE_URL}/rest/v1/devices",
-            params={'device_id': f'eq.{device_id}', 'select': 'apns_token'},
+            f"{SUPABASE_URL}/rest/v1/user_devices",
+            params={
+                'device_id': f'eq.{device_id}',
+                'select': 'user_id'
+            },
             headers=headers,
             timeout=10
         )
 
-        if response.status_code == 200:
-            data = response.json()
-            if data and len(data) > 0 and data[0].get('apns_token'):
-                return data[0]['apns_token']
+        if response.status_code != 200:
+            print(f"[PUSH] Failed to get user_ids for device: {device_id}, status: {response.status_code}")
+            print(f"[PUSH] Response: {response.text}")
+            return None
 
-        print(f"[PUSH] Device not found or no APNs token: {device_id}")
+        data = response.json()
+        if not data or len(data) == 0:
+            print(f"[PUSH] No users found for device: {device_id}")
+            return None
+
+        user_ids = [item.get('user_id') for item in data if item.get('user_id')]
+        if not user_ids:
+            print(f"[PUSH] No valid user_ids found")
+            return None
+
+        print(f"[PUSH] Found {len(user_ids)} user(s) for device: {user_ids}")
+
+        # Step 2: 各ユーザーのAPNsトークンを取得（最初に見つかったものを返す）
+        for user_id in user_ids:
+            print(f"[PUSH] Step 2: Getting APNs token for user: {user_id}")
+            response = requests.get(
+                f"{SUPABASE_URL}/rest/v1/users",
+                params={
+                    'user_id': f'eq.{user_id}',
+                    'select': 'apns_token'
+                },
+                headers=headers,
+                timeout=10
+            )
+
+            if response.status_code != 200:
+                print(f"[PUSH] Failed to get APNs token for user: {user_id}, status: {response.status_code}")
+                continue
+
+            user_data = response.json()
+            if not user_data or len(user_data) == 0:
+                print(f"[PUSH] User not found: {user_id}")
+                continue
+
+            apns_token = user_data[0].get('apns_token')
+            if apns_token:
+                print(f"[PUSH] ✅ APNs token found for user: {user_id}, token: {apns_token[:20]}...")
+                return apns_token
+            else:
+                print(f"[PUSH] No APNs token for user: {user_id}, checking next user...")
+
+        print(f"[PUSH] No APNs token found for any user of device: {device_id}")
         return None
 
     except Exception as e:
         print(f"[PUSH] Error fetching APNs token: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return None
 
 
 def create_or_update_endpoint(device_id, apns_token):
     """
     SNS Platform Endpointを作成または更新
+    既存Endpointとの属性不一致がある場合は削除してから再作成
+
+    注意：device_idは観測対象デバイス（音声録音機器）のIDであり、
+    iPhoneのデバイスIDではない。CustomUserDataには使用しない。
     """
     try:
-        # カスタムユーザーデータ（デバイスIDを保存）
-        custom_user_data = json.dumps({'device_id': device_id})
+        # CustomUserDataは使用しない（観測対象デバイスが複数あるため、
+        # device_idごとに異なる値を設定すると属性エラーが発生する）
 
         # Endpointを作成
         response = sns_client.create_platform_endpoint(
             PlatformApplicationArn=SNS_PLATFORM_APP_ARN,
-            Token=apns_token,
-            CustomUserData=custom_user_data
+            Token=apns_token
         )
 
         endpoint_arn = response['EndpointArn']
@@ -335,7 +393,7 @@ def create_or_update_endpoint(device_id, apns_token):
     except sns_client.exceptions.InvalidParameterException as e:
         # Endpointが既に存在する場合
         error_message = str(e)
-        if 'Endpoint already exists' in error_message:
+        if 'already exists' in error_message.lower():
             # エラーメッセージからARNを抽出
             import re
             match = re.search(r'arn:aws:sns[^\s]+', error_message)
@@ -343,21 +401,41 @@ def create_or_update_endpoint(device_id, apns_token):
                 endpoint_arn = match.group(0)
                 print(f"[PUSH] SNS Endpoint already exists: {endpoint_arn}")
 
-                # トークンを更新
-                try:
-                    sns_client.set_endpoint_attributes(
-                        EndpointArn=endpoint_arn,
-                        Attributes={
-                            'Token': apns_token,
-                            'Enabled': 'true',
-                            'CustomUserData': custom_user_data
-                        }
-                    )
-                    print(f"[PUSH] SNS Endpoint updated")
-                except Exception as update_error:
-                    print(f"[PUSH] Failed to update endpoint: {update_error}")
+                # 既存Endpointの属性が異なる場合は削除して再作成
+                if 'different attributes' in error_message.lower():
+                    print(f"[PUSH] Endpoint has different attributes. Deleting and recreating...")
 
-                return endpoint_arn
+                    try:
+                        # 既存Endpointを削除
+                        sns_client.delete_endpoint(EndpointArn=endpoint_arn)
+                        print(f"[PUSH] Old endpoint deleted successfully")
+
+                        # 新しいEndpointを作成（CustomUserDataなし）
+                        response = sns_client.create_platform_endpoint(
+                            PlatformApplicationArn=SNS_PLATFORM_APP_ARN,
+                            Token=apns_token
+                        )
+
+                        new_endpoint_arn = response['EndpointArn']
+                        print(f"[PUSH] New SNS Endpoint created: {new_endpoint_arn}")
+                        return new_endpoint_arn
+
+                    except Exception as recreate_error:
+                        print(f"[PUSH] ❌ Failed to delete/recreate endpoint: {str(recreate_error)}")
+                        return None
+
+                else:
+                    # 属性が同じ場合は既存Endpointを有効化して使用
+                    try:
+                        sns_client.set_endpoint_attributes(
+                            EndpointArn=endpoint_arn,
+                            Attributes={'Enabled': 'true'}
+                        )
+                        print(f"[PUSH] Existing endpoint re-enabled")
+                    except Exception as enable_error:
+                        print(f"[PUSH] Failed to re-enable endpoint: {enable_error}")
+
+                    return endpoint_arn
 
         print(f"[PUSH] InvalidParameterException: {e}")
         return None
