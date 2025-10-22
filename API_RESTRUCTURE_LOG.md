@@ -383,7 +383,13 @@ python main_supabase.py
 "endpoint": "http://vibe-analysis-scorer:8002/analyze-dashboard-summary"
 ```
 
-**状態**: 🔄 未実行
+**実施日**: 2025-10-22
+
+**コミット**: `b577745` (api-manager)
+
+**状態**: ✅ 完了
+
+**注意**: この変更はローカル環境のみ。本番環境では、EC2上のコンテナ名変更と同時に適用される必要があります。
 
 ---
 
@@ -461,32 +467,77 @@ python main_supabase.py
 
 ---
 
-## 🔄 進捗状況
+## 🔄 進捗状況（2025-10-22 更新）
 
 - **フェーズ1（ローカル）**: 83% (5/6ステップ完了) - ⚠️ venv再作成は後で実施
 - **フェーズ2（本番）**:
-  - 事前調査: 100% 完了
+  - 事前調査: 100% 完了 ✅
     - ✅ Lambda関数のエンドポイント確認
     - ✅ コンテナ間参照の確認
     - ✅ ドキュメント更新（PROCESSING_ARCHITECTURE.md）
-  - 実装作業: 0% (0/7ステップ完了)
-- **全体進捗**: 42% (5/12ステップ完了)
+  - ローカル準備: 100% 完了 ✅
+    - ✅ api-managerのコンテナ名参照更新
+    - ✅ 変更のコミット（2件）
+  - 本番環境実装: 0% (0/6ステップ完了)
+- **全体進捗**: 50% (6/12ステップ完了)
 
-### 次回作業のチェックリスト
+### ✅ 完了した作業（2025-10-22）
+
+1. **事前調査**
+   - Lambda関数のエンドポイント確認
+   - コンテナ間参照の確認（vault, janitor, demo-generator, api-manager）
+   - PROCESSING_ARCHITECTURE.mdの更新（コンテナ名列追加、Lambda関数詳細追加）
+
+2. **ローカル環境の準備**
+   - api-managerのコンテナ名参照を新名称に更新（10箇所）
+   - コミット完了:
+     - `b577745` (api-manager)
+     - `4494fda` (server-configs)
+
+### 🔜 次回作業のチェックリスト
 
 **準備完了**:
 - ✅ 影響範囲の特定完了
 - ✅ 作業手順の文書化完了
 - ✅ コンテナ名参照箇所の特定完了
+- ✅ api-managerの更新完了（ローカル）
 
-**実施待ち**:
-1. [ ] ECRリポジトリのリネーム（AWS Console）
-2. [ ] GitHub Actionsの更新（5リポジトリ）
-3. [ ] EC2ディレクトリ構造変更とdocker-compose更新
-4. [ ] api-managerのコンテナ名参照更新
-5. [ ] Nginx設定更新（新旧並行運用）
-6. [ ] systemdサービス更新
-7. [ ] 動作確認とテスト
+**本番環境での実施待ち**（以下を一連の流れで実施）:
+1. [ ] **ECRリポジトリのリネーム**（AWS Console）
+   - 4つをリネーム、1つを新規作成
+   - 所要時間: 約15分
+
+2. [ ] **GitHub Actionsの更新**（5リポジトリ）
+   - ECR_REPOSITORY環境変数を変更
+   - 所要時間: 約10分
+
+3. [ ] **EC2サーバーでの作業開始**（SSH接続）
+   ```bash
+   ssh -i /Users/kaya.matsumoto/watchme-key.pem ubuntu@3.24.16.82
+   ```
+
+4. [ ] **EC2ディレクトリ構造変更とdocker-compose更新**
+   - 5つのディレクトリをリネーム
+   - 5つのコンテナ名を変更
+   - 所要時間: 約20分
+
+5. [ ] **Nginx設定更新**（新旧エンドポイント並行運用）
+   - 7つのエンドポイントを追加
+   - 設定テスト＆リロード
+   - 所要時間: 約15分
+
+6. [ ] **systemdサービス更新**
+   - 5つの新規サービスファイル作成
+   - 5つの旧サービス無効化
+   - サービス再起動
+   - 所要時間: 約20分
+
+7. [ ] **動作確認とテスト**
+   - 各APIのヘルスチェック
+   - Lambdaからの疎通確認
+   - 所要時間: 約30分
+
+**合計所要時間**: 約2時間（EC2作業開始から完了まで）
 
 ---
 
@@ -499,5 +550,101 @@ python main_supabase.py
 
 ---
 
+---
+
+## 📝 次回作業者への引き継ぎ事項（2025-10-22作成）
+
+### 🎯 現状サマリー
+
+**完了事項**:
+- ✅ フェーズ1（ローカルリストラクチャリング）: 83%完了
+- ✅ フェーズ2事前調査: 100%完了
+- ✅ ローカル環境のapi-manager更新: 100%完了
+
+**次のステップ**:
+本番環境（EC2）でのリストラクチャリング実施
+
+### 📋 作業開始前の確認事項
+
+1. **必須ドキュメントの確認**
+   - このファイル（API_RESTRUCTURE_LOG.md）を最初から最後まで読む
+   - PROCESSING_ARCHITECTURE.mdの「コンテナ名の重要性」セクションを確認
+   - server-configs/README.mdでEC2インフラ構成を確認
+
+2. **影響範囲の理解**
+   - Lambda関数: 影響なし（HTTPSエンドポイント経由のため）
+   - api-manager: ✅ 更新済み（ローカルのみ、本番反映待ち）
+   - 他サービス（vault, janitor, demo-generator）: 影響なし
+
+3. **リスク確認**
+   - サービス停止時間: 約2時間を見込む
+   - 外部利用者なし: 長時間停止OK
+   - バックアップ: ECR履歴あり、ディレクトリは手動バックアップ推奨
+
+### 🚀 次回作業の流れ
+
+#### ステップ1: ECRリポジトリのリネーム（15分）
+
+AWSマネジメントコンソール > ECR で以下を実施:
+
+| 現在のECR | 新ECR | 操作 |
+|----------|-------|------|
+| `watchme-api-ast` | `watchme-behavior-analysis-feature-extractor-v2` | リネーム |
+| `watchme-superb-api` | `watchme-emotion-analysis-feature-extractor-v3` | リネーム |
+| `watchme-api-transcriber-v2` | `watchme-vibe-analysis-transcriber-v2` | リネーム |
+| `watchme-api-vibe-aggregator` | `watchme-vibe-analysis-aggregator` | リネーム |
+| なし | `watchme-vibe-analysis-scorer` | 新規作成 |
+
+#### ステップ2: GitHub Actionsの更新（10分）
+
+以下5リポジトリの`.github/workflows/deploy-to-ecr.yml`で`ECR_REPOSITORY`環境変数を変更:
+
+1. `api-sed-ast` → `watchme-behavior-analysis-feature-extractor-v2`
+2. `api-superb` → `watchme-emotion-analysis-feature-extractor-v3`
+3. `api-asr-azure` → `watchme-vibe-analysis-transcriber-v2`
+4. `api-vibe-aggregator` → `watchme-vibe-analysis-aggregator`
+5. `watchme-api-whisper-gpt` → `watchme-vibe-analysis-scorer`
+
+各リポジトリでコミット＆プッシュ。
+
+#### ステップ3〜7: EC2サーバーでの作業（90分）
+
+詳細は上記「次回作業のチェックリスト」を参照。
+
+**重要**: EC2作業は一連の流れで実施すること（中断しない）。
+
+### ⚠️ トラブルシューティング
+
+**問題**: コンテナが起動しない
+
+→ ログ確認: `docker logs <container_name>`
+→ ネットワーク確認: `docker network inspect watchme-network`
+
+**問題**: Nginxエラー
+
+→ 設定テスト: `sudo nginx -t`
+→ ログ確認: `sudo tail -f /var/log/nginx/error.log`
+
+**問題**: api-managerがコンテナに接続できない
+
+→ コンテナ名を確認: `docker ps | grep <container_name>`
+→ ネットワーク接続確認: `docker exec api-manager ping <container_name>`
+
+### 📞 問題が発生した場合
+
+1. このログファイルに詳細を記録
+2. 状態を ❌ に変更
+3. エラーメッセージ、スタックトレース、実行コマンドを記録
+4. 可能であればロールバック手順も記録
+
+### 🎓 学んだこと（次回作業者への知見）
+
+- Lambda関数はHTTPSエンドポイント経由なので、コンテナ名変更の影響を受けない
+- api-managerのようなスケジューラーは、コンテナ名を直接参照する可能性が高い
+- ドメイン駆動設計では、コンテナ名を機能ベースにすることで、将来のモデル変更に強くなる
+
+---
+
 **最終更新**: 2025-10-22
-**次回作業者へ**: ステップ1から順に実行してください
+**作業実施者**: Claude Code
+**次回作業者へ**: 上記「次回作業の流れ」に従って実施してください。不明点があればこのログファイル全体を参照してください。
