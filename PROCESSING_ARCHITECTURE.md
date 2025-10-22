@@ -1,8 +1,37 @@
 # WatchMe 音声処理アーキテクチャ
 
-## 📊 システム概要
+## 🎯 サービス概要
 
-WatchMeプラットフォームは、音声データを多面的に分析し、ユーザーの心理状態を可視化するシステムです。
+WatchMeは、音声データを多面的に分析し、ユーザーの心理状態を可視化するプラットフォームです。
+
+### 録音デバイスとデータ収集
+
+**メイン機能：オブザーバーデバイスによる自動録音**
+- **オブザーバーデバイス**：ウェアラブル型または据え置き型の録音デバイス
+- **録音頻度**：30分ごとに1分間自動録音（1日48データポイント）
+- **用途**：日常的な継続モニタリング
+
+**追加機能：iOSアプリ内スポット録音**
+- **録音方式**：ユーザーが手動で録音ボタンを押して開始（フォアグラウンドのみ）
+- **録音時間**：任意（制限なし）
+- **用途**：特定の会話や状況をピンポイントで分析したい場合
+
+### マルチデバイス対応
+
+- すべての録音デバイス（オブザーバー + iOSアプリ）からのデータを統合
+- 分析結果はiOSアプリのダッシュボードに一元表示
+- 将来的にAndroidアプリも対応予定
+
+### データフロー
+
+```
+録音デバイス（オブザーバー/iOSアプリ）→ S3アップロード → サーバー側で自動分析
+→ 結果をプッシュ通知 → iOSダッシュボードで閲覧
+```
+
+---
+
+## 📊 システム概要
 
 ### 🎯 2つの処理モード
 
@@ -129,14 +158,41 @@ graph LR
 
 ## 📦 システム構成
 
-### Lambda関数構成（2025年9月25日更新）
+### Lambda関数構成（2025年10月22日更新）
 
-| 関数名 | 役割 | 実行時間 | タイムアウト | トリガー |
-|--------|------|---------|------------|---------|
-| **watchme-audio-processor** | S3イベント受信→SQS送信 | 1-2秒 | 10秒 | S3イベント |
-| **watchme-audio-worker** | 音声処理実行→累積分析トリガー | 1-3分 | 15分 | SQSキュー |
-| **watchme-dashboard-summary-worker** | プロンプト生成処理 | 10-20秒 | 15分 | SQSキュー |
-| **watchme-dashboard-analysis-worker** | ChatGPT分析処理＋プッシュ通知送信 | 10-30秒 | 15分 | SQSキュー |
+| 関数名 | 役割 | 実行時間 | タイムアウト | トリガー | 呼び出し先API |
+|--------|------|---------|------------|---------|--------------|
+| **watchme-audio-processor** | S3イベント受信→SQS送信 | 1-2秒 | 10秒 | S3イベント | なし |
+| **watchme-audio-worker** | 音声処理実行→累積分析トリガー | 1-3分 | 15分 | SQSキュー | 下記7つのAPI |
+| **watchme-dashboard-summary-worker** | プロンプト生成処理 | 10-20秒 | 15分 | SQSキュー | Vibe Aggregator（dashboard-summary） |
+| **watchme-dashboard-analysis-worker** | ChatGPT分析処理＋プッシュ通知送信 | 10-30秒 | 15分 | SQSキュー | Vibe Scorer（dashboard-analysis） |
+
+#### watchme-audio-worker が呼び出すAPIエンドポイント（詳細）
+
+以下のエンドポイントは`API_BASE_URL`環境変数（デフォルト: `https://api.hey-watch.me`）を基準に構築されます。
+
+| 順序 | API | エンドポイント | メソッド | タイムアウト | 備考 |
+|-----|-----|--------------|---------|-----------|------|
+| 1 | Azure Speech API | `/vibe-transcriber-v2/fetch-and-transcribe` | POST | 180秒 | リトライ最大3回 |
+| 2 | AST API | `/behavior-features/fetch-and-process-paths` | POST | 180秒 | 音響イベント検出 |
+| 2.1 | SED Aggregator | `/behavior-aggregator/analysis/sed` | POST | 180秒 | AST成功時に自動起動 |
+| 3 | SUPERB API | `/emotion-features/process/emotion-features` | POST | 180秒 | 感情認識 |
+| 3.1 | Emotion Aggregator | `/emotion-aggregator/analyze/opensmile-aggregator` | POST | 180秒 | SUPERB成功時に自動起動 |
+| 3.5 | Vibe Aggregator（失敗記録） | `/vibe-aggregator/create-failed-record` | POST | 30秒 | Azure失敗時のみ |
+| 4 | Vibe Aggregator | `/vibe-aggregator/generate-timeblock-prompt` | GET | 180秒 | Azure/AST/SUPERB全成功時のみ |
+| 5 | Vibe Scorer | `/vibe-scorer/analyze-timeblock` | POST | 180秒 | Vibe Aggregator成功時のみ |
+
+#### watchme-dashboard-summary-worker が呼び出すAPIエンドポイント
+
+| API | エンドポイント | メソッド | タイムアウト | 備考 |
+|-----|--------------|---------|-----------|------|
+| Vibe Aggregator（dashboard-summary） | `/vibe-aggregator/generate-dashboard-summary` | GET | 180秒 | プロンプト生成 |
+
+#### watchme-dashboard-analysis-worker が呼び出すAPIエンドポイント
+
+| API | エンドポイント | メソッド | タイムアウト | 備考 |
+|-----|--------------|---------|-----------|------|
+| Vibe Scorer（dashboard-analysis） | `/vibe-scorer/analyze-dashboard-summary` | POST | 180秒 | ChatGPT分析 |
 
 ### SQSキュー構成（2025年9月25日更新）
 
@@ -153,17 +209,39 @@ graph LR
 
 **すべてのAPIサービスはAWS EC2インスタンス上でDockerコンテナとして稼働しています。**
 
-| カテゴリ | サービス名 | 技術 | ポート | エンドポイント | 稼働環境 |
-|---------|-----------|------|--------|--------------|----------|
-| **ASR** | Azure ASR API | Azure Speech Services | 8013 | /vibe-transcriber-v2 | EC2 (Docker) |
-| **SED** | AST API | YAMNet (527クラス分類) | 8017 | /behavior-features | EC2 (Docker) |
-| **SER** | SUPERB API | OpenSMILE | 8018 | /emotion-features | EC2 (Docker) |
-| **集計** | SED Aggregator | 行動パターン分析 | 8010 | /behavior-aggregator | EC2 (Docker) |
-| **集計** | Emotion Aggregator | 感情スコア集計 | 8012 | /emotion-aggregator | EC2 (Docker) |
-| **統合** | Vibe Aggregator | プロンプト生成 | 8009 | /vibe-aggregator | EC2 (Docker) |
-| **統合** | Vibe Scorer | ChatGPT連携 | 8002 | /vibe-scorer | EC2 (Docker) |
+| カテゴリ | サービス名 | 技術 | ポート | エンドポイント | コンテナ名 | 稼働環境 |
+|---------|-----------|------|--------|--------------|-----------|----------|
+| **ASR** | Azure ASR API | Azure Speech Services | 8013 | /vibe-transcriber-v2 | `vibe-transcriber-v2` | EC2 (Docker) |
+| **SED** | AST API | YAMNet (527クラス分類) | 8017 | /behavior-features | `ast-api` | EC2 (Docker) |
+| **SER** | SUPERB API | OpenSMILE | 8018 | /emotion-features | `superb-api` | EC2 (Docker) |
+| **集計** | SED Aggregator | 行動パターン分析 | 8010 | /behavior-aggregator | `api-sed-aggregator` | EC2 (Docker) |
+| **集計** | Emotion Aggregator | 感情スコア集計 | 8012 | /emotion-aggregator | `opensmile-aggregator` | EC2 (Docker) |
+| **統合** | Vibe Aggregator | プロンプト生成 | 8009 | /vibe-aggregator | `api_gen_prompt_mood_chart` | EC2 (Docker) |
+| **統合** | Vibe Scorer | ChatGPT連携 | 8002 | /vibe-scorer | `api-gpt-v1` | EC2 (Docker) |
 
 > **詳細**: EC2のインフラ構成、Dockerネットワーク、Nginx設定については [server-configs/README.md](./README.md) を参照
+
+#### 📝 コンテナ名の重要性
+
+**コンテナ間通信では、コンテナ名を直接参照する場所が多数あります：**
+
+1. **Lambda関数**（`watchme-audio-worker`, `watchme-dashboard-summary-worker`, `watchme-dashboard-analysis-worker`）
+   - 環境変数`API_BASE_URL`経由でHTTPSエンドポイントを使用（Nginx経由）
+   - コンテナ名の直接参照なし
+
+2. **API Manager（スケジューラー）**（`/api/api-manager/scheduler/run-api-process-docker.py`）
+   - **コンテナ名を直接参照**：
+     - `http://api_gen_prompt_mood_chart:8009/...`
+     - `http://api-gpt-v1:8002/...`
+     - `http://ast-api:8017/...`
+     - `http://superb-api:8018/...`
+     - `http://vibe-transcriber-v2:8013/...`
+     - `http://api-sed-aggregator:8010/...`
+     - `http://opensmile-aggregator:8012/...`
+   - ⚠️ **コンテナ名を変更する場合は、このファイルも更新が必要**
+
+3. **その他のサービス**（Vault, Janitor, Demo Generator）
+   - これらのサービスはリストラクチャ対象のコンテナを参照していないことを確認済み
 
 ### データフロー
 
@@ -315,43 +393,80 @@ graph LR
 - 1日48回の処理のうち、約**14回（09:00〜15:30のタイムブロック）**でクォーター超過が発生
 - 該当タイムブロックは`transcriptions_status = 'quota_exceeded'`として記録される
 
-### クォーター超過時の処理フロー
+### クォーター超過時の処理フロー（2025年10月21日更新）
+
+#### **改善後のフロー**
 
 ```
 1. Azure Speech APIにリクエスト送信
    ↓
 2. 1.1秒で即座にエラー応答（クォーター超過）
    ↓
-3. Lambda関数内のリトライ機能が動作せず（※）
+3. Lambda関数がレスポンス本文を解析
    ↓
-4. azure_success = False
+4. error_files リストに該当ファイルが含まれている
    ↓
-5. Vibe Aggregator、Vibe Scorerをスキップ
+5. azure_success = False と判定
    ↓
-6. 累積分析もトリガーされない
+6. Vibe Aggregator の /create-failed-record を呼び出し
    ↓
-7. Lambda関数は正常終了（200 OK）
+7. dashboardテーブルに失敗レコードを作成
+   （vibe_score=0, status='completed', summary="分析失敗..."）
    ↓
-8. 結果: そのタイムブロックのデータが欠損
+8. 累積分析をトリガー（成功時と同じフロー）
+   ↓
+9. プッシュ通知送信（失敗情報も含めて通知）
 ```
 
-**※ リトライが動作しない理由**:
-- Azure APIは**HTTP 200 OK**を返す（429エラーではない）
-- レスポンス本文に`errors: 1`が含まれる形式
-- Lambda関数内のリトライ条件（`status_code in [429, 503]`）に該当しない
+**✅ 改善のポイント（2025年10月21日実装）**:
+- **ファイル単位で成功/失敗を判定**：`processed_files`と`error_files`リストを確認
+- **失敗時もフローを止めない**：失敗レコードを作成して累積分析も実行
+- **ユーザーへの通知を継続**：失敗情報も含めてプッシュ通知を送信
 
-### データ欠損の範囲
+#### **判定ロジック**
 
-| データ種類 | 状態 |
-|-----------|------|
-| **音声ファイル** | ✅ S3に保存済み |
-| **AST（行動分析）** | ✅ 処理完了 |
-| **SUPERB（感情分析）** | ✅ 処理完了 |
-| **Azure（文字起こし）** | ❌ クォーター超過で失敗 |
-| **Vibe Aggregator（統合）** | ❌ スキップ（Azureが失敗したため） |
-| **Vibe Scorer（ChatGPT分析）** | ❌ スキップ |
-| **Dashboard（統合分析）** | ❌ 作成されない |
-| **累積分析** | ❌ トリガーされない |
+Lambda関数は以下の順序でファイル単位の成功/失敗を判定：
+
+1. **processed_files リストに含まれている** → 成功
+2. **error_files リストに含まれている** → 失敗
+3. **どちらにもない場合** → `summary.errors`の値で判定
+
+```python
+# Lambda関数内の判定ロジック（lambda_function.py Line 95-164）
+processed_files = response_data.get('processed_files', [])
+error_files = response_data.get('error_files', [])
+
+if file_path in processed_files:
+    azure_success = True  # ✅ 成功
+elif file_path in error_files:
+    azure_success = False  # ❌ 失敗（クォーター超過など）
+else:
+    # summary.errorsで判定
+    errors_count = response_data.get('summary', {}).get('errors', 0)
+    azure_success = (errors_count == 0)
+```
+
+### データの3つの状態
+
+| 状態 | vibe_score | status | 意味 |
+|------|-----------|--------|------|
+| **未処理** | `null` | `null` | まだその時間帯に到達していない |
+| **失敗** | `0` | `completed` | 処理済みだが分析失敗（クォーター超過など） |
+| **正常** | 数値（-100〜100） | `completed` | 正常に分析完了 |
+
+### データ保存の範囲
+
+| データ種類 | 成功時 | 失敗時（クォーター超過など） |
+|-----------|--------|--------------------------|
+| **音声ファイル（S3）** | ✅ 保存済み | ✅ 保存済み |
+| **AST（行動分析）** | ✅ 処理完了 | ✅ 処理完了 |
+| **SUPERB（感情分析）** | ✅ 処理完了 | ✅ 処理完了 |
+| **Azure（文字起こし）** | ✅ 処理完了 | ❌ クォーター超過で失敗 |
+| **Vibe Aggregator（統合）** | ✅ 実行 | ✅ `/create-failed-record`で失敗レコード作成 |
+| **Vibe Scorer（ChatGPT分析）** | ✅ 実行 | ❌ スキップ |
+| **Dashboard（統合分析）** | ✅ 作成（vibe_score=数値） | ✅ 作成（vibe_score=0） |
+| **累積分析** | ✅ トリガー | ✅ トリガー |
+| **プッシュ通知** | ✅ 送信 | ✅ 送信（失敗情報も含む） |
 
 ### 運用方針
 
@@ -362,22 +477,28 @@ graph LR
 - 自動リトライしても復旧しない（無駄なコスト発生）
 - **料金が発生する処理は人間による承認プロセスを経るべき**
 
-**処理フロー**:
+**処理フロー（2025年10月21日更新）**:
 ```
-1. Azure APIがクォーター超過エラーを返す
+1. Azure APIがクォーター超過エラーを返す（HTTP 200 + error_files）
    ↓
-2. Lambda関数は即座に処理を終了
+2. Lambda関数がファイル単位で失敗を検出
    ↓
-3. データベースに transcriptions_status = 'quota_exceeded' を記録
+3. Azure Speech API内部でSupabaseに transcriptions_status = 'quota_exceeded' を記録
    ↓
-4. 自動リトライは行わない
+4. Lambda関数が /create-failed-record を呼び出し
    ↓
-5. 手動で再処理（後述の手順）
+5. dashboardテーブルに失敗レコード作成（vibe_score=0）
+   ↓
+6. 累積分析を実行（失敗情報も含めて分析）
+   ↓
+7. プッシュ通知を送信（ユーザーに状況を通知）
+   ↓
+8. 必要に応じて手動再処理（後述の手順）
 ```
 
 #### **開発環境（現在）**
-- ✅ **クォーター超過は許容する**（無料プランのため）
-- ✅ **欠損データは無視**
+- ✅ **クォーター超過時も処理を継続**（失敗レコードを作成）
+- ✅ **累積分析とプッシュ通知は送信**（ユーザー体験を維持）
 - ✅ **手動再処理の手順を用意**（必要に応じて実行）
 
 #### **本番環境**
@@ -584,10 +705,18 @@ WatchMeシステムでは、**デバイス**という言葉が2つの異なる�
 
 ---
 
-*最終更新: 2025年10月20日*
+*最終更新: 2025年10月21日*
 
 ## 📋 更新履歴
 
+- **2025年10月21日**:
+  - **Lambda関数のエラーハンドリング改善完了**
+  - Azure Speech APIレスポンスのファイル単位判定を実装
+  - `processed_files`/`error_files`リストから該当ファイルの成功/失敗を判定
+  - クォーター超過時も失敗レコードを作成して処理を継続
+  - 失敗時も累積分析とプッシュ通知を送信（ユーザー体験を維持）
+  - **データの3つの状態を明確化**：未処理（null）、失敗（vibe_score=0）、正常（数値）
+  - Lambda関数をデプロイ完了（watchme-audio-worker）
 - **2025年10月20日**:
   - **実測データに基づくパフォーマンス調査完了**
   - Azure Speech APIの処理時間を実測：**26-28秒（1分音声）**
