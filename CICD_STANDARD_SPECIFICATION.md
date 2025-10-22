@@ -121,31 +121,93 @@ SUPABASE_KEY            # Supabase APIキー
 
 ## 0. 初回セットアップ（1回限りの手動作業）
 
-### EC2サーバーの準備
+### ⚠️ 重要: CI/CD実装前の必須作業
+
+新しいAPIのCI/CDを実装する際は、**必ず以下の順序で作業を実施してください**。
+
+#### ステップ0: ECRリポジトリの作成
+
+```bash
+# AWS CLIでECRリポジトリを作成
+aws ecr create-repository \
+  --repository-name {ecr-repository-name} \
+  --region ap-southeast-2 \
+  --image-scanning-configuration scanOnPush=true
+
+# 例: watchme-emotion-analysis-aggregator
+```
+
+**注意**: ECRリポジトリが存在しないとDockerイメージのプッシュが失敗します。
+
+#### ステップ1: EC2サーバーの準備
+
 ```bash
 # 1. EC2に接続
 ssh -i ~/watchme-key.pem ubuntu@EC2_HOST
 
-# 2. アプリケーション用ディレクトリ作成
-mkdir -p /home/ubuntu/{api-name}
+# 2. アプリケーション用ディレクトリ作成（重要！）
+mkdir -p /home/ubuntu/{api-directory-name}
 
 # 3. Dockerネットワークの確認/作成
 docker network create watchme-network 2>/dev/null || true
 
-# 4. 初回のみ: 必要なファイルを配置
-# ※ 以降はCI/CDで自動更新される
+# 4. ディレクトリが作成されたことを確認
+ls -la /home/ubuntu/{api-directory-name}
 ```
+
+**注意**: ディレクトリが存在しないとGitHub ActionsのSCPコマンドが失敗します。
+
+#### ステップ2: GitHub Secretsの設定
+
+以下のSecretsがリポジトリに設定されていることを確認：
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `EC2_SSH_PRIVATE_KEY`
+- `EC2_HOST`
+- `EC2_USER`
+- `SUPABASE_URL`
+- `SUPABASE_KEY`
+
+### 初回セットアップのチェックリスト
+
+- [ ] ECRリポジトリが作成されている
+- [ ] EC2上にアプリケーションディレクトリが作成されている
+- [ ] GitHub Secretsがすべて設定されている
+- [ ] Dockerネットワーク `watchme-network` が存在する
+- [ ] GitHub Actionsワークフローファイルが作成されている
+
+**これらがすべて完了してから、初めてGitHub Actionsを実行してください。**
 
 ## 1. GitHub Actionsワークフロー仕様
 
-### 必須ステップ
+### 必須ステップ（deploy-to-ec2ジョブ）
 ```yaml
-# ステップ1: 古いDockerイメージを削除（クリーンビルドのため）
-# ステップ2: Dockerイメージをクリーンビルド（--no-cache必須）
-# ステップ3: ECRにDockerイメージをプッシュ
-# ステップ4: EC2に.envファイルを作成/更新
-# ステップ5: docker-composeでコンテナ再起動
+# ステップ1: SSHエージェントのセットアップ
+# ステップ2: コードのチェックアウト
+# ステップ3: Known Hostsの追加
+# ステップ4: EC2にディレクトリ作成（初回デプロイ時のみ必要だが、べき等性のため常に実行推奨）
+# ステップ5: docker-compose.prod.ymlとrun-prod.shをEC2にコピー
+# ステップ6: EC2に.envファイルを作成/更新
+# ステップ7: docker-composeでコンテナ再起動
 ```
+
+### ステップ4: ディレクトリ作成（重要！）
+
+初回デプロイ時にディレクトリが存在しないとSCPが失敗するため、以下のステップを**必ず追加**してください：
+
+```yaml
+# ステップ4: EC2にディレクトリを作成（存在確認＆作成）
+- name: Create application directory on EC2 if not exists
+  env:
+    EC2_HOST: ${{ secrets.EC2_HOST }}
+    EC2_USER: ${{ secrets.EC2_USER }}
+  run: |
+    echo "📁 Creating application directory on EC2..."
+    ssh ${EC2_USER}@${EC2_HOST} "mkdir -p /home/ubuntu/{api-directory-name}"
+    echo "✅ Directory created/verified"
+```
+
+**このステップを追加する位置**: 「Known Hostsの追加」の直後、「Update configuration files on EC2」の直前
 
 ### ⚠️ 重要：必須要件チェックリスト
 
