@@ -253,7 +253,13 @@ pip install -r requirements.txt
 python main_supabase.py
 ```
 
-**状態**: 🔄 未実行
+**状態**: ❌ 不要（2025-10-22 確認）
+
+**理由**:
+- 本番環境: 完全にDockerコンテナで運用
+- ローカルテスト: Docker Composeで実施
+- venvディレクトリ: 過去の開発時の名残で、現在は使用していない
+- ディレクトリ移動してもDocker内部では影響なし
 
 ---
 
@@ -294,18 +300,68 @@ python main_supabase.py
 
 ---
 
-### ステップ7: ECRリポジトリのリネーム
+### ステップ7: 新規ECRリポジトリの作成
 
-**方針変更**: 新規作成ではなく、既存リポジトリをリネーム（AWS Console使用）
+**方針変更**: ECRリポジトリは名前変更不可のため、新規作成し、旧リポジトリは後で削除
 
-**対象**:
-- [ ] `watchme-api-ast` → `watchme-behavior-analysis-feature-extractor-v2`
-- [ ] `watchme-superb-api` → `watchme-emotion-analysis-feature-extractor-v3`
-- [ ] `watchme-api-transcriber-v2` → `watchme-vibe-analysis-transcriber-v2`
-- [ ] `watchme-api-vibe-aggregator` → `watchme-vibe-analysis-aggregator`
-- [ ] 新規作成: `watchme-vibe-analysis-scorer`
+**理由**: AWS Console/CLIともにECRリポジトリの名前変更機能は存在しない
 
-**状態**: 🔄 未実行
+**作成リポジトリ**:
+- ✅ `watchme-behavior-analysis-feature-extractor-v2`
+- ✅ `watchme-emotion-analysis-feature-extractor-v3`
+- ✅ `watchme-vibe-analysis-transcriber-v2`
+- ✅ `watchme-vibe-analysis-aggregator`
+- ✅ `watchme-vibe-analysis-scorer`
+
+**状態**: ✅ 完了 (2025-10-22 17:14)
+
+**実行コマンド** (AWS CLI):
+
+```bash
+# リージョン: ap-southeast-2 (Sydney)
+
+# 1. behavior-analysis-feature-extractor-v2
+aws ecr create-repository \
+  --repository-name watchme-behavior-analysis-feature-extractor-v2 \
+  --region ap-southeast-2 \
+  --image-scanning-configuration scanOnPush=true
+
+# 2. emotion-analysis-feature-extractor-v3
+aws ecr create-repository \
+  --repository-name watchme-emotion-analysis-feature-extractor-v3 \
+  --region ap-southeast-2 \
+  --image-scanning-configuration scanOnPush=true
+
+# 3. vibe-analysis-transcriber-v2
+aws ecr create-repository \
+  --repository-name watchme-vibe-analysis-transcriber-v2 \
+  --region ap-southeast-2 \
+  --image-scanning-configuration scanOnPush=true
+
+# 4. vibe-analysis-aggregator
+aws ecr create-repository \
+  --repository-name watchme-vibe-analysis-aggregator \
+  --region ap-southeast-2 \
+  --image-scanning-configuration scanOnPush=true
+
+# 5. vibe-analysis-scorer
+aws ecr create-repository \
+  --repository-name watchme-vibe-analysis-scorer \
+  --region ap-southeast-2 \
+  --image-scanning-configuration scanOnPush=true
+```
+
+**作成結果**:
+- ✅ `watchme-behavior-analysis-feature-extractor-v2` - 2025-10-22 17:14:09
+- ✅ `watchme-emotion-analysis-feature-extractor-v3` - 2025-10-22 17:14:16
+- ✅ `watchme-vibe-analysis-transcriber-v2` - 2025-10-22 17:14:24
+- ✅ `watchme-vibe-analysis-aggregator` - 2025-10-22 17:14:29
+- ✅ `watchme-vibe-analysis-scorer` - 2025-10-22 17:14:35
+
+**注意事項**:
+- 旧リポジトリ(`watchme-api-ast`等)は削除せず残しておく（動作確認後に削除）
+- 次のGitHub Actionsデプロイ時に新リポジトリへイメージがプッシュされる
+- 旧リポジトリのイメージは手動コピー不要
 
 ---
 
@@ -313,17 +369,48 @@ python main_supabase.py
 
 **対象**: 5つのGitHubリポジトリの`.github/workflows/deploy-to-ecr.yml`
 
-| リポジトリ | 現在のECR_REPOSITORY | 新ECR_REPOSITORY |
-|-----------|---------------------|------------------|
-| `api-sed-ast` | `watchme-api-ast` | `watchme-behavior-analysis-feature-extractor-v2` |
-| `api-superb` | `watchme-superb-api` | `watchme-emotion-analysis-feature-extractor-v3` |
-| `api-asr-azure` | `watchme-api-transcriber-v2` | `watchme-vibe-analysis-transcriber-v2` |
-| `api-vibe-aggregator` | `watchme-api-vibe-aggregator` | `watchme-vibe-analysis-aggregator` |
-| `watchme-api-whisper-gpt` | 未作成 | `watchme-vibe-analysis-scorer` |
+| リポジトリ | 現在のECR_REPOSITORY | 新ECR_REPOSITORY | 状態 |
+|-----------|---------------------|------------------|------|
+| `api-sed-ast` | `watchme-api-ast` | `watchme-behavior-analysis-feature-extractor-v2` | ✅ 完了 |
+| `api-superb` | なし | `watchme-emotion-analysis-feature-extractor-v3` | ✅ 完了 (新規作成) |
+| `api-asr-azure` | `watchme-api-transcriber-v2` | `watchme-vibe-analysis-transcriber-v2` | ✅ 完了 |
+| `api-vibe-aggregator` | `watchme-api-vibe-aggregator` | `watchme-vibe-analysis-aggregator` | ✅ 完了 |
+| `watchme-api-whisper-gpt` | `watchme-api-vibe-scorer` | `watchme-vibe-analysis-scorer` | ✅ 完了 |
 
-**変更内容**: ECR_REPOSITORY環境変数の値のみ変更
+**変更内容**: ECR_REPOSITORY環境変数の値を変更
 
-**状態**: 🔄 未実行
+**状態**: ✅ 完了 (2025-10-22 17:20)
+
+**実施内容**:
+
+1. **behavior-analysis-feature-extractor-v2** (api-sed-ast)
+   - コミット: 83c90d6
+   - ファイル: `.github/workflows/deploy-to-ecr.yml`
+   - 変更: ECR_REPOSITORY を `watchme-behavior-analysis-feature-extractor-v2` に更新
+
+2. **emotion-analysis-feature-extractor-v3** (api-superb)
+   - コミット: 0f68140
+   - ファイル: `.github/workflows/deploy-to-ecr.yml` (新規作成)
+   - 内容: ECR_REPOSITORY = `watchme-emotion-analysis-feature-extractor-v3`
+
+3. **vibe-analysis-transcriber-v2** (api-asr-azure)
+   - コミット: 0458ad4
+   - ファイル: `.github/workflows/deploy-to-ecr.yml`
+   - 変更: ECR_REPOSITORY を `watchme-vibe-analysis-transcriber-v2` に更新
+
+4. **vibe-analysis-aggregator** (api-vibe-aggregator)
+   - コミット: be8ee8c
+   - ファイル: `.github/workflows/deploy-to-ecr.yml`
+   - 変更: ECR_REPOSITORY を `watchme-vibe-analysis-aggregator` に更新
+
+5. **vibe-analysis-scorer** (watchme-api-whisper-gpt)
+   - コミット: 9b8bc0a
+   - ファイル: `.github/workflows/deploy-ecr.yml`
+   - 変更: ECR_REPOSITORY を `watchme-vibe-analysis-scorer` に更新
+
+**注意事項**:
+- 次回のGitHub Actionsデプロイ時に、新しいECRリポジトリへイメージが自動プッシュされる
+- EC2上のdocker-compose.prod.ymlを更新するまで、デプロイは行わないこと
 
 ---
 
@@ -459,6 +546,18 @@ python main_supabase.py
 - ⚠️ コンテナ間通信はコンテナ名で参照（IP不可）
 - ⚠️ watchme-networkは継続使用（変更なし）
 
+### CICD状況（2025-10-22確認）
+
+| API | CICD状態 | 対応状況 |
+|-----|---------|---------|
+| behavior-analysis-feature-extractor-v2 | ✅ あり | 正常動作 |
+| emotion-analysis-feature-extractor-v3 | ✅ あり | 手動実行が必要 |
+| emotion-analysis/aggregator | ❌ なし | **将来タスク: CICD実装が必要** |
+
+**将来タスク**: emotion-analysis/aggregatorのCICD実装
+- 現在は本番稼働中で安定しているため、本番移行後に別タスクとして実施
+- 参考: behavior-analysis/aggregatorやemotion-analysis/feature-extractor-v3のワークフロー
+
 ### 次回作業時の引き継ぎポイント
 1. このログファイルの「状態」列を確認
 2. 未実行（🔄）のステップから再開
@@ -467,22 +566,29 @@ python main_supabase.py
 
 ---
 
-## 🔄 進捗状況（2025-10-22 更新）
+## 🔄 進捗状況（2025-10-22 19:30 更新）
 
-- **フェーズ1（ローカル）**: 83% (5/6ステップ完了) - ⚠️ venv再作成は後で実施
-- **フェーズ2（本番）**:
+- **フェーズ1（ローカル）**: 100% (6/6ステップ完了) - ✅ 完了
+- **フェーズ2（本番準備）**: 100% 完了 ✅
   - 事前調査: 100% 完了 ✅
-    - ✅ Lambda関数のエンドポイント確認
-    - ✅ コンテナ間参照の確認
-    - ✅ ドキュメント更新（PROCESSING_ARCHITECTURE.md）
   - ローカル準備: 100% 完了 ✅
-    - ✅ api-managerのコンテナ名参照更新
-    - ✅ 変更のコミット（2件）
-  - 本番環境実装: 0% (0/6ステップ完了)
-- **全体進捗**: 50% (6/12ステップ完了)
+  - **emotion-analysis系のCICD実装**: 100% 完了 ✅ **NEW!**
+    - ✅ emotion-analysis-feature-extractor-v3のCICD作成 (2025-10-22 19:00)
+    - ✅ emotion-analysis-aggregatorのCICD作成 (2025-10-22 19:20)
+    - ✅ 両リポジトリのコミット＆プッシュ完了
+  - ECR & GitHub Actions: 100% 完了 ✅
+    - ✅ ステップ7: ECRリポジトリ作成 (2025-10-22 17:14)
+    - ✅ ステップ8: GitHub Actions更新 (2025-10-22 17:20)
+- **フェーズ3（本番環境実装）**: 0% (0/4ステップ) - 🔄 **次のセッションで実施**
+    - 🔄 ステップ9: EC2ディレクトリ構造変更
+    - 🔄 ステップ10: Nginx設定更新
+    - 🔄 ステップ11: systemdサービス更新
+    - 🔄 ステップ12: 動作確認
+- **全体進捗**: 75% (9/12ステップ完了)
 
-### ✅ 完了した作業（2025-10-22）
+### ✅ 完了した作業（2025-10-22 19:30更新）
 
+#### セッション1（午前）: 事前調査とローカル準備
 1. **事前調査**
    - Lambda関数のエンドポイント確認
    - コンテナ間参照の確認（vault, janitor, demo-generator, api-manager）
@@ -494,50 +600,105 @@ python main_supabase.py
      - `b577745` (api-manager)
      - `4494fda` (server-configs)
 
-### 🔜 次回作業のチェックリスト
+#### セッション2（夕方）: emotion-analysis系CICD実装
+3. **リポジトリ名変更**
+   - `api-superb` → `api-emotion-analysis-feature-extractor-v3` (オーガニゼーション移動)
+   - `watchme-opensmile-aggregator` → `api-emotion-analysis-aggregator` (オーガニゼーション移動)
 
-**準備完了**:
+4. **emotion-analysis-feature-extractor-v3のCICD実装**
+   - docker-compose.prod.yml更新（ECRリポジトリ名、コンテナ名）
+   - run-prod.sh新規作成（CICD標準仕様準拠）
+   - GitHub Actions workflow完全実装
+   - コミット: `1623eaf`
+
+5. **emotion-analysis-aggregatorのCICD実装**
+   - docker-compose.prod.yml更新（ECRリポジトリ名、コンテナ名、env_file方式に変更）
+   - run-prod.sh更新（CICD標準仕様準拠、3層削除アプローチ実装）
+   - GitHub Actions workflow新規作成
+   - コミット: `01b0832`
+
+6. **重要な変更点**
+   - 両APIとも`env_file: .env`方式に統一（environmentからの移行）
+   - ポートバインディングを`127.0.0.1`に変更（セキュリティ向上）
+   - コンテナ削除時に旧コンテナ名も削除する処理を追加
+
+### 🔜 次回作業のチェックリスト（2025-10-22 19:30更新）
+
+**準備完了** ✅:
 - ✅ 影響範囲の特定完了
 - ✅ 作業手順の文書化完了
 - ✅ コンテナ名参照箇所の特定完了
 - ✅ api-managerの更新完了（ローカル）
+- ✅ **emotion-analysis系2APIのCICD実装完了** ← NEW!
+- ✅ ECRリポジトリ作成完了（5個）
+- ✅ GitHub Actions更新完了（5リポジトリ）
 
-**本番環境での実施待ち**（以下を一連の流れで実施）:
-1. [ ] **ECRリポジトリのリネーム**（AWS Console）
-   - 4つをリネーム、1つを新規作成
-   - 所要時間: 約15分
+**次回セッションで実施すること**:
 
-2. [ ] **GitHub Actionsの更新**（5リポジトリ）
-   - ECR_REPOSITORY環境変数を変更
-   - 所要時間: 約10分
+#### 事前準備（オプション）
+- [ ] emotion-analysis系2APIのGitHub Actionsを手動実行してECRイメージを事前作成
+  - https://github.com/hey-watchme/api-emotion-analysis-feature-extractor-v3/actions
+  - https://github.com/hey-watchme/api-emotion-analysis-aggregator/actions
+  - （注: EC2ディレクトリがないためデプロイは失敗するが、ECRプッシュは成功する）
 
-3. [ ] **EC2サーバーでの作業開始**（SSH接続）
+#### 本番環境での実施（一連の流れで実施）
+
+1. [ ] **EC2サーバーへSSH接続**
    ```bash
    ssh -i /Users/kaya.matsumoto/watchme-key.pem ubuntu@3.24.16.82
    ```
 
-4. [ ] **EC2ディレクトリ構造変更とdocker-compose更新**
-   - 5つのディレクトリをリネーム
-   - 5つのコンテナ名を変更
-   - 所要時間: 約20分
+2. [ ] **EC2ディレクトリ構造変更**（所要時間: 20分）
+   ```bash
+   # 既存ディレクトリのバックアップ（念のため）
+   cd /home/ubuntu
 
-5. [ ] **Nginx設定更新**（新旧エンドポイント並行運用）
-   - 7つのエンドポイントを追加
-   - 設定テスト＆リロード
-   - 所要時間: 約15分
+   # 5つのディレクトリをリネーム
+   mv superb emotion-analysis-feature-extractor-v3
+   mv opensmile-aggregator emotion-analysis-aggregator
+   mv api_ast behavior-analysis-feature-extractor-v2
+   mv vibe-transcriber-v2 vibe-analysis-transcriber-v2
+   mv watchme-api-vibe-aggregator vibe-analysis-aggregator
 
-6. [ ] **systemdサービス更新**
-   - 5つの新規サービスファイル作成
-   - 5つの旧サービス無効化
+   # （api_gpt_v1は既に移動済みのため不要）
+   ```
+
+3. [ ] **各ディレクトリでの初期化**（所要時間: 15分）
+   ```bash
+   # emotion-analysis-feature-extractor-v3
+   cd /home/ubuntu/emotion-analysis-feature-extractor-v3
+   # 必要ファイルは GitHub Actionsが自動配置するため何もしない
+
+   # emotion-analysis-aggregator
+   cd /home/ubuntu/emotion-analysis-aggregator
+   # 同上
+   ```
+
+4. [ ] **Nginx設定更新**（所要時間: 15分）
+   - ファイル: `/etc/nginx/sites-available/api.hey-watch.me`
+   - 新旧エンドポイント並行運用
+   - 設定テスト: `sudo nginx -t`
+   - リロード: `sudo systemctl reload nginx`
+
+5. [ ] **systemdサービス更新**（所要時間: 20分）
+   - 新規サービスファイル作成（5個）
+   - 旧サービス無効化（5個）
    - サービス再起動
-   - 所要時間: 約20分
 
-7. [ ] **動作確認とテスト**
+6. [ ] **GitHub Actions手動実行でデプロイ**（所要時間: 30分）
+   - 各リポジトリで手動実行
+   - デプロイの成功を確認
+
+7. [ ] **動作確認とヘルスチェック**（所要時間: 30分）
    - 各APIのヘルスチェック
+   - コンテナ起動状態確認
    - Lambdaからの疎通確認
-   - 所要時間: 約30分
 
-**合計所要時間**: 約2時間（EC2作業開始から完了まで）
+**合計所要時間**: 約2.5時間（EC2作業開始から完了まで）
+
+**注意事項**:
+- emotion-analysis系2APIは新しいCICDパイプラインが完成しているため、GitHub Actionsからの自動デプロイが可能
+- 他のAPIも同様にGitHub Actionsを使用して自動デプロイ推奨
 
 ---
 
