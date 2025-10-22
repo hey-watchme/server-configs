@@ -305,6 +305,57 @@ echo "SUPABASE_KEY=${SUPABASE_KEY}" >> .env
 - SSH内で変数を使用する場合、適切な展開タイミングを意識
 - エラー時の値確認のため、適切なログ出力を検討
 
+#### ⚠️ アプリケーションが要求する環境変数の確認
+
+**重要: .envファイルに含める環境変数は、アプリケーションコードによって異なります**
+
+各APIが起動時に必要とする環境変数を正確に把握し、すべて.envに含める必要があります。
+
+**チェック方法:**
+```bash
+# アプリケーションコードで環境変数のチェックを検索
+grep -r "os.getenv\|os.environ" main.py app.py
+grep -r "raise.*環境変数\|raise.*設定されていません" main.py app.py
+```
+
+**よくある必須環境変数のパターン:**
+- **Supabase系API**: `SUPABASE_URL`, `SUPABASE_KEY`
+- **AWS S3/Bedrockを使用**: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`
+- **OpenAI API**: `OPENAI_API_KEY`
+- **カスタムサービス**: API固有の環境変数
+
+**例: AWS認証情報が必要な場合**
+```yaml
+- name: Create/Update .env file on EC2
+  env:
+    EC2_HOST: ${{ secrets.EC2_HOST }}
+    EC2_USER: ${{ secrets.EC2_USER }}
+    AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+    AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+    SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+    SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+  run: |
+    ssh ${EC2_USER}@${EC2_HOST} << ENDSSH
+      cd /home/ubuntu/{api-name}
+      echo "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}" > .env
+      echo "AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}" >> .env
+      echo "SUPABASE_URL=${SUPABASE_URL}" >> .env
+      echo "SUPABASE_KEY=${SUPABASE_KEY}" >> .env
+    ENDSSH
+```
+
+**GitHub Secretsと.envファイルの関係:**
+- **GitHub Secrets**: GitHub Actions実行中のみ利用可能
+- **.envファイル**: EC2上のDockerコンテナ内で利用可能
+- **重要**: GitHub Secretsはコンテナ内に自動的には渡されない
+- **必須**: 必要な環境変数をすべて.envファイルに明示的に書き込む
+
+**デバッグ時のヒント:**
+起動エラーが発生した場合、コンテナログで環境変数エラーを確認：
+```bash
+docker logs container-name --tail 100 | grep -i "environment\|env\|設定されていません"
+```
+
 ### デプロイスクリプトの自動更新
 
 スクリプトを自動更新する場合の考慮事項：
@@ -533,6 +584,91 @@ cat .env | grep -E "SUPABASE|AWS"
 | 環境変数エラー | `cat .env \| grep "\$"` | echoコマンドで環境変数作成 |
 | 古いコードが動く | `docker images --no-trunc` | --no-cacheオプション追加 |
 | 手動では動くがCI/CDで壊れる | 上記すべて | 設定ファイルの完全一致を確認 |
+| コンテナ起動直後にクラッシュ（環境変数不足） | `docker logs container-name \| grep "設定されていません"` | アプリが要求する全環境変数を.envに追加 |
+
+### コンテナ起動直後のクラッシュ（環境変数不足エラー）
+
+#### 症状
+```
+ValueError: AWS_ACCESS_KEY_IDおよびAWS_SECRET_ACCESS_KEYが設定されていません
+RuntimeError: 環境変数XXXXが設定されていません
+```
+
+#### 診断手順
+
+##### 1. コンテナログの確認
+```bash
+# EC2サーバー上で実行
+docker logs container-name --tail 100
+```
+
+##### 2. アプリケーションコードで必須環境変数を確認
+```bash
+# ローカル開発環境で実行
+cd /path/to/api
+grep -rn "os.getenv\|os.environ" main.py app.py
+grep -rn "raise.*環境変数\|raise.*設定されていません" *.py
+```
+
+##### 3. 現在の.envファイルを確認
+```bash
+# EC2サーバー上で実行
+cat /home/ubuntu/{api-name}/.env
+```
+
+#### 解決方法
+
+##### ステップ1: 不足している環境変数を特定
+アプリケーションコードを確認し、`os.getenv("VARIABLE_NAME")`で取得している変数をすべてリストアップ
+
+##### ステップ2: GitHub Secretsに値が登録されているか確認
+- リポジトリの Settings > Secrets and variables > Actions で確認
+- 不足していれば追加
+
+##### ステップ3: deploy-to-ecr.ymlを修正
+```yaml
+# 修正前（不足している場合）
+- name: Create/Update .env file on EC2
+  env:
+    SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+    SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+  run: |
+    ssh ${EC2_USER}@${EC2_HOST} << ENDSSH
+      cd /home/ubuntu/{api-name}
+      echo "SUPABASE_URL=${SUPABASE_URL}" > .env
+      echo "SUPABASE_KEY=${SUPABASE_KEY}" >> .env
+    ENDSSH
+
+# 修正後（必要な変数を追加）
+- name: Create/Update .env file on EC2
+  env:
+    AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+    AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+    SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+    SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+  run: |
+    ssh ${EC2_USER}@${EC2_HOST} << ENDSSH
+      cd /home/ubuntu/{api-name}
+      echo "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}" > .env
+      echo "AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}" >> .env
+      echo "SUPABASE_URL=${SUPABASE_URL}" >> .env
+      echo "SUPABASE_KEY=${SUPABASE_KEY}" >> .env
+    ENDSSH
+```
+
+##### ステップ4: コミット＆プッシュ
+```bash
+git add .github/workflows/deploy-to-ecr.yml
+git commit -m "Fix: Add missing environment variables to .env"
+git push origin main
+```
+
+#### 予防策
+新しいAPIのCI/CD実装時：
+1. アプリケーションコードで `grep -r "os.getenv" .` を実行
+2. 必須環境変数をすべてリストアップ
+3. 初回から.envファイルにすべて含める
+4. ローカルでDocker動作確認してからCI/CD実装
 
 ## セキュリティ考慮事項
 - 認証情報はGitHub Secretsでのみ管理
