@@ -60,43 +60,207 @@ WatchMeは、音声データを多面的に分析し、ユーザーの心理状�
 
 ## 🔄 処理フロー
 
+### 🎨 システム全体の処理フロー概要
+
+```mermaid
+graph TB
+    subgraph Input["🎙️ データ収集"]
+        Device["Observer Device<br/>(30分ごと・1分間録音)"]
+        iOS["iOS App<br/>(手動録音)"]
+    end
+
+    subgraph Storage["☁️ AWS Storage"]
+        S3["S3 Bucket<br/>音声ファイル保存"]
+    end
+
+    subgraph Trigger["⚡ イベントトリガー"]
+        S3Event["S3 Event<br/>PUT通知"]
+        Processor["Lambda: audio-processor<br/>(1-2秒)"]
+        SQS1["SQS Queue<br/>audio-processing"]
+    end
+
+    subgraph TimeBlock["⏱️ タイムブロック型処理<br/>(30分単位の個別分析)"]
+        Worker["Lambda: audio-worker<br/>(1-3分)"]
+
+        subgraph Analysis["📊 並列分析"]
+            ASR["ASR API<br/>Azure Speech<br/>(26-28秒)"]
+            SED["SED API<br/>YAMNet<br/>(10-20秒)"]
+            SER["SER API<br/>OpenSMILE<br/>(10-20秒)"]
+        end
+
+        subgraph Aggregation["🔄 集計処理"]
+            SEDAgg["SED Aggregator<br/>行動パターン"]
+            SERAgg["Emotion Aggregator<br/>感情スコア"]
+        end
+
+        subgraph Integration["🎯 統合分析"]
+            VibeAgg["Vibe Aggregator<br/>プロンプト生成"]
+            VibeScore["Vibe Scorer<br/>ChatGPT分析"]
+        end
+
+        Dashboard["dashboard テーブル<br/>(vibe_score保存)"]
+    end
+
+    subgraph Cumulative["📈 累積分析型処理<br/>(その時点までの統合分析)"]
+        SQS2["SQS Queue<br/>dashboard-summary"]
+        SummaryWorker["Lambda: summary-worker<br/>(10-20秒)"]
+        SummaryAPI["Dashboard Summary API<br/>プロンプト生成"]
+
+        SQS3["SQS Queue<br/>dashboard-analysis"]
+        AnalysisWorker["Lambda: analysis-worker<br/>(10-30秒)"]
+        AnalysisAPI["Dashboard Analysis API<br/>ChatGPT分析"]
+
+        DashboardSummary["dashboard_summary テーブル<br/>(累積スコア保存)"]
+    end
+
+    subgraph Notification["🔔 プッシュ通知"]
+        SNS["AWS SNS"]
+        APNs["Apple APNs"]
+        iPhone["iPhone<br/>通知受信"]
+    end
+
+    %% データ収集フロー
+    Device -->|録音アップロード| S3
+    iOS -->|録音アップロード| S3
+
+    %% トリガーフロー
+    S3 -->|PUT Event| S3Event
+    S3Event --> Processor
+    Processor -->|メッセージ送信| SQS1
+
+    %% タイムブロック処理
+    SQS1 -->|トリガー| Worker
+    Worker -->|並列実行| ASR
+    Worker -->|並列実行| SED
+    Worker -->|並列実行| SER
+
+    SED -->|特徴量| SEDAgg
+    SER -->|感情スコア| SERAgg
+
+    ASR -->|テキスト| VibeAgg
+    SED -.->|行動データ| VibeAgg
+    SER -.->|感情データ| VibeAgg
+
+    VibeAgg -->|プロンプト| VibeScore
+    VibeScore -->|分析結果| Dashboard
+
+    %% 累積分析トリガー
+    VibeScore -.->|成功時| SQS2
+
+    %% 累積分析フェーズ1
+    SQS2 -->|トリガー| SummaryWorker
+    SummaryWorker -->|API呼び出し| SummaryAPI
+    SummaryAPI -.->|完了| SQS3
+
+    %% 累積分析フェーズ2
+    SQS3 -->|トリガー| AnalysisWorker
+    AnalysisWorker -->|API呼び出し| AnalysisAPI
+    AnalysisAPI -->|結果保存| DashboardSummary
+
+    %% プッシュ通知
+    AnalysisWorker -->|通知送信| SNS
+    SNS -->|配信| APNs
+    APNs -->|プッシュ| iPhone
+
+    classDef inputStyle fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    classDef storageStyle fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef triggerStyle fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef processStyle fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    classDef aggregationStyle fill:#fff9c4,stroke:#f9a825,stroke-width:2px
+    classDef integrationStyle fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    classDef notificationStyle fill:#e0f2f1,stroke:#00796b,stroke-width:2px
+
+    class Device,iOS inputStyle
+    class S3 storageStyle
+    class S3Event,Processor,SQS1,SQS2,SQS3 triggerStyle
+    class Worker,ASR,SED,SER,SummaryWorker,AnalysisWorker processStyle
+    class SEDAgg,SERAgg aggregationStyle
+    class VibeAgg,VibeScore,SummaryAPI,AnalysisAPI,Dashboard,DashboardSummary integrationStyle
+    class SNS,APNs,iPhone notificationStyle
+```
+
+---
+
 ### 1️⃣ タイムブロック型処理（イベント駆動）
 
 #### ⚡ 2025年9月24日更新：SQSを使った2段階処理に改善
 
 ```mermaid
-graph LR
-    subgraph "トリガー（1-2秒）"
-        A[オブザーバー<br/>60秒録音] --> B[S3 Upload]
-        B --> C[Lambda Trigger<br/>watchme-audio-processor]
-        C --> D[SQSキュー<br/>watchme-audio-processing]
+graph TB
+    subgraph Trigger["⚡ トリガーフェーズ (1-2秒)"]
+        A[Observer Device<br/>60秒録音完了]
+        B[S3 Upload<br/>audio.wav]
+        C[S3 Event<br/>PUT通知]
+        D[Lambda: audio-processor<br/>メタデータ抽出]
+        E[SQS: audio-processing<br/>メッセージ送信]
     end
-    
-    subgraph "ワーカー処理（SQS駆動）"
-        D --> E[Lambda Worker<br/>watchme-audio-worker]
+
+    subgraph Worker["🔧 ワーカーフェーズ (1-3分)"]
+        F[Lambda: audio-worker<br/>SQSトリガー]
     end
-    
-    subgraph "並列分析処理"
-        E --> F1[ASR API<br/>Azure Speech]
-        E --> F2[SED API<br/>AST/YAMNet]
-        E --> F3[SER API<br/>SUPERB/OpenSMILE]
+
+    subgraph Parallel["📊 並列分析処理 (26-60秒)"]
+        G1[ASR API<br/>Azure Speech<br/>26-28秒]
+        G2[SED API<br/>YAMNet<br/>10-20秒]
+        G3[SER API<br/>OpenSMILE<br/>10-20秒]
     end
-    
-    subgraph "データ集計"
-        F2 --> G1[SED Aggregator<br/>行動パターン集計]
-        F3 --> G2[Emotion Aggregator<br/>感情スコア集計]
+
+    subgraph FeatureAgg["🔄 特徴量集計 (5-10秒)"]
+        H1[SED Aggregator<br/>行動パターン集計]
+        H2[Emotion Aggregator<br/>感情スコア集計]
     end
-    
-    subgraph "統合分析"
-        F1 --> H[Vibe Aggregator<br/>プロンプト生成]
-        F2 --> H
-        F3 --> H
-        H --> I[Vibe Scorer<br/>ChatGPT分析]
+
+    subgraph Integration["🎯 統合分析 (15-25秒)"]
+        I[Vibe Aggregator<br/>プロンプト生成<br/>5-10秒]
+        J[Vibe Scorer<br/>ChatGPT分析<br/>10-15秒]
     end
-    
-    subgraph "データ保存"
-        I --> J[dashboardテーブル<br/>30分単位データ]
+
+    subgraph Storage["💾 データ保存"]
+        K[dashboard テーブル<br/>vibe_score保存]
     end
+
+    subgraph ErrorHandling["⚠️ エラーハンドリング"]
+        L[クォーター超過検出]
+        M[create-failed-record<br/>失敗レコード作成]
+        N[vibe_score = 0<br/>status = completed]
+    end
+
+    %% 正常フロー
+    A --> B --> C --> D --> E --> F
+    F -->|並列実行| G1
+    F -->|並列実行| G2
+    F -->|並列実行| G3
+
+    G2 -->|成功時| H1
+    G3 -->|成功時| H2
+
+    G1 -->|テキスト| I
+    G2 -.->|特徴量| I
+    G3 -.->|感情スコア| I
+
+    I -->|プロンプト| J
+    J -->|分析結果| K
+
+    %% エラーフロー
+    G1 -.->|クォーター超過| L
+    L --> M --> N
+    N -.->|累積分析へ| K
+
+    K -.->|成功時トリガー| SQS2[SQS: dashboard-summary<br/>累積分析開始]
+
+    classDef triggerStyle fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef workerStyle fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    classDef processStyle fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    classDef aggStyle fill:#fff9c4,stroke:#f9a825,stroke-width:2px
+    classDef integrationStyle fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    classDef errorStyle fill:#ffebee,stroke:#c62828,stroke-width:2px
+
+    class A,B,C,D,E triggerStyle
+    class F workerStyle
+    class G1,G2,G3 processStyle
+    class H1,H2 aggStyle
+    class I,J,K integrationStyle
+    class L,M,N errorStyle
 ```
 
 **改善前の問題点**:
@@ -117,28 +281,71 @@ graph LR
 #### ⚡ 2025年9月25日更新：イベント駆動型に移行
 
 ```mermaid
-graph LR
-    subgraph "トリガー"
-        A[タイムブロック処理完了<br/>watchme-audio-worker] --> B[Vibe Scorer成功時]
-    end
-    
-    subgraph "累積分析フェーズ1"
-        B --> C[SQSメッセージ送信<br/>dashboard-summary-queue]
-        C --> D[Lambda Worker<br/>dashboard-summary-worker]
-        D --> E[Dashboard Summary API<br/>プロンプト生成]
-    end
-    
-    subgraph "累積分析フェーズ2"
-        E --> F[SQSメッセージ送信<br/>dashboard-analysis-queue]
-        F --> G[Lambda Worker<br/>dashboard-analysis-worker]
-        G --> H[Dashboard Analysis API<br/>ChatGPT分析]
+graph TB
+    subgraph TriggerPhase["⚡ トリガー（タイムブロック完了時）"]
+        A[タイムブロック処理完了<br/>audio-worker]
+        B[Vibe Scorer成功検出]
+        C[SQS: dashboard-summary-queue<br/>メッセージ送信]
     end
 
-    subgraph "データ更新・通知"
-        H --> I[dashboard_summary<br/>テーブル更新]
-        I --> J[プッシュ通知送信<br/>SNS → APNs]
-        J --> K[通知先デバイス<br/>iPhoneアプリ]
+    subgraph Phase1["📊 フェーズ1: プロンプト生成 (10-20秒)"]
+        D[Lambda: summary-worker<br/>SQSトリガー]
+        E[Dashboard Summary API<br/>その時点までの全データ取得]
+        F[プロンプト生成<br/>累積データの要約]
+        G[SQS: dashboard-analysis-queue<br/>次フェーズへ]
     end
+
+    subgraph Phase2["🤖 フェーズ2: ChatGPT分析 (10-30秒)"]
+        H[Lambda: analysis-worker<br/>SQSトリガー]
+        I[Dashboard Analysis API<br/>ChatGPT分析実行]
+        J[心理状態スコア計算]
+        K[dashboard_summary テーブル<br/>累積スコア保存]
+    end
+
+    subgraph NotificationPhase["🔔 フェーズ3: プッシュ通知"]
+        L[通知メッセージ構築]
+        M[SNS トピック発行]
+        N[APNs 配信]
+        O[iPhone アプリ<br/>通知受信]
+        P[バックグラウンド<br/>データ自動更新]
+    end
+
+    subgraph DataFlow["📈 データの流れ"]
+        Q[dashboard テーブル<br/>30分単位データ]
+        R[behavior_summary<br/>行動パターン]
+        S[emotion_summary<br/>感情推移]
+    end
+
+    %% トリガーフロー
+    A --> B --> C
+
+    %% フェーズ1
+    C --> D --> E
+    E --> F --> G
+
+    %% フェーズ2
+    G --> H --> I
+    I --> J --> K
+
+    %% 通知フロー
+    K --> L --> M --> N --> O --> P
+
+    %% データ取得
+    Q -.->|累積データ取得| E
+    R -.->|行動データ取得| E
+    S -.->|感情データ取得| E
+
+    classDef triggerStyle fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef phase1Style fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    classDef phase2Style fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    classDef notificationStyle fill:#e0f2f1,stroke:#00796b,stroke-width:2px
+    classDef dataStyle fill:#fff9c4,stroke:#f9a825,stroke-width:2px
+
+    class A,B,C triggerStyle
+    class D,E,F,G phase1Style
+    class H,I,J,K phase2Style
+    class L,M,N,O,P notificationStyle
+    class Q,R,S dataStyle
 ```
 
 **改善前の問題点**:
@@ -153,6 +360,146 @@ graph LR
 - **リアルタイム性**: ほぼリアルタイム（処理完了から数秒）
 - **信頼性**: SQSによる自動リトライ（最大3回）
 - **スケーラビリティ**: Lambda自動スケーリング
+
+---
+
+### 3️⃣ エラーハンドリングフロー
+
+#### ⚠️ クォーター超過時の処理フロー（2025年10月21日更新）
+
+```mermaid
+graph TB
+    subgraph Request["📡 リクエスト送信"]
+        A[Lambda: audio-worker]
+        B[Azure Speech API<br/>文字起こしリクエスト]
+    end
+
+    subgraph ErrorDetection["🔍 エラー検出 (1.1秒)"]
+        C[Azure レスポンス<br/>HTTP 200]
+        D{error_files に<br/>該当ファイルあり?}
+    end
+
+    subgraph NormalFlow["✅ 正常フロー"]
+        E[processed_files に存在]
+        F[azure_success = True]
+        G[Vibe Aggregator<br/>generate-timeblock-prompt]
+        H[Vibe Scorer<br/>ChatGPT分析]
+        I[dashboard テーブル<br/>vibe_score = 数値]
+    end
+
+    subgraph ErrorFlow["❌ エラーフロー（クォーター超過）"]
+        J[error_files に存在]
+        K[azure_success = False]
+        L[Vibe Aggregator<br/>create-failed-record]
+        M[dashboard テーブル<br/>vibe_score = 0<br/>status = completed]
+    end
+
+    subgraph ContinueFlow["🔄 処理継続（どちらも実行）"]
+        N[SQS: dashboard-summary-queue<br/>累積分析トリガー]
+        O[Dashboard Summary API]
+        P[Dashboard Analysis API]
+        Q[プッシュ通知送信]
+    end
+
+    subgraph Database["💾 Supabase更新"]
+        R[audio_files テーブル<br/>transcriptions_status]
+        S1[成功時:<br/>completed]
+        S2[失敗時:<br/>quota_exceeded]
+    end
+
+    %% 正常フロー
+    A --> B --> C --> D
+    D -->|No| E --> F --> G --> H --> I
+
+    %% エラーフロー
+    D -->|Yes| J --> K --> L --> M
+
+    %% 共通の継続フロー
+    I --> N
+    M --> N
+    N --> O --> P --> Q
+
+    %% データベース更新
+    B -.->|Azure内部処理| R
+    F -.->|成功| S1
+    K -.->|失敗| S2
+
+    classDef requestStyle fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    classDef detectionStyle fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef normalStyle fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    classDef errorStyle fill:#ffebee,stroke:#c62828,stroke-width:2px
+    classDef continueStyle fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef dbStyle fill:#fff9c4,stroke:#f9a825,stroke-width:2px
+
+    class A,B requestStyle
+    class C,D detectionStyle
+    class E,F,G,H,I normalStyle
+    class J,K,L,M errorStyle
+    class N,O,P,Q continueStyle
+    class R,S1,S2 dbStyle
+```
+
+**🎯 重要なポイント**:
+
+1. **エラー検出**: `error_files`リストに該当ファイルが含まれているかで判定
+2. **失敗レコード作成**: クォーター超過時も`vibe_score=0`でレコードを作成
+3. **処理継続**: 成功/失敗に関わらず累積分析とプッシュ通知を実行
+4. **データの3つの状態**:
+   - `null` (vibe_score) = 未処理
+   - `0` (vibe_score) = 失敗（クォーター超過など）
+   - 数値 (vibe_score) = 正常完了
+
+---
+
+### 4️⃣ SQSリトライメカニズム
+
+```mermaid
+graph LR
+    subgraph Queue["📥 SQS Queue"]
+        A[メッセージ受信]
+        B{処理成功?}
+    end
+
+    subgraph Success["✅ 成功ケース"]
+        C[メッセージ削除]
+        D[処理完了]
+    end
+
+    subgraph Retry["🔄 リトライケース"]
+        E[可視性タイムアウト<br/>15分]
+        F{リトライ回数<br/>< 3回?}
+        G[再度キューに戻る]
+        H[処理再実行]
+    end
+
+    subgraph DLQ["☠️ デッドレターキュー"]
+        I[リトライ3回失敗]
+        J[DLQへ移動]
+        K[手動調査が必要]
+    end
+
+    A --> B
+    B -->|Yes| C --> D
+    B -->|No| E --> F
+    F -->|Yes| G --> H --> B
+    F -->|No| I --> J --> K
+
+    classDef queueStyle fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    classDef successStyle fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    classDef retryStyle fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef dlqStyle fill:#ffebee,stroke:#c62828,stroke-width:2px
+
+    class A,B queueStyle
+    class C,D successStyle
+    class E,F,G,H retryStyle
+    class I,J,K dlqStyle
+```
+
+**⚙️ 設定値**:
+- **可視性タイムアウト**: 15分（Lambda最大実行時間と同じ）
+- **最大リトライ回数**: 3回
+- **メッセージ保持期間**: 14日間
+- **DLQ保持期間**: 14日間
 
 ---
 
