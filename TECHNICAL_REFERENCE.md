@@ -75,96 +75,32 @@
 | **Emotion Features** | `/emotion-analysis/features/` | 8018 | emotion-analysis-feature-extractor-v3 | watchme-api-superb | ECR | ✅ 2025-10-22階層化 |
 | **Emotion Aggregator** | `/emotion-analysis/aggregation/` | 8012 | emotion-analysis-aggregator | watchme-api-opensmile-aggregator | ECR | ✅ 2025-10-22階層化 |
 
-## 🔄 コンテナ間通信エンドポイント
-
-スケジューラーが各APIを呼び出す際の正確な情報：
-
-| API | コンテナ名 | ポート | エンドポイント | メソッド |
-|-----|-----------|--------|---------------|----------|
-| Azure Speech         | `vibe-analysis-transcriber-v2` | 8013 | `/fetch-and-transcribe`         | POST     |
-| Prompt Generator     | `vibe-analysis-aggregator` | 8009 | `/generate-mood-prompt-supabase` | GET      |
-| Psychology Scorer    | `vibe-analysis-scorer`          | 8002 | `/analyze-vibegraph-supabase`   | POST     |
-| Behavior Detection   | `behavior-analysis-feature-extractor-v2`             | 8017 | `/fetch-and-process-paths`      | POST     |
-| Behavior Aggregator  | `behavior-analysis-sed-aggregator`  | 8010 | `/analysis/sed`                 | POST     |
-| Emotion Features     | `emotion-analysis-feature-extractor-v3` | 8018 | `/process/emotion-features` | POST |
-| Emotion Aggregator | `emotion-analysis-aggregator` | 8012 | `/analyze/opensmile-aggregator` | POST |
-
-**注**: コンテナ間通信は上記のコンテナ名を直接使用します。外部アクセス（Nginx経由）は階層化URLを使用します。
-
 ## 🚨 トラブルシューティング
 
-### 問題: コンテナが起動しない
+### APIエンドポイントの混同に注意
 
-```bash
-# 1. 構文確認
-docker-compose -f docker-compose.prod.yml config
+WatchMeでは3種類のエンドポイントがあります：
 
-# 2. ポート競合確認
-sudo lsof -i:[ポート番号]
-# 競合がある場合: kill -9 [PID]
+#### 1. 内部通信用（watchme-network内）
+- **形式**: `http://コンテナ名:ポート/endpoint`
+- **例**: `http://vibe-analysis-transcriber-v2:8013/fetch-and-transcribe`
+- **用途**: watchme-network内でのコンテナ間通信
+- **使用者**: API Manager（スケジューラー）など
 
-# 3. 環境変数確認
-ls -la .env
-cat .env | head -5
+#### 2. 外部公開用（Nginx経由）
+- **形式**: `https://api.hey-watch.me/[階層化パス]/`
+- **例**: `https://api.hey-watch.me/vibe-analysis/transcription/`
+- **用途**: Lambda関数、外部からのアクセス
+- **特徴**: HTTPSで安全、Nginxでルーティング
 
-# 4. 詳細ログ
-sudo journalctl -u [サービス名].service -f
-```
+#### 3. 管理用UI
+- **形式**: `https://api.hey-watch.me/manager/`
+- **用途**: API Manager UI、Admin画面など
+- **ポート**: 9000番台
 
-### 問題: ヘルスチェック失敗（unhealthy）
+**⚠️ 注意**: 旧エンドポイント（階層化前）は2025-10-23に削除済み
 
-```bash
-# 1. curlの存在確認
-docker exec [コンテナ名] which curl
-
-# 2. 手動ヘルスチェック
-docker exec [コンテナ名] curl -f http://localhost:8000/health
-
-# 3. 使用Dockerfile確認
-grep dockerfile docker-compose.prod.yml
-```
-
-**解決策:** Dockerfile.prodにcurlをインストール
-
-### 問題: ネットワーク接続エラー
-
-```bash
-# 1. ネットワーク接続確認
-docker network inspect watchme-network | grep [コンテナ名]
-
-# 2. 手動接続テスト
-docker exec [コンテナA] ping -c 1 [コンテナB]
-
-# 3. 設定確認
-grep -A 5 "networks:" docker-compose.prod.yml
-```
-
-**解決策:**
-- `external: true` の設定確認
-- 手動接続: `docker network connect watchme-network [コンテナ名]`
-
-### 問題: サーバー再起動後に起動しない
-
-```bash
-# 1. 有効化確認
-sudo systemctl is-enabled [サービス名].service
-
-# 2. 依存関係確認
-sudo systemctl list-dependencies [サービス名].service
-
-# 3. 有効化
-sudo systemctl enable [サービス名].service
-```
-
-### 問題: APIが404エラー
-
-**原因**: 3種類のエンドポイントの混同
-
-1. **管理用**: `https://api.hey-watch.me/scheduler/status/`
-2. **内部通信用**: `http://コンテナ名:ポート/endpoint`
-3. **外部公開用（新）**: `https://api.hey-watch.me/vibe-analysis/transcription/`
-
-**解決策**: 適切なエンドポイントを使用（旧エンドポイントは2025-10-23に削除済み）
+> その他のトラブルシューティングは [OPERATIONS_GUIDE.md](./OPERATIONS_GUIDE.md#3-トラブルシューティング) を参照
 
 ## 📊 監視・メンテナンス
 
