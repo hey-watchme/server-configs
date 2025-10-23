@@ -31,6 +31,128 @@
 
 このリポジトリは、WatchMeプラットフォームのEC2サーバーで稼働する **インフラストラクチャ**、**Nginx**、**systemd** の設定を一元管理します。
 
+### 🎨 システムアーキテクチャ図
+
+```mermaid
+graph TB
+    subgraph Client["🎯 クライアント層"]
+        iOS["📱 iOS App<br/>(Swift)"]
+        Web["🌐 Web Dashboard<br/>(React + Vite)"]
+        Observer["⌚ Observer Device<br/>(ESP32/M5 CORE2)"]
+        ProductSite["🏠 製品サイト<br/>(Vercel)"]
+    end
+
+    subgraph AWS["☁️ AWS インフラストラクチャ"]
+        subgraph EventBridge["⏰ EventBridge スケジューラー"]
+            EB1["6時間ごと<br/>Janitor実行"]
+            EB2["30分ごと<br/>Demo Generator"]
+        end
+
+        subgraph Lambda["λ Lambda関数"]
+            L1["watchme-janitor-trigger"]
+            L2["demo-data-generator-trigger"]
+        end
+
+        S3["🗄️ S3<br/>音声ファイル保存"]
+        Supabase["🗃️ Supabase<br/>Auth + DB"]
+    end
+
+    subgraph EC2["🖥️ EC2 (t4g.large - Sydney)"]
+        subgraph Nginx["🔀 Nginx Reverse Proxy<br/>api.hey-watch.me"]
+            NginxRouter["ルーティング<br/>(HTTPS)"]
+        end
+
+        subgraph Docker["🐳 Docker Network (watchme-network)<br/>172.27.0.0/16"]
+            subgraph Gateway["🚪 ゲートウェイ層"]
+                Vault["Vault API<br/>:8000"]
+            end
+
+            subgraph Processing["🎙️ 音声処理層"]
+                Behavior["Behavior Features<br/>:8017<br/>(527種類の音響検出)"]
+                Emotion["Emotion Features<br/>:8018<br/>(8感情認識)"]
+                Transcriber["Vibe Transcriber<br/>:8013<br/>(Azure Speech)"]
+            end
+
+            subgraph Aggregation["📊 集計・分析層"]
+                VibeAgg["Vibe Aggregator<br/>:8009<br/>(プロンプト生成)"]
+                VibeScore["Vibe Scorer<br/>:8002<br/>(心理スコア)"]
+                BehaviorAgg["Behavior Aggregator<br/>:8010"]
+                EmotionAgg["Emotion Aggregator<br/>:8012"]
+            end
+
+            subgraph Management["⚙️ 管理・インフラ層"]
+                APIManager["API Manager<br/>:9001"]
+                Admin["Admin<br/>:9000"]
+                Avatar["Avatar Uploader<br/>:8014"]
+                Janitor["Janitor<br/>:8030<br/>(音声削除)"]
+            end
+        end
+
+        subgraph SystemD["🔧 systemd<br/>(プロセス管理)"]
+            SD1["15サービス<br/>自動起動"]
+        end
+    end
+
+    %% クライアント → AWS
+    iOS -->|録音アップロード| S3
+    iOS -->|認証・データ取得| Supabase
+    Web -->|ダッシュボード表示| Supabase
+    Observer -->|30分ごと自動録音| S3
+
+    %% AWS → EC2
+    S3 -->|音声ファイル| Vault
+    Supabase -.->|メタデータ| Vault
+
+    %% EventBridge → Lambda → EC2
+    EB1 -->|トリガー| L1
+    EB2 -->|トリガー| L2
+    L1 -->|HTTPS POST| NginxRouter
+    L2 -->|HTTPS POST| NginxRouter
+
+    %% Nginx → Docker Services
+    NginxRouter -->|/vault/| Vault
+    NginxRouter -->|/behavior-analysis/features/| Behavior
+    NginxRouter -->|/emotion-analysis/features/| Emotion
+    NginxRouter -->|/vibe-analysis/transcription/| Transcriber
+    NginxRouter -->|/janitor/| Janitor
+
+    %% 音声処理フロー
+    Vault -->|音声ファイル配信| Behavior
+    Vault -->|音声ファイル配信| Emotion
+    Vault -->|音声ファイル配信| Transcriber
+
+    Behavior -->|特徴量| BehaviorAgg
+    Emotion -->|感情スコア| EmotionAgg
+    Transcriber -->|テキスト| VibeAgg
+
+    VibeAgg -->|プロンプト| VibeScore
+    BehaviorAgg -.->|結果保存| Supabase
+    EmotionAgg -.->|結果保存| Supabase
+    VibeScore -.->|心理分析保存| Supabase
+
+    %% Janitorの削除フロー
+    Janitor -->|処理完了確認| Supabase
+    Janitor -->|ファイル削除| S3
+    Janitor -.->|ステータス更新| Supabase
+
+    %% systemd管理
+    SystemD -.->|プロセス監視| Docker
+
+    classDef clientStyle fill:#e1f5ff,stroke:#0288d1,stroke-width:2px
+    classDef awsStyle fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef processingStyle fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    classDef aggregationStyle fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef managementStyle fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    classDef infraStyle fill:#fff9c4,stroke:#f9a825,stroke-width:2px
+
+    class iOS,Web,Observer,ProductSite clientStyle
+    class S3,Supabase,L1,L2,EB1,EB2 awsStyle
+    class Behavior,Emotion,Transcriber,Vault processingStyle
+    class VibeAgg,VibeScore,BehaviorAgg,EmotionAgg aggregationStyle
+    class APIManager,Admin,Avatar,Janitor managementStyle
+    class NginxRouter,SystemD,SD1 infraStyle
+```
+
 ### 🎯 3つの管理領域
 
 | 管理領域 | 内容 | 設定場所 |
