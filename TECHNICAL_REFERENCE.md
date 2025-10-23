@@ -1,6 +1,6 @@
 # WatchMe 技術仕様書
 
-最終更新: 2025年9月4日 17:30 JST
+最終更新: 2025年10月23日 00:30 JST
 
 ## 🏗️ システムアーキテクチャ
 
@@ -29,36 +29,51 @@
 ### 接続コンテナ（IP割り当て）
 ```
 172.27.0.4  : watchme-api-manager-prod
-172.27.0.5  : opensmile-aggregator
-172.27.0.6  : watchme-vault-api
-172.27.0.7  : api_gen_prompt_mood_chart
-172.27.0.8  : api-gpt-v1
-172.27.0.9  : watchme-web-prod
-172.27.0.10 : vibe-transcriber-v2
-172.27.0.11 : sed-api
-172.27.0.12 : opensmile-api
-172.27.0.13 : watchme-admin
-172.27.0.14 : api-sed-aggregator
+172.27.0.5  : watchme-scheduler-prod
+172.27.0.6  : emotion-analysis-aggregator
+172.27.0.7  : watchme-vault-api
+172.27.0.8  : vibe-analysis-aggregator
+172.27.0.9  : vibe-analysis-scorer
+172.27.0.10 : watchme-web-prod
+172.27.0.11 : vibe-analysis-transcriber-v2
+172.27.0.12 : behavior-analysis-sed-aggregator
+172.27.0.14 : watchme-admin
 172.27.0.15 : watchme-avatar-uploader
+172.27.0.17 : behavior-analysis-feature-extractor-v2
+172.27.0.18 : emotion-analysis-feature-extractor-v3
+172.27.0.30 : janitor-api
 ```
 
 ## 📡 サービス一覧
 
+### クライアントアプリケーション
+
+| サービス | プラットフォーム | 用途 | 録音機能 | 技術スタック | 状態 |
+|---------|--------------|------|---------|------------|------|
+| **WatchMe App (iOS)** | iOS | ダッシュボード閲覧 + スポット録音分析 | ✅ 手動録音 | Swift | ✅ 本番稼働中 |
+| **Observer** | ウェアラブル/据え置き | 定期自動録音デバイス | ✅ 30分ごとに1分間自動録音 | ESP32 (M5 CORE2) / Arduino | 🧪 プロトタイプ運用中 |
+| **WatchMe Web** | Web | ダッシュボード閲覧専用 | ❌ なし | React + Vite | ✅ 本番稼働中 |
+| **製品サイト** | Web | マーケティング・製品紹介 | - | HTML/CSS/JS (Vercel) | ✅ 公開中 |
+
+### サーバーサイドサービス
+
 | サービス | エンドポイント | ポート | systemd | ECRリポジトリ/ローカル | デプロイ方式 | 備考 |
 |---------|--------------|--------|---------|------------------------|------------|------|
-| **Gateway API** | `https://api.hey-watch.me/` | 8000 | watchme-vault-api | watchme-api-vault | ECR | ✅ 2025-09-04移行済み |
-| **API Manager UI** | `https://api.hey-watch.me/manager/` | 9001 | watchme-api-manager | watchme-api-manager | ECR | ✅ 2025-09-04移行済み |
-| **Scheduler** | `https://api.hey-watch.me/scheduler/` | 8015 | watchme-api-manager | watchme-api-manager-scheduler | ECR | ✅ 2025-09-04移行済み |
-| **Web Dashboard** | `https://dashboard.hey-watch.me/` | 3001 | watchme-web-app | watchme-web | ECR | ✅ 5週間前から稼働中 |
-| **Admin Panel** | `https://admin.hey-watch.me/` | 9000 | watchme-admin | watchme-admin | ECR | ✅ 稼働中 |
+| **Vault** | `https://api.hey-watch.me/` | 8000 | watchme-vault-api | watchme-api-vault | ECR | ✅ 2025-09-04移行済み |
+| **Admin** | `https://admin.hey-watch.me/` | 9000 | watchme-admin | watchme-admin | ECR | ✅ 稼働中 |
+| **API Manager** | `https://api.hey-watch.me/manager/` | 9001 | watchme-api-manager | watchme-api-manager | ECR | ✅ 2025-09-04移行済み |
+| **Scheduler** | `https://api.hey-watch.me/scheduler/` | 8015 | watchme-api-manager | watchme-api-manager-scheduler | ECR | ⚠️ 停止中（Lambdaに移行済み） |
+| **Janitor** | `/janitor/` | 8030 | janitor-api | watchme-api-janitor | ECR | ✅ EventBridge + Lambda (`watchme-janitor-trigger`) 6時間ごと |
+| **Demo Generator** | `/demo/` | 8020 | demo-generator-api | watchme-api-demo-generator | ECR | ✅ EventBridge + Lambda (`demo-data-generator-trigger`) 30分ごと |
+| **Audio Enhancer** | (未公開) | 8016 | audio-enhancer-api | watchme-api-audio-enhancer | ローカル | 🚧 現在未使用（音声品質向上） |
 | **Avatar Uploader** | (内部) | 8014 | watchme-avatar-uploader | watchme-api-avatar-uploader | ECR | ✅ systemd経由 |
-| **Azure Speech** | `/vibe-transcriber-v2/` | 8013 | vibe-transcriber-v2 | watchme-api-transcriber-v2 | ECR | ✅ 稼働中 |
-| **Prompt Generator** | `/vibe-aggregator/` | 8009 | mood-chart-api | watchme-api-vibe-aggregator | ECR | ✅ 稼働中 |
-| **Psychology Scorer** | `/vibe-scorer/` | 8002 | api-gpt-v1 | watchme-api-vibe-scorer | ECR | ✅ 2025-09-04移行済み |
-| **Behavior Detection** | `/behavior-features/` | 8017 | watchme-behavior-ast | watchme-api-ast | ECR | ✅ 2025-09-19移行済み |
-| **SED Aggregator** | `/behavior-aggregator/` | 8010 | api-sed-aggregator | watchme-api-sed-aggregator | ECR | ✅ 2025-09-04移行済み |
-| **Emotion Features** | `/emotion-features/` | 8018 | watchme-emotion-superb | watchme-api-superb | ECR | ✅ 2025-09-19移行済み |
-| **Emotion Aggregator** | `/emotion-aggregator/` | 8012 | opensmile-aggregator | watchme-api-opensmile-aggregator | ECR | ✅ 2025-09-04移行済み |
+| **Vibe Transcriber** | `/vibe-analysis/transcription/` | 8013 | vibe-analysis-transcriber-v2 | watchme-api-transcriber-v2 | ECR | ✅ 2025-10-22階層化 |
+| **Vibe Aggregator** | `/vibe-analysis/aggregation/` | 8009 | vibe-analysis-aggregator | watchme-api-vibe-aggregator | ECR | ✅ 2025-10-22階層化 |
+| **Vibe Scorer** | `/vibe-analysis/scoring/` | 8002 | api-gpt-v1 | watchme-api-vibe-scorer | ECR | ✅ 2025-10-22階層化 |
+| **Behavior Features** | `/behavior-analysis/features/` | 8017 | behavior-analysis-feature-extractor-v2 | watchme-api-ast | ECR | ✅ 2025-10-22階層化 |
+| **Behavior Aggregator** | `/behavior-aggregator/` | 8010 | api-sed-aggregator | watchme-api-sed-aggregator | ECR | ✅ 2025-09-04移行済み |
+| **Emotion Features** | `/emotion-analysis/features/` | 8018 | emotion-analysis-feature-extractor-v3 | watchme-api-superb | ECR | ✅ 2025-10-22階層化 |
+| **Emotion Aggregator** | `/emotion-analysis/aggregation/` | 8012 | emotion-analysis-aggregator | watchme-api-opensmile-aggregator | ECR | ✅ 2025-10-22階層化 |
 
 ## 🔄 コンテナ間通信エンドポイント
 
@@ -66,13 +81,15 @@
 
 | API | コンテナ名 | ポート | エンドポイント | メソッド |
 |-----|-----------|--------|---------------|----------|
-| Azure Speech         | `vibe-transcriber-v2` | 8013 | `/fetch-and-transcribe`         | POST     |
-| Prompt Generator     | `api_gen_prompt_mood_chart` | 8009 | `/generate-mood-prompt-supabase` | GET      |
-| Psychology Scorer    | `api-gpt-v1`          | 8002 | `/analyze-vibegraph-supabase`   | POST     |
-| Behavior Detection   | `ast-api`             | 8017 | `/fetch-and-process-paths`      | POST     |  # sed-apiから移行
-| Behavior Aggregator  | `api-sed-aggregator`  | 8010 | `/analysis/sed`                 | POST     |
-| Emotion Features     | `superb-api`          | 8018 | `/process/emotion-features`     | POST     |  # opensmile-apiから移行
-| Emotion Aggregator | `opensmile-aggregator` | 8012 | `/analyze/opensmile-aggregator` | POST |
+| Azure Speech         | `vibe-analysis-transcriber-v2` | 8013 | `/fetch-and-transcribe`         | POST     |
+| Prompt Generator     | `vibe-analysis-aggregator` | 8009 | `/generate-mood-prompt-supabase` | GET      |
+| Psychology Scorer    | `vibe-analysis-scorer`          | 8002 | `/analyze-vibegraph-supabase`   | POST     |
+| Behavior Detection   | `behavior-analysis-feature-extractor-v2`             | 8017 | `/fetch-and-process-paths`      | POST     |
+| Behavior Aggregator  | `behavior-analysis-sed-aggregator`  | 8010 | `/analysis/sed`                 | POST     |
+| Emotion Features     | `emotion-analysis-feature-extractor-v3` | 8018 | `/process/emotion-features` | POST |
+| Emotion Aggregator | `emotion-analysis-aggregator` | 8012 | `/analyze/opensmile-aggregator` | POST |
+
+**注**: コンテナ間通信は上記のコンテナ名を直接使用します。外部アクセス（Nginx経由）は階層化URLを使用します。
 
 ## 🚨 トラブルシューティング
 
@@ -145,9 +162,9 @@ sudo systemctl enable [サービス名].service
 
 1. **管理用**: `https://api.hey-watch.me/scheduler/status/`
 2. **内部通信用**: `http://コンテナ名:ポート/endpoint`
-3. **外部公開用**: `https://api.hey-watch.me/vibe-transcriber/`
+3. **外部公開用（新）**: `https://api.hey-watch.me/vibe-analysis/transcription/`
 
-**解決策**: 適切なエンドポイントを使用
+**解決策**: 適切なエンドポイントを使用（旧エンドポイントは2025-10-23に削除済み）
 
 ## 📊 監視・メンテナンス
 
@@ -224,6 +241,94 @@ sudo systemctl reload nginx
 curl -I https://api.hey-watch.me/
 ```
 
+### Nginxタイムアウト設定
+
+#### 概要
+
+Nginxがリバースプロキシとして各APIにリクエストを転送する際の**待機時間の上限**を管理しています。
+この設定が適切でないと、処理は成功しているのに504エラーが返される問題が発生します。
+
+#### 現在の設定値
+
+| API | パス | タイムアウト | 平均処理時間 | 用途 |
+|-----|------|------------|-------------|------|
+| **Behavior Features** | /behavior-analysis/features/ | **180秒** | 60-90秒 | 音響イベント検出（大規模モデル） |
+| **Emotion Features** | /emotion-analysis/features/ | **180秒** | 30-60秒 | 感情認識処理 |
+| **Vibe Transcriber** | /vibe-analysis/transcription/ | **180秒** | 15-30秒 | 音声文字起こし |
+| **Vibe Aggregator** | /vibe-analysis/aggregation/ | 60秒（デフォルト） | 5-10秒 | プロンプト生成 |
+| **Vibe Scorer** | /vibe-analysis/scoring/ | 60秒（デフォルト） | 10-15秒 | ChatGPT分析 |
+| **その他のAPI** | - | 60秒（デフォルト） | < 10秒 | 軽量処理 |
+
+#### タイムアウトの種類と役割
+
+```nginx
+location /behavior-analysis/features/ {
+    proxy_pass http://localhost:8017/;
+
+    # 3種類のタイムアウト設定
+    proxy_connect_timeout 180s;  # 接続確立までの待機時間
+    proxy_send_timeout 180s;     # リクエスト送信の待機時間
+    proxy_read_timeout 180s;     # レスポンス受信の待機時間（最も重要）
+}
+```
+
+#### なぜタイムアウト設定が必要か
+
+1. **リソース保護**: 無限待機によるNginxワーカープロセスの枯渇を防ぐ
+2. **障害検知**: バックエンドの異常を適切なタイミングで検出
+3. **一貫性の確保**: Lambda(180秒) → Nginx(180秒) → API の連鎖を保つ
+
+#### トラブルシューティング
+
+**症状: 504 Gateway Timeout エラー**
+
+**原因**: Nginxのタイムアウトが処理時間より短い
+
+```
+実際の処理時間: 90秒
+Nginxタイムアウト: 60秒（デフォルト）
+結果: 60秒で504エラー（処理は継続中）
+```
+
+**解決方法**: 該当APIのlocationブロックにタイムアウト設定を追加
+
+```nginx
+# 例: 新しいAPIで長時間処理が必要な場合
+location /new-heavy-api/ {
+    proxy_pass http://localhost:8020/;
+    # ... 他の設定 ...
+
+    # タイムアウトを延長
+    proxy_read_timeout 300s;    # 5分まで待機
+    proxy_connect_timeout 30s;  # 接続は30秒
+    proxy_send_timeout 60s;     # 送信は60秒
+}
+```
+
+#### 設定変更時の注意事項
+
+1. **影響範囲の確認**
+   - 必要なAPIのみタイムアウトを延長（全体への影響を避ける）
+   - クライアント側のタイムアウトも確認（Lambda、ブラウザ等）
+
+2. **適切な値の選定**
+   - 平均処理時間の2-3倍を目安に設定
+   - 過度に長い設定はリソース浪費につながる
+
+3. **変更の適用手順**
+   ```bash
+   # 1. このリポジトリで設定を変更
+   # 2. GitHubにプッシュ
+   # 3. 本番サーバーで適用
+   ssh ubuntu@[SERVER_IP]
+   cd /home/ubuntu/watchme-server-configs
+   git pull origin main
+   ./setup_server.sh
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
+
+---
+
 ## 🎯 ベストプラクティス
 
 1. **必ず本番用設定を使用**
@@ -250,26 +355,26 @@ curl -I https://api.hey-watch.me/
 
 | サービス名 | ECRリポジトリ | イメージURI |
 |-----------|-------------|------------|
-| **Admin Panel** | watchme-admin | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-admin:latest |
+| **Admin** | watchme-admin | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-admin:latest |
 | **Avatar Uploader** | watchme-avatar-uploader | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-avatar-uploader:latest |
-| **Azure Speech** | watchme-api-transcriber-v2 | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-transcriber-v2:latest |
-| **Psychology Scorer** | watchme-api-vibe-scorer | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-vibe-scorer:latest |
-| **Behavior Detection** | watchme-api-behavior-features | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-behavior-features:latest |
-| **SED Aggregator** | watchme-api-sed-aggregator | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-sed-aggregator:latest |
+| **Vibe Transcriber** | watchme-api-transcriber-v2 | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-transcriber-v2:latest |
+| **Vibe Scorer** | watchme-api-vibe-scorer | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-vibe-scorer:latest |
+| **Behavior Features** | watchme-api-behavior-features | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-behavior-features:latest |
+| **Behavior Aggregator** | watchme-api-sed-aggregator | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-sed-aggregator:latest |
 | **Emotion Features** | watchme-opensmile-api | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-opensmile-api:latest |
 | **Emotion Aggregator** | watchme-api-opensmile-aggregator | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-opensmile-aggregator:latest |
-| **Prompt Generator** | watchme-api-vibe-aggregator | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-vibe-aggregator:latest |
-| **Web Dashboard** | watchme-web | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-web:latest |
-| **Gateway API** | watchme-api-vault | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-vault:latest |
-| **API Manager UI** | watchme-api-manager | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-manager:latest |
+| **Vibe Aggregator** | watchme-api-vibe-aggregator | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-vibe-aggregator:latest |
+| **WatchMe Web** | watchme-web | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-web:latest |
+| **Vault** | watchme-api-vault | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-vault:latest |
+| **API Manager** | watchme-api-manager | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-manager:latest |
 | **Scheduler** | watchme-api-manager-scheduler | 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-api-manager-scheduler:latest |
 
 ### ECR移行状況サマリー
 #### ✅ 移行済み（13サービス - 全サービス移行完了！）
-- Admin Panel, Avatar Uploader, Azure Speech, Prompt Generator
-- Psychology Scorer, Behavior Detection, Emotion Features, Emotion Aggregator
-- Web Dashboard
-- Behavior Aggregator, Gateway API, API Manager UI, Scheduler（2025-09-04追加）
+- Admin, Avatar Uploader, Vibe Transcriber, Vibe Aggregator
+- Vibe Scorer, Behavior Features, Emotion Features, Emotion Aggregator
+- WatchMe Web
+- Behavior Aggregator, Vault, API Manager, Scheduler（2025-09-04追加）
 
 ### 未使用ECRリポジトリ
 - watchme-api-transcriber（旧バージョン、v2が稼働中）

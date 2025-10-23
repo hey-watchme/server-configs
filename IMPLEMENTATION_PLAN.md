@@ -1,663 +1,153 @@
 # 実装計画：エラーハンドリングとユーザー体験改善
 
 **作成日**: 2025年10月20日
-**次のセッションで実装予定**
+**最終更新**: 2025年10月21日 09:05
 
 ---
 
-## 📋 背景
+## 📋 実装状況サマリー
 
-### 調査結果のまとめ
+### ✅ 完了したタスク（2025年10月21日）
 
-1. **Azure Speech APIの処理時間**: 26-28秒（1分音声）
-2. **重複処理は発生していない**: クォーター消費3倍の懸念は否定
-3. **クォーター超過時の挙動**: 1.1秒で即座にエラー（HTTP 200 OK, `errors: 1`）
-4. **現在の問題**: クォーター超過を正しく検出できていない（リトライが動作しない）
+1. **Vibe Aggregatorに失敗処理エンドポイント追加**
+   - エンドポイント: `POST /create-failed-record`
+   - 処理内容: Azure失敗時にdashboardテーブルに失敗レコードを作成
+   - vibe_score: `0`（未処理`null`と区別するため）
+   - status: `'completed'`（累積分析をトリガーするため）
 
-### 確立された運用方針
+2. **Lambda関数（watchme-audio-worker）修正**
+   - Azure失敗時に`/create-failed-record`を自動呼び出し
+   - 失敗レコード作成後も累積分析をトリガー
 
-- ✅ **クォーター超過は即座に諦める**（自動リトライしない）
-- ✅ **データベースに記録**（`transcriptions_status = 'quota_exceeded'`）
-- ✅ **手動で再処理**（料金承認プロセス）
-- ✅ **ユーザーには適切なメッセージを表示**
+3. **累積分析API修正**
+   - `status='completed'`の全データを取得（vibe_scoreの有無に関係なく）
+   - 失敗レコードも累積分析に含める
+
+4. **Azure APIレスポンスのファイル単位判定実装** ✅ **完了（2025年10月21日 09:05）**
+   - `processed_files`/`error_files`リストから該当ファイルの成功/失敗を判定
+   - HTTP 200でもファイル単位でエラーを検出可能に
+   - クォーター超過時も正確に失敗を検出
+   - **実装場所**: `lambda_function.py` Line 95-164
+
+5. **デプロイ完了**
+   - Vibe Aggregator: GitHubにpush → CI/CD自動デプロイ
+   - Lambda関数: AWSにデプロイ完了（2025年10月21日 09:05）
 
 ---
 
-## 🎯 実装タスク
+## 🔧 残タスク
 
-### **Task 1: Lambda関数でAzureクォーター超過を正しく検出する**
+### **Task 1: ~~Azure APIレスポンスからファイル単位で成功/失敗を判定~~** ✅ **完了**
 
-**ファイル**: `/Users/kaya.matsumoto/projects/watchme/server-configs/lambda-functions/watchme-audio-worker/lambda_function.py`
+~~**優先度**: 高~~
 
-**現在のコード（問題あり）**:
+**実装完了**:
 ```python
-# Line 89-93
-if transcribe_response.status_code in [429, 503]:
-    print(f"Received {transcribe_response.status_code}, will retry...")
-    retry_count += 1
-    continue
-```
+# Lambda関数内の判定ロジック（lambda_function.py Line 95-164）
+processed_files = response_data.get('processed_files', [])
+error_files = response_data.get('error_files', [])
 
-**問題点**:
-- Azure APIはクォーター超過時に**HTTP 200 OK**を返す
-- レスポンス本文に`errors: 1`が含まれる形式
-- 現在のコードでは検出できない
-
-**修正内容**:
-
-```python
-# Line 80-123を以下に置き換え
-
-print(f"Calling Azure Speech API (attempt {retry_count + 1}/{max_retries})...")
-transcribe_response = requests.post(
-    f"{API_BASE_URL}/vibe-transcriber-v2/fetch-and-transcribe",
-    json={
-        "file_paths": [file_path]
-    },
-    timeout=180
-)
-
-# レスポンスの解析
-if transcribe_response.status_code == 200:
-    try:
-        response_data = transcribe_response.json()
-
-        # クォーター超過の検出（重要）
-        if response_data.get('summary', {}).get('errors', 0) > 0:
-            error_files = response_data.get('error_files', [])
-
-            # エラー詳細をログ出力
-            print(f"Azure API returned errors: {response_data.get('summary')}")
-
-            # クォーター超過の可能性が高い
-            # → 即座に諦める（リトライしない）
-            azure_success = False
-            results['transcription'] = {
-                'status_code': 200,
-                'success': False,
-                'error_type': 'quota_exceeded',
-                'error_files': error_files,
-                'message': 'Azure quota exceeded - manual reprocessing required'
-            }
-
-            print(f"⚠️ Azure quota exceeded. Stopping retries.")
-            break  # リトライループを抜ける
-
-        # 成功の場合
-        azure_success = True
-        results['transcription'] = {
-            'status_code': transcribe_response.status_code,
-            'success': True,
-            'response': response_data,
-            'retry_count': retry_count
-        }
-
-        print(f"Azure Speech API response: {response_data}")
-        break  # 成功したのでループを抜ける
-
-    except Exception as e:
-        print(f"Error parsing Azure response: {str(e)}")
-        results['transcription'] = {
-            'status_code': 200,
-            'success': False,
-            'error': f'Response parsing error: {str(e)}'
-        }
-        break
-
-# 429/503の場合はリトライ
-elif transcribe_response.status_code in [429, 503]:
-    print(f"Received {transcribe_response.status_code}, will retry...")
-    retry_count += 1
-    if retry_count < max_retries:
-        wait_time = min(30, 5 * (2 ** (retry_count - 1)))
-        print(f"Waiting {wait_time} seconds before retry...")
-        time.sleep(wait_time)
-        continue
-    else:
-        # 最大リトライ回数に到達
-        azure_success = False
-        results['transcription'] = {
-            'status_code': transcribe_response.status_code,
-            'success': False,
-            'error': f'Max retries reached with status {transcribe_response.status_code}'
-        }
-        break
-
-# その他のエラー
+if file_path in processed_files:
+    azure_success = True  # ✅ 成功
+elif file_path in error_files:
+    azure_success = False  # ❌ 失敗（クォーター超過など）
 else:
-    print(f"Azure API failed with status: {transcribe_response.status_code}")
-    azure_success = False
-    results['transcription'] = {
-        'status_code': transcribe_response.status_code,
-        'success': False,
-        'error': f'HTTP {transcribe_response.status_code}'
-    }
-    break
+    # summary.errorsで判定
+    errors_count = response_data.get('summary', {}).get('errors', 0)
+    azure_success = (errors_count == 0)
 ```
 
-**テスト方法**:
-1. CloudWatch Logsで「Azure quota exceeded」というログが出力されるか確認
-2. データベースの`audio_files`テーブルで`transcriptions_status = 'quota_exceeded'`が記録されるか確認
+**デプロイ状況**: ✅ 完了（2025年10月21日 09:05）
 
 ---
 
-### **Task 2: エラー種別ごとのリトライロジックを実装**
+### **Task 2: プッシュ通知の動作確認**
 
-**同じファイル**: `lambda_function.py`
+**優先度**: 中
 
-**実装内容**:
-
-リトライ対象のエラーを明確にする：
-
-```python
-# 関数の先頭に追加
-
-RETRYABLE_STATUS_CODES = [429, 503]  # リトライ対象のHTTPステータス
-RETRYABLE_EXCEPTIONS = (requests.Timeout, requests.ConnectionError)
-
-def should_retry_error(status_code, exception):
-    """エラーがリトライ可能か判定"""
-    if status_code in RETRYABLE_STATUS_CODES:
-        return True
-    if isinstance(exception, RETRYABLE_EXCEPTIONS):
-        return True
-    return False
-```
-
-AST APIとSUPERB APIにも同様のリトライロジックを追加（現在はリトライなし）。
+**状況**:
+- SNS Platform Application（サンドボックス）を有効化済み
+- 次の音声アップロードで通知が届くか確認が必要
 
 ---
 
-### **Task 3: ダッシュボードで分析失敗時のユーザー体験を改善**
+### **Task 3: フロントエンド（iOSアプリ）でエラー表示改善**
 
-#### **3-1. バックエンド（Dashboard Summary API）**
+**優先度**: 中
 
-**ファイル**: Vibe Aggregator API（プロンプト生成）
+**現在の状況**:
+- dashboardテーブルの`summary`に失敗メッセージが入っている
+- アプリ側で特別な表示をしていない可能性
 
-**現在の問題**:
-- クォーター超過時、`dashboard`テーブルにレコードが作成されない
-- ユーザーはデータポイント自体が存在しないように見える
-
-**改善内容**:
-
-`dashboard`テーブルに**失敗レコード**を作成する：
-
-```python
-# Vibe Scorer APIの代わりに、Vibe Aggregatorで失敗レコードを作成
-
-# Azure失敗時の処理
-if transcriptions_status == 'quota_exceeded':
-    # 失敗レコードをdashboardテーブルに挿入
-    dashboard_record = {
-        'device_id': device_id,
-        'date': date,
-        'time_block': time_block,
-        'status': 'failed',
-        'failure_reason': 'quota_exceeded',
-        'vibe_score': None,
-        'burst_events': None,
-        'current_time': None,
-        'time_context': None,
-        'cumulative_evaluation': None,
-        'mood_trajectory': None,
-        'current_state_score': None,
-        'message': '分析に失敗しました。しばらくしてから再度お試しください。',
-        'user_message': 'Azure Speech APIのクォーター超過により、音声の文字起こしができませんでした。システム管理者に通知されています。',
-        'created_at': datetime.utcnow().isoformat()
-    }
-
-    # Supabaseに保存
-    supabase.table('dashboard').upsert(dashboard_record).execute()
-```
-
-**データベーススキーマの追加**:
-
-`dashboard`テーブルに以下のカラムを追加（必要であれば）:
-- `status` (text): 'completed', 'failed', 'pending'
-- `failure_reason` (text): 'quota_exceeded', 'api_error', etc.
-- `message` (text): システム管理者向けメッセージ
-- `user_message` (text): エンドユーザー向けメッセージ
+**改善案**:
+- `vibe_score=0`かつ`summary`に「失敗」が含まれる場合に特別な表示
+- または専用のエラー表示UI
 
 ---
 
-#### **3-2. フロントエンド（ダッシュボード）**
+### **Task 4: 手動再処理の仕組み（低優先度）**
 
-**ファイル**: `/Users/kaya.matsumoto/projects/watchme/watchme_v8/` または該当するダッシュボードコンポーネント
+**優先度**: 低
 
-**現在の問題**:
-- データがない場合、空白またはローディング状態のまま
-- ユーザーは何が起きているか分からない
-
-**改善内容**:
-
-##### **パターンA: データポイントにエラー状態を表示**
-
-```typescript
-// ダッシュボードのデータ取得部分
-
-interface DashboardData {
-  device_id: string;
-  date: string;
-  time_block: string;
-  status: 'completed' | 'failed' | 'pending';
-  failure_reason?: 'quota_exceeded' | 'api_error';
-  user_message?: string;
-  vibe_score?: number;
-  // ... 他のフィールド
-}
-
-// コンポーネント内
-{dashboardData.map((item) => {
-  if (item.status === 'failed') {
-    return (
-      <div className="data-point failed">
-        <div className="time-block">{item.time_block}</div>
-        <div className="error-message">
-          <Icon name="alert-circle" />
-          <p>{item.user_message || '分析に失敗しました'}</p>
-          <button onClick={() => handleRetry(item)}>
-            再分析を依頼
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // 通常のデータ表示
-  return <DataPoint data={item} />;
-})}
-```
-
-##### **パターンB: グラフ上にエラーマーカーを表示**
-
-```typescript
-// Chart.jsを使用している場合
-
-const chartData = {
-  labels: timeBlocks,
-  datasets: [{
-    label: 'Vibe Score',
-    data: dashboardData.map(item => {
-      if (item.status === 'failed') {
-        return null;  // データなし
-      }
-      return item.vibe_score;
-    }),
-    // ... スタイル設定
-  }]
-};
-
-// エラーマーカーの追加
-const errorAnnotations = dashboardData
-  .filter(item => item.status === 'failed')
-  .map(item => ({
-    type: 'point',
-    xValue: item.time_block,
-    backgroundColor: '#ff4444',
-    borderColor: '#ff4444',
-    label: {
-      content: '⚠️ 分析失敗',
-      enabled: true
-    }
-  }));
-```
-
-##### **パターンC: 通知バナーで一括表示**
-
-```typescript
-// ページ上部に通知バナーを表示
-
-const failedDataPoints = dashboardData.filter(item => item.status === 'failed');
-
-{failedDataPoints.length > 0 && (
-  <div className="notification-banner warning">
-    <Icon name="alert-triangle" />
-    <div>
-      <strong>一部のデータ分析に失敗しています</strong>
-      <p>
-        {failedDataPoints.length}件のタイムブロックで分析が完了していません。
-        システム管理者に自動通知されています。
-      </p>
-      <details>
-        <summary>詳細を見る</summary>
-        <ul>
-          {failedDataPoints.map(item => (
-            <li key={item.time_block}>
-              {item.time_block}: {item.user_message}
-            </li>
-          ))}
-        </ul>
-      </details>
-    </div>
-  </div>
-)}
-```
-
-**UIテキストの例**:
-
-| 状況 | ユーザー向けメッセージ |
-|------|---------------------|
-| クォーター超過 | 「分析処理の上限に達したため、このタイムブロックの分析ができませんでした。しばらくしてから自動的に再試行されます。」 |
-| API一時エラー | 「一時的なエラーが発生しました。数分後に自動的に再試行されます。」 |
-| 処理中 | 「分析処理中です。しばらくお待ちください...」 |
+**方法**:
+- Claude Codeなどのエージェントに直接操作してもらう
+- 大量データの扱いは今後の課題
 
 ---
 
-### **Task 4: Dashboard Summary APIで失敗データを適切にハンドリング**
+## 🎯 データフロー（現在の実装）
 
-**ファイル**: Vibe Aggregator API（`/vibe-aggregator/generate-dashboard-summary`）
+### **成功時**
+```
+Lambda → Azure API → 成功
+→ Vibe Aggregator → Vibe Scorer
+→ dashboardテーブル（vibe_score=数値, status='completed'）
+→ 累積分析 → プッシュ通知
+```
 
-**現在の問題**:
-- 失敗したタイムブロックがあると、累積分析全体が失敗する可能性
-
-**改善内容**:
-
-```python
-# 累積分析のプロンプト生成時
-
-# dashboardテーブルから全データを取得
-dashboard_data = supabase.table('dashboard')\
-    .select('*')\
-    .eq('device_id', device_id)\
-    .eq('date', date)\
-    .order('time_block')\
-    .execute()
-
-# 成功したデータのみを分析対象にする
-successful_data = [
-    item for item in dashboard_data.data
-    if item.get('status') == 'completed' and item.get('vibe_score') is not None
-]
-
-failed_data = [
-    item for item in dashboard_data.data
-    if item.get('status') == 'failed'
-]
-
-# プロンプトに失敗情報を含める
-prompt = f"""
-## 1日全体の総合分析依頼
-
-### 分析対象
-- 成功したタイムブロック: {len(successful_data)}件
-- 失敗したタイムブロック: {len(failed_data)}件
-
-### 分析データ
-{json.dumps(successful_data, ensure_ascii=False)}
-
-### 注意事項
-以下のタイムブロックは分析失敗のため、データがありません：
-{[item['time_block'] for item in failed_data]}
-
-上記を考慮して、利用可能なデータのみで分析を行ってください。
-"""
+### **失敗時**
+```
+Lambda → Azure API → 失敗
+→ /create-failed-record
+→ dashboardテーブル（vibe_score=0, status='completed', summary="分析失敗..."）
+→ 累積分析 → プッシュ通知
 ```
 
 ---
 
-### **Task 5: 手動再処理用の管理画面またはAPIエンドポイントを作成**
+## 📊 データの3つの状態
 
-#### **オプションA: 管理画面UI（推奨）**
-
-**場所**: `/Users/kaya.matsumoto/projects/watchme/admin/` または watchme-admin
-
-**実装内容**:
-
-```typescript
-// 失敗データの一覧表示ページ
-
-interface FailedData {
-  device_id: string;
-  date: string;
-  time_block: string;
-  failure_reason: string;
-  created_at: string;
-  file_path: string;
-}
-
-function FailedDataList() {
-  const [failedData, setFailedData] = useState<FailedData[]>([]);
-
-  // Supabaseから失敗データを取得
-  useEffect(() => {
-    const fetchFailedData = async () => {
-      const { data } = await supabase
-        .from('audio_files')
-        .select('*')
-        .eq('transcriptions_status', 'quota_exceeded')
-        .order('created_at', { ascending: false });
-
-      setFailedData(data || []);
-    };
-
-    fetchFailedData();
-  }, []);
-
-  // 再処理の実行
-  const handleReprocess = async (item: FailedData) => {
-    try {
-      const response = await fetch('https://api.hey-watch.me/vibe-transcriber-v2/fetch-and-transcribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          file_paths: [item.file_path]
-        })
-      });
-
-      if (response.ok) {
-        alert('再処理を開始しました');
-        // リストを更新
-      } else {
-        alert('再処理に失敗しました');
-      }
-    } catch (error) {
-      console.error(error);
-      alert('エラーが発生しました');
-    }
-  };
-
-  return (
-    <div className="failed-data-list">
-      <h2>分析失敗データ一覧</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>デバイスID</th>
-            <th>日付</th>
-            <th>タイムブロック</th>
-            <th>失敗理由</th>
-            <th>発生日時</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          {failedData.map(item => (
-            <tr key={`${item.device_id}-${item.date}-${item.time_block}`}>
-              <td>{item.device_id.slice(0, 8)}...</td>
-              <td>{item.date}</td>
-              <td>{item.time_block}</td>
-              <td>{item.failure_reason || 'quota_exceeded'}</td>
-              <td>{new Date(item.created_at).toLocaleString()}</td>
-              <td>
-                <button onClick={() => handleReprocess(item)}>
-                  再処理
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-```
-
-#### **オプションB: APIエンドポイント（シンプル）**
-
-**場所**: Vibe Transcriber API
-
-**新規エンドポイント**: `/vibe-transcriber-v2/reprocess-failed`
-
-```python
-@app.post("/reprocess-failed")
-async def reprocess_failed_data(
-    device_id: Optional[str] = None,
-    date: Optional[str] = None,
-    limit: int = 10
-):
-    """
-    失敗したデータを再処理
-
-    Parameters:
-    - device_id: 特定のデバイスのみ（省略可）
-    - date: 特定の日付のみ（省略可）
-    - limit: 最大処理件数（デフォルト10件）
-    """
-
-    # Supabaseから失敗データを取得
-    query = supabase.table('audio_files')\
-        .select('file_path, device_id, local_date, time_block')\
-        .eq('transcriptions_status', 'quota_exceeded')
-
-    if device_id:
-        query = query.eq('device_id', device_id)
-    if date:
-        query = query.eq('local_date', date)
-
-    result = query.limit(limit).execute()
-
-    file_paths = [item['file_path'] for item in result.data]
-
-    if not file_paths:
-        return {
-            "status": "success",
-            "message": "No failed data to reprocess",
-            "reprocessed_count": 0
-        }
-
-    # 既存の処理エンドポイントを呼び出し
-    reprocess_result = await fetch_and_transcribe(
-        FilePaths(file_paths=file_paths)
-    )
-
-    return {
-        "status": "success",
-        "message": f"Reprocessed {len(file_paths)} files",
-        "reprocessed_count": len(file_paths),
-        "details": reprocess_result
-    }
-```
+| 状態 | vibe_score | 意味 |
+|------|-----------|------|
+| **未処理** | `null` | まだその時間帯に到達していない |
+| **失敗** | `0` | 処理済みだが分析失敗 |
+| **正常** | 数値（-100〜100） | 正常に分析完了 |
 
 ---
 
-## 📊 実装の優先順位
+## 📝 重要なポイント
 
-### **Phase 1: 緊急（必須）**
-1. ✅ **Task 1**: Lambda関数でクォーター超過を正しく検出
-2. ✅ **Task 3-1**: バックエンドで失敗レコードを作成
+1. **HTTP 200とerrors:1の関係**
+   - Azure APIはバッチ処理API
+   - API自体が成功してもファイル単位で失敗する場合がある
+   - `processed_files`と`error_files`でファイル単位の成功/失敗を判定
 
-### **Phase 2: 重要（早めに実装）**
-3. ✅ **Task 3-2**: ダッシュボードでエラー表示
-4. ✅ **Task 4**: Dashboard Summary APIで失敗データをハンドリング
+2. **失敗時もフローを止めない設計**
+   - 失敗レコード作成後も累積分析を実行
+   - 条件分岐を最小化し、シンプルなフロー維持
 
-### **Phase 3: 改善（時間があれば）**
-5. ⭕ **Task 2**: AST/SUPERB APIにもリトライロジック追加
-6. ⭕ **Task 5**: 管理画面で手動再処理UI
-
----
-
-## 🧪 テスト計画
-
-### **1. Lambda関数のテスト**
-
-**テストケース**:
-```python
-# クォーター超過のシミュレーション
-mock_response = {
-    "status": "success",
-    "summary": {
-        "total_files": 1,
-        "pending_processed": 0,
-        "errors": 1  # ← これを検出できるか
-    },
-    "error_files": ["files/..."],
-    "message": "1件中0件を処理しました"
-}
-```
-
-**確認項目**:
-- [ ] `azure_success = False`になるか
-- [ ] `error_type = 'quota_exceeded'`が記録されるか
-- [ ] リトライループを抜けるか（無駄なリトライをしない）
-- [ ] CloudWatchに適切なログが出力されるか
-
-### **2. ダッシュボードのテスト**
-
-**テストデータ**:
-```sql
--- 失敗レコードを手動で作成
-INSERT INTO dashboard (device_id, date, time_block, status, failure_reason, user_message)
-VALUES (
-  'test-device-id',
-  '2025-10-20',
-  '09-00',
-  'failed',
-  'quota_exceeded',
-  'Azure Speech APIのクォーター超過により、音声の文字起こしができませんでした。'
-);
-```
-
-**確認項目**:
-- [ ] エラー状態が視覚的に分かるか
-- [ ] ユーザー向けメッセージが表示されるか
-- [ ] 他の正常データと区別できるか
-
-### **3. 手動再処理のテスト**
-
-**手順**:
-1. クォーター超過のデータを用意
-2. Azureクォーターを確認（リセット後または追加購入後）
-3. 管理画面またはAPIで再処理を実行
-4. データベースのステータスが更新されるか確認
+3. **再処理の簡便さ**
+   - audio_filesテーブルの`transcriptions_status`を参照
+   - 再処理時は単にupsertで上書き
 
 ---
 
-## 📝 引き継ぎメモ
-
-### **重要なポイント**
-
-1. **Azure APIのエラーレスポンス形式**
-   - HTTP 200 OKを返す
-   - `summary.errors > 0`でエラー判定
-   - これを検出できていないのが現在の問題
-
-2. **ユーザー体験の改善が必須**
-   - データがないだけでは、ユーザーは何が起きているか分からない
-   - 「分析失敗」「再試行中」「完了」の状態を明確に表示
-
-3. **手動再処理の仕組み**
-   - 管理画面UIまたはAPIエンドポイント
-   - データベースから`quota_exceeded`を検索
-   - Azure APIを再実行
-
-4. **コスト管理の思想**
-   - 自動リトライは無駄なコスト発生のリスク
-   - 人間による承認プロセスを経る
-
-### **関連ファイル**
+## 🔗 関連ファイル
 
 - Lambda関数: `/Users/kaya.matsumoto/projects/watchme/server-configs/lambda-functions/watchme-audio-worker/lambda_function.py`
-- 設計ドキュメント: `/Users/kaya.matsumoto/projects/watchme/server-configs/PROCESSING_ARCHITECTURE.md`
-- ダッシュボード: `/Users/kaya.matsumoto/projects/watchme/watchme_v8/`（または該当プロジェクト）
-- 管理画面: `/Users/kaya.matsumoto/projects/watchme/admin/`
-
-### **次のセッションで最初にすること**
-
-1. ✅ Lambda関数の修正（Task 1）
-2. ✅ ローカルでビルド・デプロイ
-3. ✅ CloudWatchログで動作確認
-4. ✅ ダッシュボードのUI改善（Task 3-2）
+- Vibe Aggregator: `/Users/kaya.matsumoto/api_gen-prompt_mood-chart_v1/main.py`
+- アーキテクチャ: `/Users/kaya.matsumoto/projects/watchme/server-configs/PROCESSING_ARCHITECTURE.md`
 
 ---
 
-*この引き継ぎ資料は次のセッションで即座に実装を開始できるように作成されています。*
+*次のセッションではTask 1（Azure APIレスポンスのファイル単位判定）の実装を優先*

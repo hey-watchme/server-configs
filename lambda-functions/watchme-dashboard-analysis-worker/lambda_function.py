@@ -57,7 +57,7 @@ def lambda_handler(event, context):
             # API成功/失敗に関わらず、プッシュ通知を送信
             # （アプリ側でデータを再取得させる）
             try:
-                send_push_notification(device_id, date)
+                send_push_notification(device_id, date, time_slot)
             except Exception as push_error:
                 print(f"[PUSH] ⚠️ Push notification failed, but continuing: {str(push_error)}")
 
@@ -82,11 +82,11 @@ def call_dashboard_analysis_api(device_id, date, prompt):
     """
     try:
         print(f"Calling Dashboard Analysis API...")
-        print(f"URL: {API_BASE_URL}/vibe-scorer/analyze-dashboard-summary")
-        
+        print(f"URL: {API_BASE_URL}/vibe-analysis/scoring/analyze-dashboard-summary")
+
         # APIを呼び出し
         response = requests.post(
-            f"{API_BASE_URL}/vibe-scorer/analyze-dashboard-summary",
+            f"{API_BASE_URL}/vibe-analysis/scoring/analyze-dashboard-summary",
             json={
                 "device_id": device_id,
                 "date": date
@@ -206,12 +206,12 @@ def log_success_metrics(device_id, date, time_slot, analysis_result):
         print(f"Error logging metrics: {str(e)}")
 
 
-def send_push_notification(device_id, date):
+def send_push_notification(device_id, date, time_slot):
     """
-    iOSアプリにサイレントプッシュ通知を送信
+    iOSアプリにプッシュ通知を送信（観測対象名とタイムブロックを含む）
     """
     try:
-        print(f"[PUSH] Starting push notification for device: {device_id}, date: {date}")
+        print(f"[PUSH] Starting push notification for device: {device_id}, date: {date}, time_slot: {time_slot}")
 
         # 1. SupabaseからユーザーのAPNsトークンを取得
         apns_token = get_user_apns_token(device_id)
@@ -222,7 +222,42 @@ def send_push_notification(device_id, date):
 
         print(f"[PUSH] APNs token found: {apns_token[:20]}...")
 
-        # 2. SNS Platform Endpointを作成または取得
+        # 2. 観測対象名（Subject名）を取得
+        subject_name = get_subject_name_for_device(device_id)
+
+        # 3. タイムブロックをフォーマット（例：22-00 → 22:00-22:30）
+        if time_slot:
+            try:
+                # タイムブロック形式: "22-00" → "22:00-22:30"
+                hour = int(time_slot.split('-')[0])
+                start_time = f"{hour:02d}:00"
+                end_time = f"{hour:02d}:30"
+                time_range = f"{start_time}-{end_time}"
+            except:
+                # パースに失敗した場合はタイムブロックなしで表示
+                time_range = None
+                print(f"[PUSH] Warning: Failed to parse time_slot: {time_slot}")
+        else:
+            time_range = None
+
+        # 4. メッセージを動的に生成
+        if subject_name:
+            # 観測対象名がある場合
+            if time_range:
+                body_text = f"{subject_name}さんの{time_range}のデータが届きました✨"
+            else:
+                body_text = f"{subject_name}さんの最新データが届きました✨"
+            print(f"[PUSH] Message for subject: {subject_name}, time_range: {time_range}")
+        else:
+            # 観測対象名がない場合：デバイスIDの先頭8文字を使用
+            device_id_short = device_id[:8]
+            if time_range:
+                body_text = f"デバイス {device_id_short} の{time_range}のデータが届きました✨"
+            else:
+                body_text = f"デバイス {device_id_short} の最新データが届きました✨"
+            print(f"[PUSH] Message for device ID (no subject): {device_id_short}, time_range: {time_range}")
+
+        # 4. SNS Platform Endpointを作成または取得
         endpoint_arn = create_or_update_endpoint(device_id, apns_token)
 
         if not endpoint_arn:
@@ -231,13 +266,12 @@ def send_push_notification(device_id, date):
 
         print(f"[PUSH] SNS Endpoint ARN: {endpoint_arn}")
 
-        # 3. テスト用：通常の通知ペイロード（バナー表示）
+        # 5. 通知ペイロードを作成（バナー表示）
         message = {
             'APNS_SANDBOX': json.dumps({
                 'aps': {
                     'alert': {
-                        'title': 'データ更新完了',
-                        'body': '新しい分析結果が利用可能です'
+                        'body': body_text
                     },
                     'sound': 'default',
                     'content-available': 1
@@ -363,6 +397,85 @@ def get_user_apns_token(device_id):
 
     except Exception as e:
         print(f"[PUSH] Error fetching APNs token: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
+def get_subject_name_for_device(device_id):
+    """
+    device_idに紐づく観測対象（Subject）の名前を取得
+
+    Args:
+        device_id: 観測対象デバイスのID
+
+    Returns:
+        str: 観測対象の名前（例: "山田太郎"）、取得できない場合はNone
+    """
+    try:
+        headers = {
+            'apikey': SUPABASE_KEY,
+            'Authorization': f'Bearer {SUPABASE_KEY}'
+        }
+
+        # Step 1: device_idからsubject_idを取得
+        print(f"[PUSH] Getting subject_id for device: {device_id}")
+        response = requests.get(
+            f"{SUPABASE_URL}/rest/v1/devices",
+            params={
+                'device_id': f'eq.{device_id}',
+                'select': 'subject_id'
+            },
+            headers=headers,
+            timeout=10
+        )
+
+        if response.status_code != 200:
+            print(f"[PUSH] Failed to get device info: {response.status_code}")
+            return None
+
+        device_data = response.json()
+        if not device_data or len(device_data) == 0:
+            print(f"[PUSH] Device not found: {device_id}")
+            return None
+
+        subject_id = device_data[0].get('subject_id')
+        if not subject_id:
+            print(f"[PUSH] No subject_id for device: {device_id}")
+            return None
+
+        print(f"[PUSH] Subject ID found: {subject_id}")
+
+        # Step 2: subject_idから観測対象の名前を取得
+        response = requests.get(
+            f"{SUPABASE_URL}/rest/v1/subjects",
+            params={
+                'subject_id': f'eq.{subject_id}',
+                'select': 'name'
+            },
+            headers=headers,
+            timeout=10
+        )
+
+        if response.status_code != 200:
+            print(f"[PUSH] Failed to get subject info: {response.status_code}")
+            return None
+
+        subject_data = response.json()
+        if not subject_data or len(subject_data) == 0:
+            print(f"[PUSH] Subject not found: {subject_id}")
+            return None
+
+        subject_name = subject_data[0].get('name')
+        if subject_name:
+            print(f"[PUSH] ✅ Subject name found: {subject_name}")
+            return subject_name
+        else:
+            print(f"[PUSH] No name for subject: {subject_id}")
+            return None
+
+    except Exception as e:
+        print(f"[PUSH] Error fetching subject name: {str(e)}")
         import traceback
         traceback.print_exc()
         return None

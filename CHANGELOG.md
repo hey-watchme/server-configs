@@ -1,5 +1,60 @@
 # WatchMe Server 変更履歴
 
+## 2025年9月19日
+
+### API移行完了 - 音声処理API世代交代
+
+#### 移行概要
+| 旧API | → | 新API | 改善点 |
+|-------|---|-------|--------|
+| **SED API**(YamNet) | → | **AST API**(Transformer) | 音響イベント検出高精度化（527種類） |
+| **OpenSMILE API** | → | **SUPERB API**(wav2vec2) | 処理速度向上、互換性維持 |
+
+#### ポート割り当て
+| API名 | ポート | 用途 | Nginxパス | ECRリポジトリ |
+|-------|--------|------|----------|--------------|
+| **AST API** | 8017 | 音響イベント検出 | /behavior-features/ | watchme-api-ast |
+| **SUPERB API** | 8018 | 感情認識 | /emotion-features/ | watchme-api-superb |
+| ~~sed-api~~ | ~~8004~~ | ~~旧音響イベント検出~~ | - | 廃止 |
+| ~~opensmile-api~~ | ~~8011~~ | ~~旧感情特徴量抽出~~ | - | 廃止 |
+
+#### 修正完了事項
+- **AST API**: ポート8017に統一（docker-compose.prod.yml + Nginx設定）
+- **SUPERB API**: ポート8018に統一
+- **ディレクトリ**:
+  - AST: `/home/ubuntu/api_ast/`
+  - SUPERB: `/home/ubuntu/api_superb_v1/`
+- **メモリ制限**: AST=2GB、SUPERB=1GB
+
+#### インフラアップグレード
+- **EC2インスタンスタイプ変更**: t4g.small (1.8GB) → **t4g.large (7.8GB)**
+  - 実施日: 2025-09-19
+  - 理由: AST/SUPERB APIの大規模モデル実行のため
+  - メモリ使用率: 78% → 20%台に改善
+  - 注意: 将来的にt4g.smallに戻す可能性あり
+
+#### ネットワークインフラ移行完了状況
+**全フェーズ完了（2025-09-04時点）**:
+
+| フェーズ | 完了日 | 内容 |
+|---------|---------|------|
+| Phase 1: インフラ整備 | 2025-08-06 | docker-compose.infra.yml作成、監視スクリプト導入 |
+| Phase 2: 問題修正 | 2025-08-20 | 全APIのwatchme-network接続 |
+| Phase 3: systemd移行 | 2025-09-03 | 全13サービスのsystemd管理化 |
+| Phase 4: ネットワーク統合 | 2025-09-04 | レガシーネットワーク4個削除、watchme-networkに統合 |
+
+**削除したレガシーネットワーク**:
+- api_sed_v1_default
+- watchme-api-manager_watchme-network
+- watchme-docker_watchme-network
+- watchme-vault-api-docker_vault-network
+
+**システム最終状態**:
+- 稼働サービス: 15サービス（systemd管理）
+- 自動起動: 有効
+- ポートバインド: 127.0.0.1（セキュリティ向上）
+- ディスク使用率: 50% (14GB/29GB)
+
 ## 2025年9月24日
 
 ### Nginxプロキシタイムアウト設定の追加

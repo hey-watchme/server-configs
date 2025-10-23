@@ -100,7 +100,7 @@ fi
 echo ""
 echo "--> Enabling all WatchMe services for auto-start on boot..."
 
-# 全てのwatchmeサービスをリスト化
+# 全てのwatchmeサービスをリスト化（2025-10-22更新: 階層化サービス名に対応）
 WATCHME_SERVICES=(
     "watchme-vault-api"
     "watchme-api-manager"
@@ -112,10 +112,11 @@ WATCHME_SERVICES=(
     "api-gpt-v1"
     "api-sed-aggregator"
     "mood-chart-api"
-    "opensmile-api"
-    "opensmile-aggregator"
-    "superb-api"
-    "vibe-transcriber-v2"
+    "behavior-analysis-feature-extractor-v2"
+    "emotion-analysis-feature-extractor-v3"
+    "emotion-analysis-aggregator"
+    "vibe-analysis-transcriber-v2"
+    "vibe-analysis-aggregator"
 )
 
 # 各サービスを有効化（起動はしない）

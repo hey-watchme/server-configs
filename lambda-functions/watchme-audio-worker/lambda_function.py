@@ -79,7 +79,7 @@ def trigger_processing_pipeline(file_path, device_id, date, time_slot):
             
             print(f"Calling Azure Speech API (attempt {retry_count + 1}/{max_retries})...")
             transcribe_response = requests.post(
-                f"{API_BASE_URL}/vibe-transcriber-v2/fetch-and-transcribe",
+                f"{API_BASE_URL}/vibe-analysis/transcription/fetch-and-transcribe",
                 json={
                     "file_paths": [file_path]
                 },
@@ -91,24 +91,77 @@ def trigger_processing_pipeline(file_path, device_id, date, time_slot):
                 print(f"Received {transcribe_response.status_code}, will retry...")
                 retry_count += 1
                 continue
-                
-            azure_success = transcribe_response.status_code == 200
-            results['transcription'] = {
-                'status_code': transcribe_response.status_code,
-                'success': azure_success,
-                'retry_count': retry_count
-            }
-            
-            if azure_success:
+
+            # HTTP 200の場合、レスポンス本文を解析してファイル単位で判定
+            if transcribe_response.status_code == 200:
                 try:
                     response_data = transcribe_response.json()
                     print(f"Azure Speech API response: {response_data}")
-                    results['transcription']['response'] = response_data
+
+                    # 【重要】該当ファイルが成功したか失敗したかを判定
+                    processed_files = response_data.get('processed_files', [])
+                    error_files = response_data.get('error_files', [])
+
+                    # ファイル単位で成功/失敗を判定
+                    if file_path in processed_files:
+                        # ✅ 成功
+                        azure_success = True
+                        results['transcription'] = {
+                            'status_code': 200,
+                            'success': True,
+                            'response': response_data,
+                            'retry_count': retry_count
+                        }
+                        print(f"✅ Azure Speech API: File successfully processed")
+
+                    elif file_path in error_files:
+                        # ❌ 失敗（クォーター超過など）
+                        azure_success = False
+                        results['transcription'] = {
+                            'status_code': 200,
+                            'success': False,
+                            'error_type': 'processing_failed',
+                            'response': response_data,
+                            'retry_count': retry_count,
+                            'message': 'File was in error_files list'
+                        }
+                        print(f"⚠️ Azure Speech API: File processing failed")
+
+                    else:
+                        # ファイルがどちらのリストにもない場合はsummary.errorsで判定
+                        errors_count = response_data.get('summary', {}).get('errors', 0)
+                        azure_success = (errors_count == 0)
+
+                        results['transcription'] = {
+                            'status_code': 200,
+                            'success': azure_success,
+                            'response': response_data,
+                            'retry_count': retry_count,
+                            'message': f'Errors: {errors_count}' if not azure_success else 'Success'
+                        }
+                        print(f"{'✅' if azure_success else '⚠️'} Azure Speech API: {results['transcription']['message']}")
+
+                    break  # レスポンス解析完了、ループを抜ける
+
                 except Exception as e:
                     print(f"Error parsing Azure response: {str(e)}")
-            
-            # 成功または429/503以外のエラーの場合はループを抜ける
-            break
+                    azure_success = False
+                    results['transcription'] = {
+                        'status_code': 200,
+                        'success': False,
+                        'error': f'Response parsing error: {str(e)}'
+                    }
+                    break
+            else:
+                # HTTP 200以外のエラー
+                print(f"Azure API failed with status: {transcribe_response.status_code}")
+                azure_success = False
+                results['transcription'] = {
+                    'status_code': transcribe_response.status_code,
+                    'success': False,
+                    'error': f'HTTP {transcribe_response.status_code}'
+                }
+                break
                 
         except requests.Timeout:
             print("Transcription API timeout")
@@ -127,7 +180,7 @@ def trigger_processing_pipeline(file_path, device_id, date, time_slot):
     try:
         print(f"Calling AST API for audio event detection...")
         ast_response = requests.post(
-            f"{API_BASE_URL}/behavior-features/fetch-and-process-paths",
+            f"{API_BASE_URL}/behavior-analysis/features/fetch-and-process-paths",
             json={
                 "file_paths": [file_path]
             },
@@ -184,7 +237,7 @@ def trigger_processing_pipeline(file_path, device_id, date, time_slot):
     try:
         print(f"Calling SUPERB API for emotion recognition...")
         superb_response = requests.post(
-            f"{API_BASE_URL}/emotion-features/process/emotion-features",
+            f"{API_BASE_URL}/emotion-analysis/features/process/emotion-features",
             json={
                 "file_paths": [file_path]
             },
@@ -201,7 +254,7 @@ def trigger_processing_pipeline(file_path, device_id, date, time_slot):
             print(f"SUPERB API successful. Starting Emotion Aggregator...")
             try:
                 emotion_aggregator_response = requests.post(
-                    f"{API_BASE_URL}/emotion-aggregator/analyze/opensmile-aggregator",
+                    f"{API_BASE_URL}/emotion-analysis/aggregation/analyze/opensmile-aggregator",
                     json={
                         "device_id": device_id,
                         "date": date
@@ -236,12 +289,48 @@ def trigger_processing_pipeline(file_path, device_id, date, time_slot):
         print(f"SUPERB API error: {str(e)}")
         results['superb_emotion'] = {'error': str(e), 'success': False}
     
+    # 3.5. Azure失敗時の処理: dashboardテーブルに失敗レコードを作成
+    if not azure_success:
+        print(f"⚠️ Azure API failed. Creating failed record in dashboard table...")
+        try:
+            failed_record_response = requests.post(
+                f"{API_BASE_URL}/vibe-analysis/aggregation/create-failed-record",
+                params={
+                    "device_id": device_id,
+                    "date": date,
+                    "time_block": time_slot,
+                    "failure_reason": "quota_exceeded",
+                    "error_message": "Azure Speech API failed"
+                },
+                timeout=30
+            )
+
+            if failed_record_response.status_code == 200:
+                print(f"✅ Failed record created successfully in dashboard table")
+                results['failed_record'] = {
+                    'status_code': failed_record_response.status_code,
+                    'success': True
+                }
+
+                # 失敗レコード作成成功時も累積分析をトリガー
+                # （dashboard.status='completed'になっているため、次のプロセスに進める）
+                trigger_dashboard_summary(device_id, date, time_slot)
+            else:
+                print(f"❌ Failed to create failed record: {failed_record_response.status_code}")
+                results['failed_record'] = {
+                    'status_code': failed_record_response.status_code,
+                    'success': False
+                }
+        except Exception as e:
+            print(f"❌ Error creating failed record: {str(e)}")
+            results['failed_record'] = {'error': str(e), 'success': False}
+
     # 4. Vibe Aggregator（3つのAPIが全て成功した場合のみ）
     if azure_success and ast_success and superb_success:
         print(f"All APIs successful. Starting Vibe Aggregator...")
         try:
             vibe_aggregator_response = requests.get(
-                f"{API_BASE_URL}/vibe-aggregator/generate-timeblock-prompt",
+                f"{API_BASE_URL}/vibe-analysis/aggregation/generate-timeblock-prompt",
                 params={
                     "device_id": device_id,
                     "date": date,
@@ -269,7 +358,7 @@ def trigger_processing_pipeline(file_path, device_id, date, time_slot):
                         print(f"Starting Vibe Scorer...")
                         try:
                             vibe_scorer_response = requests.post(
-                                f"{API_BASE_URL}/vibe-scorer/analyze-timeblock",
+                                f"{API_BASE_URL}/vibe-analysis/scoring/analyze-timeblock",
                                 json={
                                     "prompt": prompt,
                                     "device_id": device_id,

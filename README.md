@@ -1,5 +1,32 @@
 # WatchMe サーバー設定リポジトリ
 
+## 📚 ドキュメントガイド
+
+このリポジトリには複数のドキュメントがあります。**目的に応じて適切なドキュメントを参照してください。**
+
+### 🎯 目的別ドキュメント一覧
+
+| 目的 | ドキュメント | 内容 | こんな時に読む |
+|------|-------------|------|--------------|
+| **📖 基本理解** | [README.md](./README.md)（このファイル） | サーバー全体の構成・設定 | 最初に読む、全体像を把握したい |
+| **🔄 処理の流れ** | [PROCESSING_ARCHITECTURE.md](./PROCESSING_ARCHITECTURE.md) | 音声処理の全体フロー、Lambda→API連携 | データがどう処理されるか知りたい |
+| **🔧 技術仕様** | [TECHNICAL_REFERENCE.md](./TECHNICAL_REFERENCE.md) | 全サービス一覧、エンドポイント、ECRリポジトリ | APIのURL・ポート番号を調べたい |
+| **📝 作業手順** | [OPERATIONS_GUIDE.md](./OPERATIONS_GUIDE.md) | デプロイ・設定変更・トラブルシューティング | 実際に作業する時の手順を知りたい |
+| **🚀 CI/CD** | [CICD_STANDARD_SPECIFICATION.md](./CICD_STANDARD_SPECIFICATION.md) | GitHub Actions、自動デプロイ設定 | 新しいAPIのCI/CDを設定したい |
+| **📅 変更履歴** | [CHANGELOG.md](./CHANGELOG.md) | 過去の変更・移行の記録 | いつ何を変更したか確認したい |
+| **💰 コスト** | [COST_MANAGEMENT.md](./COST_MANAGEMENT.md) | AWS料金の管理・最適化 | コストを確認・削減したい |
+| **🌏 リージョン移行** | [REGION_MIGRATION_GUIDE.md](./REGION_MIGRATION_GUIDE.md) | シドニー→東京リージョン移行手順 | リージョン移行を計画している |
+| **🏗️ リストラクチャ** | [API_RESTRUCTURE_LOG.md](./API_RESTRUCTURE_LOG.md) | API階層化の作業ログ | API構造改革の進捗を確認したい |
+
+### 💡 初めての方へのおすすめ読む順序
+
+1. **このREADME.md** - システム全体の構成を理解
+2. **[PROCESSING_ARCHITECTURE.md](./PROCESSING_ARCHITECTURE.md)** - データの流れを理解
+3. **[TECHNICAL_REFERENCE.md](./TECHNICAL_REFERENCE.md)** - 各サービスの詳細を把握
+4. **[OPERATIONS_GUIDE.md](./OPERATIONS_GUIDE.md)** - 実際の作業方法を学ぶ
+
+---
+
 ## 📊 システム概要
 
 このリポジトリは、WatchMeプラットフォームのEC2サーバーで稼働する **インフラストラクチャ**、**Nginx**、**systemd** の設定を一元管理します。
@@ -12,290 +39,34 @@
 | **リバースプロキシ** | Nginx設定、ルーティング | sites-available/ |
 | **プロセス管理** | systemdサービス、自動起動 | systemd/ |
 
-### 🔧 2つの環境
+### 🔧 現在の環境
 
-| 環境 | リージョン | 状態 | 用途 |
-|------|-----------|------|------|
-| **現行環境** | ap-southeast-2 (シドニー) | 稼働中 | 開発・テスト |
-| **移行予定** | ap-northeast-1 (東京) | 準備中 | 本番運用 |
+| 項目 | 値 |
+|------|-----|
+| **リージョン** | ap-southeast-2 (シドニー) |
+| **状態** | 稼働中 |
+| **移行予定** | ap-northeast-1 (東京) - [移行ガイド](./REGION_MIGRATION_GUIDE.md) 📋 |
 
 ### ⚡ クイックアクセス
 
+#### 📖 日常作業用ドキュメント
 | 目的 | ドキュメント | 内容 |
 |------|-------------|------|
-| **CI/CD標準仕様** | [CICD_STANDARD_SPECIFICATION.md](./CICD_STANDARD_SPECIFICATION.md) | 統一CI/CDプロセス |
 | **デプロイ手順** | [OPERATIONS_GUIDE.md](./OPERATIONS_GUIDE.md#1-アプリケーションのデプロイ手順) | アプリのデプロイ方法 |
 | **設定変更** | [OPERATIONS_GUIDE.md](./OPERATIONS_GUIDE.md#2-サーバー構成の変更手順) | サーバー設定の変更 |
-| **技術仕様** | [TECHNICAL_REFERENCE.md](./TECHNICAL_REFERENCE.md) | 詳細な技術情報 |
+| **技術仕様** | [TECHNICAL_REFERENCE.md](./TECHNICAL_REFERENCE.md) | システム全体の詳細仕様 |
 | **処理フロー** | [PROCESSING_ARCHITECTURE.md](./PROCESSING_ARCHITECTURE.md) | 音声処理の全体像 |
-| **変更履歴** | [CHANGELOG.md](./CHANGELOG.md) | 全変更の記録 |
+
+#### 🗂️ 参照用ドキュメント
+| 目的 | ドキュメント | 内容 |
+|------|-------------|------|
+| **変更履歴** | [CHANGELOG.md](./CHANGELOG.md) | 全変更の記録（過去のAPI移行含む） |
+| **CI/CD仕様** | [CICD_STANDARD_SPECIFICATION.md](./CICD_STANDARD_SPECIFICATION.md) | 統一CI/CDプロセス |
+| **🚀 東京リージョン移行** | [REGION_MIGRATION_GUIDE.md](./REGION_MIGRATION_GUIDE.md) | シドニー→東京移行の完全手順 |
+| **💰 コスト管理** | [COST_MANAGEMENT.md](./COST_MANAGEMENT.md) | AWS料金管理 |
+| **🚨 EC2再起動復旧** | [OPERATIONS_GUIDE.md#4-🚨-ec2インスタンス再起動後の復旧手順](./OPERATIONS_GUIDE.md#4-🚨-ec2インスタンス再起動後の復旧手順) | インスタンス再起動時の対処 |
 
 ---
-
-## ⏱️ Nginxプロキシタイムアウト設定（2025年9月24日更新）
-
-### 概要
-
-Nginxがリバースプロキシとして各APIにリクエストを転送する際の**待機時間の上限**を管理しています。
-この設定が適切でないと、処理は成功しているのに504エラーが返される問題が発生します。
-
-### 現在の設定値
-
-| API | パス | タイムアウト | 平均処理時間 | 用途 |
-|-----|------|------------|-------------|------|
-| **AST API** | /behavior-features/ | **180秒** | 60-90秒 | 音響イベント検出（大規模モデル） |
-| **SUPERB API** | /emotion-features/ | **180秒** | 30-60秒 | 感情認識処理 |
-| **Azure Speech** | /vibe-transcriber-v2/ | **180秒** | 15-30秒 | 音声文字起こし |
-| **Vibe Aggregator** | /vibe-aggregator/ | 60秒（デフォルト） | 5-10秒 | プロンプト生成 |
-| **Vibe Scorer** | /vibe-scorer/ | 60秒（デフォルト） | 10-15秒 | ChatGPT分析 |
-| **その他のAPI** | - | 60秒（デフォルト） | < 10秒 | 軽量処理 |
-
-### タイムアウトの種類と役割
-
-```nginx
-location /behavior-features/ {
-    proxy_pass http://localhost:8017/;
-    
-    # 3種類のタイムアウト設定
-    proxy_connect_timeout 180s;  # 接続確立までの待機時間
-    proxy_send_timeout 180s;     # リクエスト送信の待機時間
-    proxy_read_timeout 180s;     # レスポンス受信の待機時間（最も重要）
-}
-```
-
-### なぜタイムアウト設定が必要か
-
-1. **リソース保護**: 無限待機によるNginxワーカープロセスの枯渇を防ぐ
-2. **障害検知**: バックエンドの異常を適切なタイミングで検出
-3. **一貫性の確保**: Lambda(180秒) → Nginx(180秒) → API の連鎖を保つ
-
-### トラブルシューティング
-
-#### 症状: 504 Gateway Timeout エラー
-
-**原因**: Nginxのタイムアウトが処理時間より短い
-
-```
-実際の処理時間: 90秒
-Nginxタイムアウト: 60秒（デフォルト）
-結果: 60秒で504エラー（処理は継続中）
-```
-
-**解決方法**: 該当APIのlocationブロックにタイムアウト設定を追加
-
-```nginx
-# 例: 新しいAPIで長時間処理が必要な場合
-location /new-heavy-api/ {
-    proxy_pass http://localhost:8020/;
-    # ... 他の設定 ...
-    
-    # タイムアウトを延長
-    proxy_read_timeout 300s;    # 5分まで待機
-    proxy_connect_timeout 30s;  # 接続は30秒
-    proxy_send_timeout 60s;     # 送信は60秒
-}
-```
-
-### 設定変更時の注意事項
-
-1. **影響範囲の確認**
-   - 必要なAPIのみタイムアウトを延長（全体への影響を避ける）
-   - クライアント側のタイムアウトも確認（Lambda、ブラウザ等）
-
-2. **適切な値の選定**
-   - 平均処理時間の2-3倍を目安に設定
-   - 過度に長い設定はリソース浪費につながる
-
-3. **変更の適用手順**
-   ```bash
-   # 1. このリポジトリで設定を変更
-   # 2. GitHubにプッシュ
-   # 3. 本番サーバーで適用
-   ssh ubuntu@[SERVER_IP]
-   cd /home/ubuntu/watchme-server-configs
-   git pull origin main
-   ./setup_server.sh
-   sudo nginx -t && sudo systemctl reload nginx
-   ```
-
-### 関連ドキュメント
-
-- [PROCESSING_ARCHITECTURE.md](./PROCESSING_ARCHITECTURE.md) - 各APIの処理時間詳細
-- [TECHNICAL_REFERENCE.md](./TECHNICAL_REFERENCE.md) - システム全体の技術仕様
-
----
-
-## 🔄 API移行状況
-
-### 音声処理API世代交代（2025年9月19日完了）
-
-| 旧API | → | 新API | 改善点 |
-|-------|---|-------|--------|
-| **SED API**<br>(YamNet) | → | **AST API**<br>(Transformer) | 527種類の音響イベント検出<br>高精度化 |
-| **OpenSMILE API** | → | **SUPERB API**<br>(wav2vec2) | 処理速度向上<br>互換性維持 |
-
-### ポート割り当て一覧
-
-| API名 | 正しいポート | 用途 | Nginxパス | ECRリポジトリ |
-|-------|------------|------|----------|--------------|
-| **AST API** | **8017** | 音響イベント検出（SED代替） | /behavior-features/ | watchme-api-ast |
-| **SUPERB API** | **8018** | 感情認識（OpenSMILE代替） | /emotion-features/ | watchme-api-superb |
-| sed-api（廃止） | 8004 | 旧音響イベント検出 | - | watchme-api-behavior-features |
-| opensmile-api（廃止） | 8011 | 旧感情特徴量抽出 | - | watchme-api-opensmile |
-
-### 移行作業手順（リージョン移行時に実施）
-
-#### Step 1: ECRリポジトリの作成（東京リージョン）
-```bash
-# AST API用
-aws ecr create-repository --repository-name watchme-api-ast --region ap-northeast-1
-
-# SUPERB API用  
-aws ecr create-repository --repository-name watchme-api-superb --region ap-northeast-1
-```
-
-#### Step 2: Dockerイメージのビルドとプッシュ
-```bash
-# AST API
-cd /path/to/api_ast
-docker build -f Dockerfile.prod -t watchme-api-ast:latest .
-docker tag watchme-api-ast:latest 754724220380.dkr.ecr.ap-northeast-1.amazonaws.com/watchme-api-ast:latest
-docker push 754724220380.dkr.ecr.ap-northeast-1.amazonaws.com/watchme-api-ast:latest
-
-# SUPERB API
-cd /path/to/api_superb_v1
-docker build -f Dockerfile.prod -t watchme-api-superb:latest .
-docker tag watchme-api-superb:latest 754724220380.dkr.ecr.ap-northeast-1.amazonaws.com/watchme-api-superb:latest
-docker push 754724220380.dkr.ecr.ap-northeast-1.amazonaws.com/watchme-api-superb:latest
-```
-
-#### Step 3: docker-compose.prod.yml設定（正しいポート）
-
-**AST API (api_ast/docker-compose.prod.yml):**
-```yaml
-version: '3.8'
-services:
-  api:
-    image: 754724220380.dkr.ecr.ap-northeast-1.amazonaws.com/watchme-api-ast:latest
-    container_name: ast-api
-    ports:
-      - "127.0.0.1:8017:8017"  # 正しいポート：8017
-    networks:
-      - watchme-network
-    mem_limit: 2g
-```
-
-**SUPERB API (api_superb_v1/docker-compose.prod.yml):**
-```yaml
-version: '3.8'
-services:
-  api:
-    image: 754724220380.dkr.ecr.ap-northeast-1.amazonaws.com/watchme-api-superb:latest
-    container_name: superb-api
-    ports:
-      - "127.0.0.1:8018:8018"  # 正しいポート：8018
-    networks:
-      - watchme-network
-    mem_limit: 1g
-```
-
-#### Step 4: Nginx設定更新
-```nginx
-# AST API (音響イベント検出)
-location /behavior-features/ {
-    proxy_pass http://localhost:8017/;  # AST APIのポート
-    # ... 他の設定
-}
-
-# SUPERB API (感情認識)
-location /emotion-features/ {
-    proxy_pass http://localhost:8018/;  # SUPERB APIのポート
-    # ... 他の設定
-}
-```
-
-#### Step 5: systemdサービス設定
-新しいサービスファイルを作成：
-- `/etc/systemd/system/watchme-ast-api.service`
-- `/etc/systemd/system/watchme-superb-api.service`
-
-### ⚠️ 移行時の注意事項
-
-1. **ポートの混同を避ける**
-   - AST = 8017（セブンティーン）
-   - SUPERB = 8018（エイティーン）
-
-2. **旧APIの停止タイミング**
-   - 新APIが正常動作を確認してから停止
-   - データ移行が必要な場合は事前に実施
-
-3. **メモリ制限**
-   - AST API: 2GB推奨（モデルが大きい）
-   - SUPERB API: 1GB推奨
-
-4. **ヘルスチェック**
-   - AST: `curl http://localhost:8017/health`
-   - SUPERB: `curl http://localhost:8018/health`
-
-## 🌏 リージョン移行計画
-
-### 移行概要
-
-| 項目 | 現在（シドニー） | 移行後（東京） | 改善度 |
-|------|----------------|--------------|--------|
-| **リージョン** | ap-southeast-2 | ap-northeast-1 | - |
-| **レイテンシー** | 150-200ms | 20-30ms | 85%削減 |
-| **優先度** | - | 高（商用前必須） | - |
-| **実施時期** | - | 2025年9月中推奨 | - |
-
-### パフォーマンス比較
-| 操作 | シドニー（現在） | 東京（移行後） | 体感差 |
-|-----|----------------|--------------|--------|
-| API応答 | 250ms | 30ms | ワンテンポの差 |
-| ダッシュボード初期表示 | 1.5秒 | 0.2秒 | 明確に速い |
-| リアルタイム音声処理 | 300ms遅延 | 40ms遅延 | 大幅改善 |
-| iOSアプリ操作 | もっさり | サクサク | UX大幅向上 |
-
-### 移行作業の概要（所要時間: 4-5時間）
-1. **影響範囲**: EC2インスタンス + ECR（13リポジトリ）
-2. **影響なし**: Supabase（DB）、S3（ストレージ）は独立
-3. **設定変更**: 39ファイルで `ap-southeast-2` → `ap-northeast-1` 変更
-4. **AWSクレジット**: $300クレジットは継続利用可能
-
-### 移行チェックリスト
-```bash
-□ 東京リージョンにECRリポジトリ作成（15個に増加）
-  - 既存13個
-  - 新規: watchme-api-ast
-  - 新規: watchme-api-superb
-□ Dockerイメージを東京ECRへコピー
-□ 東京にEC2インスタンス作成（t4g.large）
-□ 全設定ファイルのリージョン変更
-□ DNS切り替え
-□ 動作確認後、シドニー環境停止
-```
-
-**📅 実施時期**: 顧客がいない今のうちに早急に実施推奨（2025年9月中）
-
-### ✅ 2025年9月19日 修正完了事項
-
-**ポート設定の修正が完了しました：**
-
-1. **AST API - 正常稼働中**
-   - ポート: 8017（統一）
-   - docker-compose.prod.ymlでポートマッピング: `127.0.0.1:8017:8017`
-   - Nginx: `/behavior-features/` → `localhost:8017`
-   - ディレクトリ: `/home/ubuntu/api_ast/`
-
-2. **SUPERB API - 正常稼働中**
-   - ポート: 8018
-   - Nginx: `/emotion-features/` → `localhost:8018`
-   - ディレクトリ: `/home/ubuntu/api_superb_v1/`
-
-**東京リージョン移行時の注意：**
-- AST APIは内部・外部ともに8017を使用
-- SUPERB APIは内部・外部ともに8018を使用
-- この設定で統一されています
 
 ## 🖥️ インフラストラクチャ
 
@@ -359,16 +130,7 @@ location /emotion-features/ {
 2. マージ後、**手動で**本番サーバーの設定ファイルを更新
 3. 本番サーバー上の設定は `/home/ubuntu/watchme-server-configs/` に配置
 
-## 📚 ドキュメント体系
-
-### 主要ドキュメント
-
-| ドキュメント | 内容 | 読者 |
-|------------|------|------|
-| **[PROCESSING_ARCHITECTURE.md](./PROCESSING_ARCHITECTURE.md)** | 🆕 音声処理の全体フロー、API依存関係、データの流れ | 開発者・設計者 |
-| **[OPERATIONS_GUIDE.md](./OPERATIONS_GUIDE.md)** | デプロイ手順、トラブルシューティング、日常運用 | 開発者・運用担当 |
-| **[TECHNICAL_REFERENCE.md](./TECHNICAL_REFERENCE.md)** | システム仕様、ネットワーク設計、API一覧 | エンジニア |
-| **[CHANGELOG.md](./CHANGELOG.md)** | 全変更履歴（時系列） | 全員 |
+---
 
 ## 📁 リポジトリ構造
 
@@ -427,25 +189,22 @@ watchme-server-configs/
 | **管理サービス** | watchme-infrastructure | systemdサービス |
 | **作成日** | 2025-08-06 | - |
 
-### 📡 接続コンテナ一覧（2025年9月19日更新）
+### 📡 接続コンテナ一覧（2025年10月23日更新）
 ```
-watchme-api-manager-prod     (172.27.0.4)  # API管理UI
-watchme-scheduler-prod       (172.27.0.5)  # スケジューラー
-opensmile-aggregator         (172.27.0.6)  # 感情スコア集計
-watchme-vault-api            (172.27.0.7)  # Gateway API
-api_gen_prompt_mood_chart    (172.27.0.8)  # Vibe Aggregator
-api-gpt-v1                   (172.27.0.9)  # スコアリング
-watchme-web-prod             (172.27.0.10) # Webダッシュボード
-vibe-transcriber-v2          (172.27.0.11) # Azure Speech
-ast-api                      (172.27.0.17) # 音声イベント検出（新）※8017ポート
-superb-api                   (172.27.0.18) # 感情認識（新）※8018ポート
-watchme-admin                (172.27.0.14) # 管理画面
-api-sed-aggregator           (172.27.0.15) # 音声イベント集計
-watchme-avatar-uploader      (172.27.0.16) # アバターアップロード
-
-# 廃止予定（移行後削除）
-sed-api                      (172.27.0.12) # 旧音声イベント検出 → AST APIへ移行
-opensmile-api                (172.27.0.13) # 旧音声特徴量抽出 → SUPERB APIへ移行
+watchme-api-manager-prod                    (172.27.0.4)  # API管理UI
+watchme-scheduler-prod                      (172.27.0.5)  # スケジューラー
+emotion-analysis-aggregator                 (172.27.0.6)  # 感情スコア集計
+watchme-vault-api                           (172.27.0.7)  # Gateway API
+vibe-analysis-aggregator                    (172.27.0.8)  # Vibe Aggregator
+vibe-analysis-scorer                        (172.27.0.9)  # スコアリング
+watchme-web-prod                            (172.27.0.10) # Webダッシュボード
+vibe-analysis-transcriber-v2                (172.27.0.11) # Azure Speech
+behavior-analysis-sed-aggregator            (172.27.0.12) # 音声イベント集計
+watchme-admin                               (172.27.0.14) # 管理画面
+watchme-avatar-uploader                     (172.27.0.15) # アバターアップロード
+behavior-analysis-feature-extractor-v2      (172.27.0.17) # 音響イベント検出 ※8017ポート
+emotion-analysis-feature-extractor-v3       (172.27.0.18) # 感情認識 ※8018ポート
+janitor-api                                 (172.27.0.30) # 音声ファイル自動削除 ※8030ポート
 ```
 
 ### 📋 システム状態
@@ -457,26 +216,7 @@ opensmile-api                (172.27.0.13) # 旧音声特徴量抽出 → SUPERB
 | **ポートバインド** | 127.0.0.1 | セキュリティ向上 |
 | **ディスク使用率** | 50% (14GB/29GB) | 余裕あり |
 
-### 📦 移行完了状況
-
-| フェーズ | 完了日 | 内容 |
-|---------|---------|------|
-| **Phase 1: インフラ整備** | ✅ 2025-08-06 | docker-compose.infra.yml, 監視スクリプト |
-| **Phase 2: 問題修正** | ✅ 2025-08-20 | APIのwatchme-network接続 |
-| **Phase 3: systemd移行** | ✅ 2025-09-03 | 全13サービスのsystemd管理 |
-| **Phase 4: ネットワーク統合** | ✅ 2025-09-04 | レガシーネットワーク削除 |
-
-**実施内容**:
-- レガシーネットワーク4個を削除
-  - api_sed_v1_default
-  - watchme-api-manager_watchme-network  
-  - watchme-docker_watchme-network
-  - watchme-vault-api-docker_vault-network
-- 全サービスがwatchme-networkに統合完了
-
-**修正したサービス**:
-- ✅ `/home/ubuntu/watchme-docker/docker-compose.prod.yml` - external: trueに修正済み
-- ✅ watchme-api-manager systemd設定 - docker-compose.all.yml → docker-compose.prod.ymlに修正
+> **ネットワーク移行履歴**: 詳細は [CHANGELOG.md](./CHANGELOG.md#2025年9月19日) を参照
 
 ### 🔧 管理コマンド
 
@@ -504,56 +244,12 @@ crontab -e
 
 ---
 
-*最終更新: 2025年9月23日*
-
----
-
-## 1. 設計思想：2層のルーティングを理解する【最重要】
-
-このサーバーの構成を理解する上で最も重要なのは、Nginxによる**「2層のルーティング」**の概念です。ここを理解しないと、過去に発生したような障害が再発します。
-
-**ホテルの受付**に例えてみましょう。
-
-1.  **公開URL (`location`)**: お客様が知っている部屋番号 (例: **201号室**)
-    - これは `location /scheduler/` のような、外部に公開されるクリーンなURLパスです。
-
-2.  **内部パス (`proxy_pass`)**: スタッフだけが知っている実際の部屋の場所 (例: **A棟3階の奥**)
-    - これは `proxy_pass http://localhost:8015/api/scheduler/` のような、コンテナ内部でアプリケーションが実際にリクエストを待っているパスです。
-
-フロント（受付）にいるNginxの仕事は、お客様の「**201号室**に行きたい」というリクエストを、スタッフ用の「**A棟3階の奥**へご案内」という指示に正しく変換することです。
-
-### ⚠️最大の注意点：`proxy_pass` の挙動
-
-Nginxでは、`proxy_pass` にパス（例: `/api/scheduler/`）を指定すると、`location` のパス（`/scheduler/`）が**置き換えられます**。
-
-**過去の障害事例：**
-
-- **ブラウザのリクエスト**: `https://.../scheduler/status/whisper`
-
-- **間違っていた設定**: `proxy_pass http://localhost:8015/;`
-  - `/scheduler/` が `/` に置き換えられ、転送先は `http://...:8015/status/whisper` となり、404エラーが発生した。
-
-- **正しい設定**: `proxy_pass http://localhost:8015/api/scheduler/;`
-  - `/scheduler/` が `/api/scheduler/` に置き換えられ、転送先は `http://...:8015/api/scheduler/status/whisper` となり、正常にAPIが応答した。
-
-**新しいサービスを追加する際は、必ずこの「公開URL」と「内部パス」の2つを意識してください。**
-
-### 1.1. ファイル構造の不一致に注意 (フロントエンドアプリ)
-
-Reactなどのフレームワークでは、ビルド設定（例: `vite.config.js` の `base` オプション）によって、生成される `index.html` 内のJS/CSSへのパスに `/manager/` のようなプレフィックスが付くことがあります。
-
-しかし、Dockerコンテナ内のWebサーバー（Nginx）から見ると、これらのファイルはルートからの相対パス (`/assets/...`) に配置されています。この**「ビルドが作るパス」**と**「コンテナ内の実際のパス」**の不一致を吸収するために、各アプリケーションのコンテナ内に、専用のNginx設定が必要になる場合があります。
-
-新しいフロントエンドをデプロイする際は、ビルド後のパス構造をよく確認し、必要であればそのアプリの `Dockerfile` と `nginx.conf` も調整してください。
-
----
-
-## 2. 運用ルールと作業フロー【推奨】
+## 1. 運用ルールと作業フロー
 
 このリポジトリの設定を本番サーバーに反映させるための、推奨ワークフローです。
 **サーバー上のファイルを直接編集するのではなく、常にこのGitリポジリを起点として作業を行ってください。**
 
-### サーバーへの初回セットアップ手順
+### 1.1. サーバーへの初回セットアップ手順
 
 新しいEC2サーバーを構築した際に、最初に一度だけ実行する手順です。
 
@@ -580,7 +276,7 @@ Reactなどのフレームワークでは、ビルド設定（例: `vite.config.
     ```
     これにより、リポジトリ内のすべてのNginxおよびsystemdの設定が、OSの適切な場所に自動でリンクされ、サービスが有効化されます。
 
-### 設定変更時のデプロイ手順
+### 1.2. 設定変更時のデプロイ手順
 
 一度セットアップが完了したサーバーで、Nginxやsystemdの設定を変更・追加する際の標準的な手順です。
 
@@ -605,7 +301,7 @@ Reactなどのフレームワークでは、ビルド設定（例: `vite.config.
 
 ---
 
-### 緊急時の手動復旧手順（非推奨）
+### 1.3. 緊急時の手動復旧手順（非推奨）
 
 万が一、上記の方法が使えない場合にのみ、以下の手動手順で作業を行ってください。作業ミスを防ぐため、可能な限り`setup_server.sh`の使用を推奨します。
 
@@ -626,343 +322,96 @@ sudo systemctl reload nginx
 
 ---
 
-## 3. テンプレート：新しいAPIサービスの追加
+## 2. 新しいAPIサービスの追加
 
-新しいAPIサービスを追加する際は、以下の**3つの設定**が必要です。
+新規API追加時の必須設定：
 
-### ⓪ 【最重要】Docker Composeでネットワーク設定
+1. **Docker Compose**: `networks: watchme-network (external: true)` を設定
+2. **Nginx**: `/etc/nginx/sites-available/api.hey-watch.me` にlocation追加
+3. **systemd**: `systemd/[サービス名].service` 作成
 
-**必ず** docker-compose.yml に以下のネットワーク設定を追加してください：
-
-```yaml
-version: '3.8'
-
-services:
-  your-service:
-    # ... サービス設定 ...
-    networks:
-      - watchme-network  # 必須！
-
-networks:
-  watchme-network:
-    external: true  # 必ず external: true を使用
-```
-
-⚠️ **注意**: `driver: bridge` は使用しないでください（ネットワーク作成側になってしまいます）
-
-### ① Nginx設定の追加
-
-`sites-available/api.hey-watch.me` ファイルに、以下のブロックを追記します。
-
-```nginx
-# [サービス名] API
-location /[公開URLパス]/ {
-    # 注意: パスの最後にスラッシュを付けること
-
-    # 内部のAPIがリッスンしているポートとパスを指定
-    # パスがない場合は http://localhost:[ポート番号]/ でOK
-    proxy_pass http://localhost:[ポート番号]/[内部APIパス]/;
-
-    # --- 以下は定型句 ---
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    
-    # CORS設定（必要に応じて）
-    add_header "Access-Control-Allow-Origin" "*";
-    add_header "Access-Control-Allow-Methods" "GET, POST, OPTIONS";
-    add_header "Access-Control-Allow-Headers" "Content-Type, Authorization";
-    
-    # OPTIONSリクエストの処理（必要に応じて）
-    if ($request_method = "OPTIONS") {
-        return 204;
-    }
-}
-```
-
-#### 実例：Avatar Uploader APIの追加
-
-```nginx
-# Avatar Uploader API
-location /avatar/ {
-    proxy_pass http://localhost:8014/;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    
-    # CORS設定
-    add_header "Access-Control-Allow-Origin" "*";
-    add_header "Access-Control-Allow-Methods" "GET, POST, DELETE, OPTIONS";
-    add_header "Access-Control-Allow-Headers" "Content-Type, Authorization";
-    
-    # OPTIONSリクエストの処理
-    if ($request_method = "OPTIONS") {
-        return 204;
-    }
-    
-    # ファイルアップロード用の設定
-    client_max_body_size 10M;  # 10MBまでの画像アップロードを許可
-}
-```
-
-### ② systemdサービスファイルの作成
-
-`systemd/` ディレクトリに、`[サービス名].service` という名前で新しいファイルを作成します。
-
-```ini
-[Unit]
-Description=[サービスの説明]
-After=docker.service watchme-infrastructure.service  # インフラの後に起動
-Requires=docker.service watchme-infrastructure.service
-
-[Service]
-TimeoutStartSec=0
-
-# 常にECRから最新のイメージを取得
-ExecStartPre=-/usr/bin/docker-compose -f [docker-compose.prod.ymlへの絶対パス] pull -q
-
-# Docker Composeでコンテナを起動
-ExecStart=/usr/bin/docker-compose -f [docker-compose.prod.ymlへの絶対パス] up
-
-# サービス停止時にコンテナを停止
-ExecStop=/usr/bin/docker-compose -f [docker-compose.prod.ymlへの絶対パス] down
-
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-```
-
-### 3.2. コンテナ間通信のルール
-
-サービスAのコンテナから、サービスBのコンテナのAPIを呼び出すなど、コンテナ間で通信を行う場合は、**ホスト名としてサービス名（コンテナ名）を使用してください。**
-
-`host.docker.internal` や `localhost` は、環境によって挙動が異なるため、使用を避けるべきです。
-
-**前提条件:**
-- 通信する全てのサービスが、`docker-compose.yml` 内で同じ `networks` に所属していること。（例: `watchme-net`）
-
-**実装例（Pythonの場合）:**
-```python
-# 例: 'vibe-transcriber-v2' という名前のコンテナにリクエストを送る
-API_ENDPOINT = "http://vibe-transcriber-v2:8013/transcribe"
-response = requests.post(API_ENDPOINT, json=data)
-```
+詳細な手順、設定例、テンプレートは [OPERATIONS_GUIDE.md - アプリケーションのデプロイ手順](./OPERATIONS_GUIDE.md#1-アプリケーションのデプロイ手順) を参照。
 
 ---
 
-## 4. トラブルシューティング
+## 3. トラブルシューティング
 
-### 🌐 ネットワーク関連の問題
+問題が発生した場合は、[運用ガイド - トラブルシューティング](./OPERATIONS_GUIDE.md#3-トラブルシューティング)を参照してください。
 
-#### 症状: APIコンテナ間の通信エラー
-```
-ERROR: API接続エラー - コンテナ名 'xxx' が解決できません
-```
-
-**解決方法：**
-```bash
-# 1. ネットワーク接続状態を確認
-bash /home/ubuntu/watchme-server-configs/scripts/check-infrastructure.sh
-
-# 2. 自動修復を実行
-python3 /home/ubuntu/watchme-server-configs/scripts/network_monitor.py --fix
-
-# 3. 手動で接続（必要な場合）
-docker network connect watchme-network [container-name]
-```
-
-#### 症状: Vibe Aggregatorが動作しない
-
-**確認手順：**
-```bash
-# cronログ確認
-sudo tail -100 /var/log/scheduler/cron.log | grep vibe-aggregator
-
-# コンテナログ確認
-docker logs api_gen_prompt_mood_chart --tail 50
-
-# 手動実行テスト
-docker exec watchme-scheduler-prod python /app/run-api-process-docker.py vibe-aggregator --date 2025-08-28
-```
-
-### 💾 メモリ不足関連の問題 【2025年8月30日追加】
-
-#### 症状: Dockerイメージプル/コンテナ起動時の "no space left on device"
-```
-failed to register layer: write /usr/lib/aarch64-linux-gnu/libLLVM.so.19.1: no space left on device
-```
-
-**根本原因**: ディスク容量不足（95%以上使用）
-**解決手順**:
-```bash
-# 1. 現在のディスク使用状況確認
-df -h
-
-# 2. Dockerリソース大量クリーンアップ
-sudo docker container prune -f    # 停止コンテナ削除
-sudo docker image prune -a -f     # 未使用イメージ削除
-sudo docker volume prune -f       # 未使用ボリューム削除
-sudo docker system prune -a -f    # 包括的クリーンアップ
-
-# 3. 効果確認
-df -h  # 10GB以上削減されることを確認
-```
-
-#### 症状: コンテナが起動するがすぐに停止する（メモリ不足）
-```bash
-# コンテナが見つからない、またはステータスがExited (137)
-```
-
-**根本原因**: メモリ使用量が制限を超過（OOM Killer作動）
-**解決手順**:
-```bash
-# 1. メモリ使用状況確認
-docker stats --no-stream
-free -h
-
-# 2. 重要度の低いコンテナを一時停止
-docker stop opensmile-aggregator api-sed-aggregator
-
-# 3. メモリ制限付きで起動（例）
-docker run -d --name [container-name] \
-  --network watchme-network \
-  -p [port]:[port] \
-  --memory="1g" --cpus="1.0" \  # リソース制限重要
-  --env-file /path/to/.env \
-  --restart unless-stopped \
-  [IMAGE_URI]
-```
-
-#### 症状: ECR認証エラー "authorization token has expired"
-```
-pull access denied ... may require 'docker login': denied: Your authorization token has expired
-```
-
-**解決手順**:
-```bash
-# ECRに再ログイン
-aws ecr get-login-password --region ap-southeast-2 | \
-  sudo docker login --username AWS --password-stdin \
-  754724220380.dkr.ecr.ap-southeast-2.amazonaws.com
-```
-
-### 🔧 Nginx関連の問題
-
-#### 症状: 502 Bad Gateway エラー
-外部からAPIアクセス時に502エラーが発生する場合の診断手順：
-
-1. **コンテナの生存確認**
-   ```bash
-   # コンテナが実際に動作しているか確認
-   docker ps | grep [コンテナ名]
-   
-   # 内部からの直接アクセステスト
-   curl http://localhost:[ポート]/
-   ```
-
-2. **Nginx設定の確認（最重要）**
-   ```bash
-   # 現在の設定を確認
-   grep -A 5 "location /[API名]/" /etc/nginx/sites-available/api.hey-watch.me
-   
-   # ⚠️ よくある間違い：
-   # 例： proxy_pass http://localhost:[port]/;  # Nginxがホスト上にある場合
-   # 例： proxy_pass http://[container-name]:[port]/;  # Nginxがコンテナの場合
-   ```
-   
-   **重要**: Nginxがホスト上で直接動作している場合は`localhost`が正しい
-
-3. **ポートマッピングの確認**
-   ```bash
-   # ポートが正しくマッピングされているか確認
-   sudo lsof -i:[ポート番号]
-   docker port [コンテナ名]
-   ```
-
-4. **Nginxログ確認**
-   ```bash
-   sudo tail -n 50 /var/log/nginx/error.log
-   sudo tail -n 50 /var/log/nginx/access.log | grep "[API名]"
-   ```
-
-#### その他のNginx問題
-
-404エラーなどの問題が発生した場合、以下の手順で問題を切り分けてください。
-
-1.  **APIは生きているか？ (サーバー内部から確認)**
-    - サービスがダウンしているのが原因かもしれません。まず、サーバー内部から直接APIを叩いてみます。
-    ```bash
-    # 1. ポート番号を確認
-    sudo lsof -i:[ポート番号]
-
-    # 2. 内部から直接curlで叩く
-    curl http://localhost:[ポート番号]/[内部APIパス]/[任意のエンドポイント]
-    ```
-    - ここで応答がなければ、問題はNginxではなく、APIアプリケーション自体にあります。サービスのログを確認してください。
-
-2.  **Nginxのログは何か言っているか？**
-    - APIが生きているのにエラーが出る場合、Nginxのログにヒントがあるはずです。
-    ```bash
-    # エラーログの最新50行を確認
-    sudo tail -n 50 /var/log/nginx/error.log
-
-    # アクセスログで、該当のリクエストがどのように記録されているか確認
-    sudo tail -n 50 /var/log/nginx/access.log | grep "[公開URLパス]"
-    ```
-
-3.  **設定は正しくリロードされているか？**
-    - 設定ファイルを変更した後は、`sudo nginx -t` でテストし、`sudo systemctl reload nginx` を実行したか再確認してください。単純なリロード忘れもよくある原因です。
+**主なカテゴリ**：
+- 🌐 ネットワーク関連の問題（API間通信エラー、接続エラー）
+- 💾 メモリ・ディスク不足
+- 🔐 ECR認証エラー
+- 🔧 Nginx関連の問題（502/404エラー）
+- 🧹 Janitor APIトラブルシューティング
+- 🛠️ メンテナンス用コマンド集
 
 ---
 
-## 📊 現在稼働中のサービス一覧（2025年9月19日更新）
+## 📊 現在稼働中のサービス一覧（2025年10月23日更新）
+
+### クライアントアプリケーション
+
+| サービス名 | プラットフォーム | 用途 | 録音機能 | 技術スタック | 状態 |
+|-----------|--------------|------|---------|------------|------|
+| **WatchMe App (iOS)** | iOS | ダッシュボード閲覧 + スポット録音分析 | ✅ 手動録音 | Swift | ✅ 本番稼働中 |
+| **Observer** | ウェアラブル/据え置き | 定期自動録音デバイス | ✅ 30分ごとに1分間自動録音 | ESP32 (M5 CORE2) / Arduino | 🧪 プロトタイプ運用中 |
+| **WatchMe Web** | Web | ダッシュボード閲覧専用 | ❌ なし | React + Vite | ✅ 本番稼働中 |
+| **製品サイト** | Web | マーケティング・製品紹介 | - | HTML/CSS/JS (Vercel) | ✅ 公開中 |
 
 ### 音声処理API群
 
 | サービス名 | ポート | 用途 | Nginxパス | コンテナ名 | 状態 |
 |-----------|--------|------|----------|-----------|------|
-| **AST API** | 8017 | 音響イベント検出（527種類） | /behavior-features/ | ast-api | ✅ 稼働中 |
-| **SUPERB API** | 8018 | 感情認識（8感情） | /emotion-features/ | superb-api | ✅ 稼働中 |
-| Whisper API | 8013 | 音声文字起こし | /vibe-transcriber/ | vibe-transcriber-v2 | ✅ 稼働中 |
-| ~~SED API~~ | ~~8004~~ | ~~音響イベント検出~~ | - | - | ❌ 廃止（AST APIへ移行） |
-| ~~OpenSMILE API~~ | ~~8011~~ | ~~感情特徴量抽出~~ | - | - | ❌ 廃止（SUPERB APIへ移行） |
+| **Behavior Features** | 8017 | 音響イベント検出（527種類） | /behavior-analysis/features/ | behavior-analysis-feature-extractor-v2 | ✅ 稼働中 |
+| **Emotion Features** | 8018 | 感情認識（8感情） | /emotion-analysis/features/ | emotion-analysis-feature-extractor-v3 | ✅ 稼働中 |
+| **Vibe Transcriber** | 8013 | 音声文字起こし | /vibe-analysis/transcription/ | vibe-analysis-transcriber-v2 | ✅ 稼働中 |
+| **Janitor** | 8030 | 音声ファイル自動削除 | /janitor/ | janitor-api | ✅ 稼働中 |
 
 ### 集計・分析API群
 
 | サービス名 | ポート | 用途 | Nginxパス | コンテナ名 | 状態 |
 |-----------|--------|------|----------|-----------|------|
-| Vibe Aggregator | 8009 | プロンプト生成 | /vibe-aggregator/ | api_gen_prompt_mood_chart | ✅ 稼働中 |
-| Vibe Scorer | 8002 | 心理スコア生成 | /vibe-scorer/ | api-gpt-v1 | ✅ 稼働中 |
-| SED Aggregator | 8010 | 音声イベント集計 | /behavior-aggregator/ | api-sed-aggregator | ✅ 稼働中 |
-| OpenSMILE Aggregator | 8012 | 感情スコア集計 | /emotion-aggregator/ | opensmile-aggregator | ✅ 稼働中 |
+| **Vibe Aggregator** | 8009 | プロンプト生成 | /vibe-analysis/aggregation/ | vibe-analysis-aggregator | ✅ 稼働中 |
+| **Vibe Scorer** | 8002 | 心理スコア生成 | /vibe-analysis/scoring/ | vibe-analysis-scorer | ✅ 稼働中 |
+| **Behavior Aggregator** | 8010 | 音声イベント集計 | /behavior-aggregator/ | behavior-analysis-sed-aggregator | ✅ 稼働中 |
+| **Emotion Aggregator** | 8012 | 感情スコア集計 | /emotion-analysis/aggregation/ | emotion-analysis-aggregator | ✅ 稼働中 |
 
 ### インフラ・管理系
 
 | サービス名 | ポート | 用途 | Nginxパス | コンテナ名 | 状態 |
 |-----------|--------|------|----------|-----------|------|
-| Vault API | 8000 | ファイル管理Gateway | /vault/ | watchme-vault-api | ✅ 稼働中 |
+| Vault | 8000 | ファイル管理Gateway | /vault/ | watchme-vault-api | ✅ 稼働中 |
 | API Manager | 9001 | API管理UI | /manager/ | watchme-api-manager-prod | ✅ 稼働中 |
-| Scheduler | 8015 | スケジューラー | /scheduler/ | watchme-scheduler-prod | ✅ 稼働中 |
-| Admin Panel | 9000 | 管理画面 | /admin/ | watchme-admin | ✅ 稼働中 |
-| Web Dashboard | 3001 | ダッシュボード | / | watchme-web-prod | ✅ 稼働中 |
+| Scheduler | 8015 | スケジューラー | /scheduler/ | watchme-scheduler-prod | ⚠️ 停止中（Lambdaに移行済み） |
+| Admin | 9000 | 管理画面 | /admin/ | watchme-admin | ✅ 稼働中 |
 | Avatar Uploader | 8014 | アバター管理 | /avatar/ | watchme-avatar-uploader | ✅ 稼働中 |
+
+### 自動実行サービス（EventBridge + Lambda）
+
+| サービス名 | ポート | 用途 | Lambda関数名 | 実行間隔 | 状態 |
+|-----------|--------|------|-------------|---------|------|
+| Janitor | 8030 | 音声ファイル自動削除 | `watchme-janitor-trigger` | 6時間ごと | ✅ 稼働中 |
+| Demo Generator | 8020 | デモデータ生成 | `demo-data-generator-trigger` | 30分ごと | ✅ 稼働中 |
+
+### その他のAPI
+
+| サービス名 | ポート | 用途 | Nginxパス | コンテナ名 | 状態 |
+|-----------|--------|------|----------|-----------|------|
+| Audio Enhancer | 8016 | 音声品質向上 | (未公開) | audio-enhancer-api | 🚧 現在未使用 |
 
 ### メモリ使用状況（概算）
 
 | カテゴリ | サービス | メモリ使用量 |
 |----------|----------|--------------|
-| 重量級 | AST API | ~2.0GB |
-| | SUPERB API | ~1.5GB |
-| | Whisper API | ~1.0GB |
+| 重量級 | Behavior Features | ~2.0GB |
+| | Emotion Features | ~1.5GB |
+| | Vibe Transcriber | ~1.0GB |
 | 中量級 | 各種Aggregator | ~500MB each |
 | 軽量級 | Web/Admin UI | ~200MB each |
 | **合計** | | **約6.5GB / 7.8GB** |
 
-## 5. よくある質問とベストプラクティス
+## 4. よくある質問
 
 ### Q: watchme-networkとは何ですか？
 
@@ -971,21 +420,6 @@ aws ecr get-login-password --region ap-southeast-2 | \
 - コンテナ名でのDNS解決が可能
 - 外部からはアクセス不可（セキュア）
 - `docker-compose.infra.yml`で一元管理
-
-### Q: 新しいAPIがネットワークに繋がらない！
-
-**A: docker-compose.ymlの設定を確認してください：**
-```yaml
-networks:
-  watchme-network:
-    external: true  # これが必須！
-```
-
-エラーが続く場合：
-```bash
-# 監視スクリプトで自動修復
-python3 /home/ubuntu/watchme-server-configs/scripts/network_monitor.py --fix
-```
 
 ### Q: API ManagerとSchedulerはどのように管理されている？
 
@@ -1023,70 +457,6 @@ python3 /home/ubuntu/watchme-server-configs/scripts/network_monitor.py --fix
 4. マージ後、本番サーバーで手動で同じ設定を追加
 5. `sudo nginx -t`でテスト → `sudo systemctl reload nginx`
 
-### Q: Whisper APIのメモリ使用量が心配です。今後どうすべき？
-
-**A: 【重要】現在のt4g.smallでは限界に近い状況です。**
-
-**現在の状況**:
-- Whisper API: 580MB (アイドル時) → 1GB (処理時)
-- 全システム: 1.4GB/1.8GB使用 (78%使用率)
-- 利用可能: 約400MB未満
-
-**今後の選択肢**:
-
-1. **短期的解決策（現状維持）**:
-   - baseモデルのみ使用継続
-   - 必要時に低優先度コンテナを一時停止
-   - リソース制限の厳格化
-
-2. **中長期的解決策（推奨）**:
-   - **t4g.medium** (4GB RAM) へのアップグレード検討
-   - **t4g.large** (8GB RAM) なら複数のWhisperモデル同時実行可能
-   - コスト: t4g.small ($13.3/月) → t4g.medium ($26.6/月)
-
-3. **代替案**:
-   - OpenAI Whisper API (外部サービス) への移行
-   - Whisper処理を別サーバーに分離
-
-**⚠️ 注意**: largeモデルは現在の環境では動作不可（2GB以上必要）
-
-### Q: 設定を間違えてサービスが落ちた！
-
-**A: バックアップから復元：**
-```bash
-# バックアップファイルを探す
-ls -la /etc/nginx/sites-available/*.backup.*
-
-# 最新のバックアップから復元
-sudo cp /etc/nginx/sites-available/api.hey-watch.me.backup.[最新のタイムスタンプ] \
-        /etc/nginx/sites-available/api.hey-watch.me
-
-# テストとリロード
-sudo nginx -t && sudo systemctl reload nginx
-```
-
-### Q: スケジューラーが動かなくなった！
-
-**A: よくある原因と解決方法：**
-
-**原因1: docker-compose.prod.ymlを使ってしまった**
-```bash
-# 診断: スケジューラーコンテナが存在しない
-docker ps | grep scheduler
-# 何も表示されない場合
-
-# 解決方法:
-cd /home/ubuntu/watchme-api-manager
-docker-compose -f docker-compose.all.yml up -d
-```
-
-**原因2: ネットワーク設定の誤り**
-```bash
-# docker-compose.all.ymlの最後を確認
-tail -5 docker-compose.all.yml
-# external: trueであることを確認（driver: bridgeはNG）
-```
-
 ### Q: どのポートが使われているか確認したい
 
 **A: 以下のコマンドで確認：**
@@ -1101,60 +471,13 @@ sudo lsof -i:8014
 grep -E "proxy_pass|listen" /etc/nginx/sites-available/api.hey-watch.me
 ```
 
-## 🛠️ メンテナンス用コマンド集（2025年9月19日追加）
+> **トラブルシューティング**: その他の問題は [運用ガイド](./OPERATIONS_GUIDE.md#3-トラブルシューティング) を参照
 
-### サービス状態確認
-```bash
-# 全コンテナの状態確認
-docker ps --format "table {{.Names}}\t{{.Ports}}\t{{.Status}}"
+---
 
-# メモリ使用状況
-docker stats --no-stream
+## 5. ベストプラクティス
 
-# ネットワーク接続確認
-docker network inspect watchme-network | jq '.[0].Containers | keys'
-```
-
-### AST APIの管理
-```bash
-# 再起動
-cd /home/ubuntu/api_ast && docker-compose restart
-
-# ログ確認
-docker logs ast-api --tail 50 -f
-
-# ヘルスチェック
-curl http://localhost:8017/health
-```
-
-### SUPERB APIの管理
-```bash
-# 再起動
-cd /home/ubuntu/api_superb_v1 && docker-compose restart
-
-# ログ確認
-docker logs superb-api --tail 50 -f
-
-# ヘルスチェック
-curl http://localhost:8018/health
-```
-
-### トラブル時の緊急対応
-```bash
-# メモリ逼迫時（優先度の低いサービスを停止）
-docker stop api-sed-aggregator opensmile-aggregator
-
-# ディスク容量不足時
-docker system prune -a -f
-docker image prune -a -f
-
-# ネットワーク問題時
-python3 /home/ubuntu/watchme-server-configs/scripts/network_monitor.py --fix
-```
-
-### ベストプラクティス
-
-1. **ネットワーク設定を最優先** 🆕
+1. **ネットワーク設定を最優先**
    - 新しいサービスは必ず`watchme-network`に`external: true`で参加
    - デプロイ後は`check-infrastructure.sh`で接続確認
    - 問題があれば`network_monitor.py --fix`で自動修復
@@ -1169,14 +492,124 @@ python3 /home/ubuntu/watchme-server-configs/scripts/network_monitor.py --fix
 
 4. **ドキュメント化**
    - 新しいサービスを追加したら、このREADMEも更新
-   - server_overview.mdにもエンドポイント情報を追加
-   - NETWORK-ARCHITECTURE.mdに接続状態を記録 🆕
+   - CHANGELOG.mdに変更履歴を記録
 
 5. **ポート番号の管理**
    - 8000番台: メインAPI
    - 8001-8099: マイクロサービス
    - 9000番台: 管理ツール
    - 新しいサービスは既存のポートと重複しないよう確認
+
+---
+
+## 🧹 Janitor - 音声データ自動削除サービス
+
+### 概要
+
+処理済み音声ファイルを自動削除し、ユーザーのプライバシーを保護するサービスです。EventBridge + Lambda経由で6時間ごとに自動実行されます。
+
+### 基本情報
+
+| 項目 | 値 |
+|------|-----|
+| **外部URL** | https://api.hey-watch.me/janitor/ |
+| **ポート** | 8030 |
+| **コンテナ名** | janitor-api |
+| **ディレクトリ** | /home/ubuntu/janitor/ |
+| **ECRリポジトリ** | watchme-api-janitor |
+| **実行頻度** | 6時間ごと（EventBridge） |
+
+### 自動実行スケジュール
+
+**EventBridge Cron式**: `0 */6 * * ? *` (UTC基準)
+
+**実行時刻（JST）**:
+- 09:00 JST（00:00 UTC）
+- 15:00 JST（06:00 UTC）
+- 21:00 JST（12:00 UTC）
+- 03:00 JST（18:00 UTC）
+
+### アーキテクチャ
+
+```
+EventBridge (6時間ごと)
+  ↓
+Lambda: watchme-janitor-trigger
+  ↓ (HTTPS POST)
+https://api.hey-watch.me/janitor/cleanup
+  ↓
+Janitor API (FastAPI - Docker/EC2)
+  ├─ Supabaseから削除対象を検索
+  ├─ S3からファイル削除
+  └─ Supabaseレコードのfile_statusを'deleted'に更新
+```
+
+### 削除条件
+
+以下の**すべて**を満たすファイルを削除:
+1. `transcriptions_status = 'completed'`（文字起こし完了）
+2. `behavior_features_status = 'completed'`（行動分析完了）
+3. `emotion_features_status = 'completed'`（感情分析完了）
+4. `created_at`が**24時間以上経過**（安全マージン）
+
+### エンドポイント
+
+| メソッド | パス | 説明 |
+|---------|------|------|
+| GET | `/janitor/health` | ヘルスチェック |
+| GET | `/janitor/stats` | 削除対象ファイルの統計情報 |
+| POST | `/janitor/cleanup` | 削除処理を実行 |
+
+### 運用実績（2025-10-19時点）
+
+**Lambda実行履歴（過去24時間）**:
+- 2025-10-19 13:31 JST - 削除0件（対象なし）
+- 2025-10-19 15:00 JST - **削除100件成功**（8.3MB）
+
+**データベース状態**:
+- `file_status = 'deleted'`: 108件
+- すべてのレコードで処理ステータスが完了済み
+
+### 管理コマンド
+
+```bash
+# ヘルスチェック
+curl https://api.hey-watch.me/janitor/health
+
+# 削除対象の統計確認
+curl https://api.hey-watch.me/janitor/stats
+
+# 手動で削除処理を実行
+curl -X POST https://api.hey-watch.me/janitor/cleanup
+
+# コンテナログ確認
+docker logs janitor-api --tail 100 -f
+
+# サービス再起動
+cd /home/ubuntu/janitor
+docker-compose -f docker-compose.prod.yml restart
+```
+
+> **トラブルシューティング**: 削除処理の問題は [運用ガイド](./OPERATIONS_GUIDE.md#🧹-janitor-api-トラブルシューティング) を参照
+
+### プライバシー保護
+
+> **音声データの自動削除について**
+>
+> 録音された音声データは、AIによる分析が完了した後、自動的に削除されます。
+> - **保存期間**: 分析完了後、最長24時間以内
+> - **削除頻度**: 6時間ごとに自動削除処理を実行
+> - **削除対象**: 文字起こし、行動分析、感情分析がすべて完了したデータ
+>
+> このため、音声データそのものが第三者に閲覧されることはありません。
+> 分析結果（テキスト、グラフデータ）のみがダッシュボードに表示されます。
+
+### 詳細ドキュメント
+
+- **GitHubリポジトリ**: https://github.com/hey-watchme/api-janitor
+- **README**: /Users/kaya.matsumoto/projects/watchme/api/janitor/README.md
+
+---
 
 ## 🚀 今後の予定
 
