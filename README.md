@@ -68,9 +68,9 @@ graph TB
             end
 
             subgraph Processing["🎙️ 音声処理層"]
-                Behavior["Behavior Features<br/>:8017<br/>(527種類の音響検出)"]
-                Emotion["Emotion Features<br/>:8018<br/>(8感情認識)"]
-                Transcriber["Vibe Transcriber<br/>:8013<br/>(Azure Speech)"]
+                BehaviorFeatures["Behavior Features<br/>:8017<br/>(527種類の音響検出)"]
+                EmotionFeatures["Emotion Features<br/>:8018<br/>(8感情認識)"]
+                VibeTranscriber["Vibe Transcriber<br/>:8013<br/>(Azure Speech)"]
             end
 
             subgraph Aggregation["📊 集計・分析層"]
@@ -111,19 +111,19 @@ graph TB
 
     %% Nginx → Docker Services
     NginxRouter -->|/vault/| Vault
-    NginxRouter -->|/behavior-analysis/features/| Behavior
-    NginxRouter -->|/emotion-analysis/features/| Emotion
-    NginxRouter -->|/vibe-analysis/transcription/| Transcriber
+    NginxRouter -->|/behavior-analysis/features/| BehaviorFeatures
+    NginxRouter -->|/emotion-analysis/features/| EmotionFeatures
+    NginxRouter -->|/vibe-analysis/transcription/| VibeTranscriber
     NginxRouter -->|/janitor/| Janitor
 
     %% 音声処理フロー
-    Vault -->|音声ファイル配信| Behavior
-    Vault -->|音声ファイル配信| Emotion
-    Vault -->|音声ファイル配信| Transcriber
+    Vault -->|音声ファイル配信| BehaviorFeatures
+    Vault -->|音声ファイル配信| EmotionFeatures
+    Vault -->|音声ファイル配信| VibeTranscriber
 
-    Behavior -->|特徴量| BehaviorAgg
-    Emotion -->|感情スコア| EmotionAgg
-    Transcriber -->|テキスト| VibeAgg
+    BehaviorFeatures -->|特徴量| BehaviorAgg
+    EmotionFeatures -->|感情スコア| EmotionAgg
+    VibeTranscriber -->|テキスト| VibeAgg
 
     VibeAgg -->|プロンプト| VibeScore
     BehaviorAgg -.->|結果保存| Supabase
@@ -147,7 +147,7 @@ graph TB
 
     class iOS,Web,Observer,ProductSite clientStyle
     class S3,Supabase,L1,L2,EB1,EB2 awsStyle
-    class Behavior,Emotion,Transcriber,Vault processingStyle
+    class BehaviorFeatures,EmotionFeatures,VibeTranscriber,Vault processingStyle
     class VibeAgg,VibeScore,BehaviorAgg,EmotionAgg aggregationStyle
     class APIManager,Admin,Avatar,Janitor managementStyle
     class NginxRouter,SystemD,SD1 infraStyle

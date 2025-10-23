@@ -42,19 +42,19 @@ WatchMeは、音声データを多面的に分析し、ユーザーの心理状�
 
 ### 🔬 3つの分析技術
 
-| 技術 | 正式名称 | 役割 | 出力データ |
-|------|---------|------|-----------|
-| **ASR** | Automatic Speech Recognition | 音声認識・文字起こし | 発話内容テキスト |
-| **SED** | Sound Event Detection | 音響イベント検出 | 環境音・行動の分類 |
-| **SER** | Speech Emotion Recognition | 音声感情認識 | 8つの基本感情スコア |
+| 技術分野 | サービス名 | 役割 | 出力データ |
+|---------|-----------|------|-----------|
+| **音声認識** | Vibe Transcriber | 音声認識・文字起こし | 発話内容テキスト |
+| **音響分析** | Behavior Features | 音響イベント検出 | 環境音・行動の分類（527種類） |
+| **感情分析** | Emotion Features | 音声感情認識 | 8つの基本感情スコア |
 
 ### 📈 3つの表示軸
 
 | 表示軸 | データソース | 内容 |
 |--------|------------|------|
-| **気分（Vibe）** | ASR + SED + SER の総合 | 総合的な心理状態スコアとサマリー |
-| **行動（Behavior）** | SED中心 | 音響イベントから推定される行動パターン |
-| **感情（Emotion）** | SER中心 | 8つの基本感情の時系列変化 |
+| **気分（Vibe）** | Vibe Transcriber + Behavior Features + Emotion Features の総合 | 総合的な心理状態スコアとサマリー |
+| **行動（Behavior）** | Behavior Features中心 | 音響イベントから推定される行動パターン |
+| **感情（Emotion）** | Emotion Features中心 | 8つの基本感情の時系列変化 |
 
 ---
 
@@ -83,14 +83,14 @@ graph TB
         Worker["Lambda: audio-worker<br/>(1-3分)"]
 
         subgraph Analysis["📊 並列分析"]
-            ASR["ASR API<br/>Azure Speech<br/>(26-28秒)"]
-            SED["SED API<br/>YAMNet<br/>(10-20秒)"]
-            SER["SER API<br/>OpenSMILE<br/>(10-20秒)"]
+            VibeTranscriber["Vibe Transcriber<br/>Azure Speech<br/>(26-28秒)"]
+            BehaviorFeatures["Behavior Features<br/>音響イベント検出<br/>(10-20秒)"]
+            EmotionFeatures["Emotion Features<br/>感情認識<br/>(10-20秒)"]
         end
 
         subgraph Aggregation["🔄 集計処理"]
-            SEDAgg["SED Aggregator<br/>行動パターン"]
-            SERAgg["Emotion Aggregator<br/>感情スコア"]
+            BehaviorAgg["Behavior Aggregator<br/>行動パターン"]
+            EmotionAgg["Emotion Aggregator<br/>感情スコア"]
         end
 
         subgraph Integration["🎯 統合分析"]
@@ -130,16 +130,16 @@ graph TB
 
     %% タイムブロック処理
     SQS1 -->|トリガー| Worker
-    Worker -->|並列実行| ASR
-    Worker -->|並列実行| SED
-    Worker -->|並列実行| SER
+    Worker -->|並列実行| VibeTranscriber
+    Worker -->|並列実行| BehaviorFeatures
+    Worker -->|並列実行| EmotionFeatures
 
-    SED -->|特徴量| SEDAgg
-    SER -->|感情スコア| SERAgg
+    BehaviorFeatures -->|特徴量| BehaviorAgg
+    EmotionFeatures -->|感情スコア| EmotionAgg
 
-    ASR -->|テキスト| VibeAgg
-    SED -.->|行動データ| VibeAgg
-    SER -.->|感情データ| VibeAgg
+    VibeTranscriber -->|テキスト| VibeAgg
+    BehaviorFeatures -.->|行動データ| VibeAgg
+    EmotionFeatures -.->|感情データ| VibeAgg
 
     VibeAgg -->|プロンプト| VibeScore
     VibeScore -->|分析結果| Dashboard
@@ -173,8 +173,8 @@ graph TB
     class Device,iOS inputStyle
     class S3 storageStyle
     class S3Event,Processor,SQS1,SQS2,SQS3 triggerStyle
-    class Worker,ASR,SED,SER,SummaryWorker,AnalysisWorker processStyle
-    class SEDAgg,SERAgg aggregationStyle
+    class Worker,VibeTranscriber,BehaviorFeatures,EmotionFeatures,SummaryWorker,AnalysisWorker processStyle
+    class BehaviorAgg,EmotionAgg aggregationStyle
     class VibeAgg,VibeScore,SummaryAPI,AnalysisAPI,Dashboard,DashboardSummary integrationStyle
     class SNS,APNs,iPhone notificationStyle
 ```
@@ -200,13 +200,13 @@ graph TB
     end
 
     subgraph Parallel["📊 並列分析処理 (26-60秒)"]
-        G1[ASR API<br/>Azure Speech<br/>26-28秒]
-        G2[SED API<br/>YAMNet<br/>10-20秒]
-        G3[SER API<br/>OpenSMILE<br/>10-20秒]
+        G1[Vibe Transcriber<br/>Azure Speech<br/>26-28秒]
+        G2[Behavior Features<br/>音響イベント検出<br/>10-20秒]
+        G3[Emotion Features<br/>感情認識<br/>10-20秒]
     end
 
     subgraph FeatureAgg["🔄 特徴量集計 (5-10秒)"]
-        H1[SED Aggregator<br/>行動パターン集計]
+        H1[Behavior Aggregator<br/>行動パターン集計]
         H2[Emotion Aggregator<br/>感情スコア集計]
     end
 
@@ -520,13 +520,13 @@ graph LR
 
 | 順序 | API | エンドポイント | メソッド | タイムアウト | 備考 |
 |-----|-----|--------------|---------|-----------|------|
-| 1 | Azure Speech API | `/vibe-analysis/transcription/fetch-and-transcribe` | POST | 180秒 | リトライ最大3回 |
-| 2 | AST API | `/behavior-analysis/features/fetch-and-process-paths` | POST | 180秒 | 音響イベント検出 |
-| 2.1 | SED Aggregator | `/behavior-aggregator/analysis/sed` | POST | 180秒 | AST成功時に自動起動 |
-| 3 | SUPERB API | `/emotion-analysis/features/process/emotion-features` | POST | 180秒 | 感情認識 |
-| 3.1 | Emotion Aggregator | `/emotion-analysis/aggregation/analyze/opensmile-aggregator` | POST | 180秒 | SUPERB成功時に自動起動 |
-| 3.5 | Vibe Aggregator（失敗記録） | `/vibe-analysis/aggregation/create-failed-record` | POST | 30秒 | Azure失敗時のみ |
-| 4 | Vibe Aggregator | `/vibe-analysis/aggregation/generate-timeblock-prompt` | GET | 180秒 | Azure/AST/SUPERB全成功時のみ |
+| 1 | Vibe Transcriber | `/vibe-analysis/transcription/fetch-and-transcribe` | POST | 180秒 | リトライ最大3回 |
+| 2 | Behavior Features | `/behavior-analysis/features/fetch-and-process-paths` | POST | 180秒 | 音響イベント検出 |
+| 2.1 | Behavior Aggregator | `/behavior-aggregator/analysis/sed` | POST | 180秒 | Behavior Features成功時に自動起動 |
+| 3 | Emotion Features | `/emotion-analysis/features/process/emotion-features` | POST | 180秒 | 感情認識 |
+| 3.1 | Emotion Aggregator | `/emotion-analysis/aggregation/analyze/opensmile-aggregator` | POST | 180秒 | Emotion Features成功時に自動起動 |
+| 3.5 | Vibe Aggregator（失敗記録） | `/vibe-analysis/aggregation/create-failed-record` | POST | 30秒 | Vibe Transcriber失敗時のみ |
+| 4 | Vibe Aggregator | `/vibe-analysis/aggregation/generate-timeblock-prompt` | GET | 180秒 | 全サービス成功時のみ |
 | 5 | Vibe Scorer | `/vibe-analysis/scoring/analyze-timeblock` | POST | 180秒 | Vibe Aggregator成功時のみ |
 
 #### watchme-dashboard-summary-worker が呼び出すAPIエンドポイント
@@ -558,13 +558,13 @@ graph LR
 
 | カテゴリ | サービス名 | 技術 | ポート | エンドポイント | コンテナ名 | 稼働環境 |
 |---------|-----------|------|--------|--------------|-----------|----------|
-| **ASR** | Azure ASR API | Azure Speech Services | 8013 | /vibe-analysis/transcription | `vibe-transcriber-v2` | EC2 (Docker) |
-| **SED** | AST API | YAMNet (527クラス分類) | 8017 | /behavior-analysis/features | `ast-api` | EC2 (Docker) |
-| **SER** | SUPERB API | OpenSMILE | 8018 | /emotion-analysis/features | `emotion-analysis-feature-extractor-v3` | EC2 (Docker) |
-| **集計** | SED Aggregator | 行動パターン分析 | 8010 | /behavior-aggregator | `api-sed-aggregator` | EC2 (Docker) |
+| **音声認識** | Vibe Transcriber | Azure Speech Services | 8013 | /vibe-analysis/transcription | `vibe-analysis-transcriber-v2` | EC2 (Docker) |
+| **音響分析** | Behavior Features | 音響イベント検出（527種類） | 8017 | /behavior-analysis/features | `behavior-analysis-feature-extractor-v2` | EC2 (Docker) |
+| **感情分析** | Emotion Features | 音声感情認識（8感情） | 8018 | /emotion-analysis/features | `emotion-analysis-feature-extractor-v3` | EC2 (Docker) |
+| **集計** | Behavior Aggregator | 行動パターン分析 | 8010 | /behavior-aggregator | `behavior-analysis-sed-aggregator` | EC2 (Docker) |
 | **集計** | Emotion Aggregator | 感情スコア集計 | 8012 | /emotion-analysis/aggregation | `emotion-analysis-aggregator` | EC2 (Docker) |
-| **統合** | Vibe Aggregator | プロンプト生成 | 8009 | /vibe-analysis/aggregation | `api_gen_prompt_mood_chart` | EC2 (Docker) |
-| **統合** | Vibe Scorer | ChatGPT連携 | 8002 | /vibe-analysis/scoring | `api-gpt-v1` | EC2 (Docker) |
+| **統合** | Vibe Aggregator | プロンプト生成 | 8009 | /vibe-analysis/aggregation | `vibe-analysis-aggregator` | EC2 (Docker) |
+| **統合** | Vibe Scorer | ChatGPT連携 | 8002 | /vibe-analysis/scoring | `vibe-analysis-scorer` | EC2 (Docker) |
 
 > **詳細**: EC2のインフラ構成、Dockerネットワーク、Nginx設定については [server-configs/README.md](./README.md) を参照
 
@@ -578,13 +578,13 @@ graph LR
 
 2. **API Manager（スケジューラー）**（`/api/api-manager/scheduler/run-api-process-docker.py`）
    - **コンテナ名を直接参照**：
-     - `http://api_gen_prompt_mood_chart:8009/...`
-     - `http://api-gpt-v1:8002/...`
-     - `http://ast-api:8017/...`
-     - `http://superb-api:8018/...`
-     - `http://vibe-transcriber-v2:8013/...`
-     - `http://api-sed-aggregator:8010/...`
-     - `http://opensmile-aggregator:8012/...`
+     - `http://vibe-analysis-aggregator:8009/...`
+     - `http://vibe-analysis-scorer:8002/...`
+     - `http://behavior-analysis-feature-extractor-v2:8017/...`
+     - `http://emotion-analysis-feature-extractor-v3:8018/...`
+     - `http://vibe-analysis-transcriber-v2:8013/...`
+     - `http://behavior-analysis-sed-aggregator:8010/...`
+     - `http://emotion-analysis-aggregator:8012/...`
    - ⚠️ **コンテナ名を変更する場合は、このファイルも更新が必要**
 
 3. **その他のサービス**（Vault, Janitor, Demo Generator）
@@ -705,9 +705,9 @@ graph LR
 | 処理 | 平均時間 | タイムアウト設定 | 実測データ（2025年10月調査） |
 |------|---------|--------------|---------------------------|
 | Lambda Trigger（SQS送信） | 1-2秒 | 10秒 | - |
-| ASR API (Azure) | 15-30秒 | 3分（HTTP）/ 15分（Lambda） | **26-28秒**（1分音声） |
-| SED API | 10-20秒 | 3分 | - |
-| SER API | 10-20秒 | 3分 | - |
+| Vibe Transcriber | 15-30秒 | 3分（HTTP）/ 15分（Lambda） | **26-28秒**（1分音声） |
+| Behavior Features | 10-20秒 | 3分 | - |
+| Emotion Features | 10-20秒 | 3分 | - |
 | Vibe Aggregator | 5-10秒 | 30秒 | - |
 | Vibe Scorer | 10-15秒 | 30秒 | - |
 | Lambda Worker（全体） | 1-3分 | **15分** | - |
