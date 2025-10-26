@@ -1,22 +1,79 @@
 # WatchMe 技術仕様書
 
-最終更新: 2025年10月23日 00:30 JST
+最終更新: 2025年10月26日 14:00 JST
 
 ## 🏗️ システムアーキテクチャ
 
-### AWS EC2仕様 （更新: 2025-09-19）
+### AWS EC2仕様 （更新: 2025-10-26）
 - **インスタンスタイプ**: t4g.large (一時的アップグレード、以前t4g.small)
 - **CPU**: 2 vCPU (AWS Graviton2)
-- **メモリ**: 8.0GB RAM (実使用: 7.8GB) ← 大幅増加
+- **メモリ**: 8.0GB RAM (実使用: 7.8GB)
 - **ストレージ**: 30GB gp3 SSD
 - **リージョン**: ap-southeast-2 (Sydney)
 - **IPアドレス**: 3.24.16.82
 
-### リソース状況 （t4g.largeアップグレード後）
-- **メモリ使用率**: 未確認 (t4g.small時: ~78%)
-- **Swap使用率**: 未確認 (t4g.small時: ~65%)
-- **利用可能メモリ**: 6GB以上 (大幅改善)
-- **注意**: 将来t4g.smallに戻す可能性あり、リソース管理は継続必要
+### リソース状況 （2025-10-26 現在）
+
+#### メモリ使用状況
+- **総メモリ**: 7.6GB
+- **使用中**: 2.4GB (31%)
+- **利用可能**: 5.2GB (68%)
+- **Swap使用**: 607MB / 2.0GB (30%)
+- **バッファ/キャッシュ**: 4.8GB
+
+#### ディスク使用状況
+- **総容量**: 29GB
+- **使用中**: 22GB (77%)
+- **空き容量**: 6.6GB (23%)
+- **⚠️ 警告**: ディスク使用率が高い（80%に近い）
+
+#### リソース管理の考慮事項
+
+**Kushinada APIへの移行によるリソース影響 (2025-10-26):**
+
+| 項目 | v3 (SUPERB) | v2 (Kushinada) | 差分 |
+|------|-------------|----------------|------|
+| モデルサイズ | 約400MB | 約1.3GB | +900MB |
+| Dockerイメージ | 約3.4GB | 約4.5GB（予想） | +1.1GB |
+| 実行時メモリ | 1.5-2GB | 3-3.5GB | +1.5-2GB |
+| ピーク時メモリ | 約2.5GB | 約4GB | +1.5GB |
+
+**⚠️ 重要な注意点:**
+1. **メモリは現状余裕あり**: 利用可能メモリ5.2GBに対し、Kushinadaは3-3.5GB使用予定
+2. **ディスク容量に注意**: 空き6.6GBに対し、新イメージで約1.1GB増加
+3. **同時実行数の制限**: メモリ制約により、ワーカー数は1に制限推奨
+4. **将来の対策**:
+   - 不要なDockerイメージの定期削除（`docker system prune`）
+   - 古いログファイルのクリーンアップ
+   - 必要に応じてストレージ拡張（30GB → 50GB）を検討
+
+### AWSリージョン構成 （更新: 2025-10-26）
+
+**全てのAWSリソースは `ap-southeast-2` (Sydney) に統一されています。**
+
+| サービス | リージョン | リージョン名 | 備考 |
+|---------|-----------|------------|------|
+| **EC2** | `ap-southeast-2` | Sydney | サーバー本体 |
+| **ECR** | `ap-southeast-2` | Sydney | Dockerイメージレジストリ（13リポジトリ） |
+| **Lambda** | `ap-southeast-2` | Sydney | audio-worker, janitor-trigger等 |
+| **S3 (watchme-vault)** | `ap-southeast-2` | Sydney | 音声ファイル保管 |
+| **EventBridge** | `ap-southeast-2` | Sydney | スケジューラー |
+
+#### 重要な注意点
+
+1. **全リソースをap-southeast-2に統一**
+   - 全てのAWSサービスは同じリージョン内に配置されています
+   - リージョン間のデータ転送料金は発生しません
+   - 混乱を避けるため、全ての`.env`ファイルで`AWS_REGION=ap-southeast-2`を使用
+
+2. **設定の統一**
+   - EC2上で動作するAPIは `AWS_REGION=ap-southeast-2` を環境変数で設定
+   - Lambda関数も `region_name='ap-southeast-2'` を明示的に指定
+   - **重要**: 過去に`us-east-1`が使われていた記述は全て誤りです
+
+3. **リージョン移行計画**
+   - 将来的に東京リージョン (`ap-northeast-1`) への移行を検討中
+   - 詳細は [REGION_MIGRATION_GUIDE.md](./REGION_MIGRATION_GUIDE.md) を参照
 
 ## 🌐 ネットワーク設計
 
@@ -72,8 +129,58 @@
 | **Vibe Scorer** | `/vibe-analysis/scoring/` | 8002 | api-gpt-v1 | watchme-api-vibe-scorer | ECR | ✅ 2025-10-22階層化 |
 | **Behavior Features** | `/behavior-analysis/features/` | 8017 | behavior-analysis-feature-extractor-v2 | watchme-api-ast | ECR | ✅ 2025-10-22階層化 |
 | **Behavior Aggregator** | `/behavior-aggregator/` | 8010 | api-sed-aggregator | watchme-api-sed-aggregator | ECR | ✅ 2025-09-04移行済み |
-| **Emotion Features** | `/emotion-analysis/features/` | 8018 | emotion-analysis-feature-extractor-v3 | watchme-api-superb | ECR | ✅ 2025-10-22階層化 |
+| **Emotion Features** | `/emotion-analysis/features/` | 8018 | emotion-analysis-feature-extractor-v3 | watchme-emotion-analysis-feature-extractor-v3 | ECR | ✅ 2025-10-26 Kushinada移行 |
 | **Emotion Aggregator** | `/emotion-analysis/aggregation/` | 8012 | emotion-analysis-aggregator | watchme-api-opensmile-aggregator | ECR | ✅ 2025-10-22階層化 |
+
+## 🎙️ 音声処理API詳細
+
+### Emotion Features API（感情認識）
+
+**2025-10-26更新: SUPERB → Kushinada移行完了**
+
+| 項目 | v3 (SUPERB) | v2 (Kushinada - 現行) |
+|------|-------------|---------------------|
+| **モデル** | wav2vec2-base-superb-er | kushinada-hubert-large-jtes-er |
+| **開発元** | Meta AI / SUPERB | 産総研（AIST） |
+| **学習データ** | 英語音声（IEMOCAP等） | 日本語音声（JTES） |
+| **感情カテゴリ** | 8感情 | 4感情 |
+| **パラメータ数** | 95M | 316M |
+| **モデルサイズ** | 400MB | 1.3GB |
+| **実行時メモリ** | 1.5-2GB | 3-3.5GB |
+| **処理時間（60秒音声）** | 30-45秒 | 40-60秒 |
+| **anger検出精度** | 低い（誤認識多い） | **高い（84.77%）** |
+
+#### 感情カテゴリ詳細
+
+**Kushinada (v2) - 4感情:**
+- `neutral` - 中立
+- `joy` - 喜び
+- `anger` - 怒り（**高精度**）
+- `sadness` - 悲しみ
+
+**処理方式:**
+- 10秒セグメントで分析（時系列追跡）
+- 各セグメントの感情確率を返却
+- OpenSMILE互換データ構造
+
+#### リソース要件
+
+**メモリ:**
+- アイドル時: 約500MB
+- 推論時: 3-3.5GB（ピーク時）
+- 推奨: workers=1（メモリ制約）
+
+**ストレージ:**
+- Dockerイメージ: 約4.5GB
+- モデルキャッシュ: 約1.3GB
+- 合計: 約5.8GB
+
+#### 移行理由（2025-10-26）
+
+1. **日本語音声に特化**: JTESデータセットで学習
+2. **怒り検出の精度向上**: 84.77% vs SUPERBの誤認識問題
+3. **時系列分析**: 10秒セグメントで感情推移を追跡
+4. **実証済み**: ローカルテストで高精度を確認
 
 ## 🚨 トラブルシューティング
 
