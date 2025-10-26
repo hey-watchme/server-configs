@@ -444,21 +444,46 @@ print(f'✅ チェックポイントダウンロード完了: {checkpoint_path}'
 - ✅ 実行時間：3-5分削減（毎回）
 
 **ヘルスチェック設定の調整**:
+
+⚠️ **重要**: モデルをイメージに含めても、初回デプロイではキャッシュが空のため約40秒かかります。
+
 ```dockerfile
-# モデルが既にイメージに含まれているため、start-periodを短縮
-HEALTHCHECK --interval=30s --timeout=30s --start-period=30s --retries=3 \
+# 初回デプロイを考慮して、十分な猶予を設定
+HEALTHCHECK --interval=30s --timeout=30s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:8018/health || exit 1
 ```
 
 ```yaml
-# docker-compose.prod.ymlも同様に短縮
+# docker-compose.prod.ymlも同様に設定
 healthcheck:
   test: ["CMD", "curl", "-f", "http://localhost:8018/health"]
   interval: 30s
   timeout: 10s
   retries: 3
-  start_period: 30s  # モデルは既にイメージに含まれているため短縮
+  start_period: 60s  # 初回デプロイはモデルロードに約40秒かかる
 ```
+
+**CI/CDワークフローのヘルスチェック**:
+```yaml
+# 最大60秒間（12回 × 5秒）リトライ
+for i in {1..12}; do
+  if curl -f http://localhost:8018/health > /dev/null 2>&1; then
+    echo "✅ Health check passed (attempt $i/12)"
+    break
+  fi
+  echo "  Attempt $i/12 failed, retrying in 5 seconds..."
+  sleep 5
+done
+```
+
+**キャッシュディレクトリの注意点**:
+- ビルド時: `/root/.cache/huggingface/`
+- 実行時: `ENV TRANSFORMERS_CACHE=/app/.cache`（異なる場合がある）
+- → 初回起動時にHugging Faceから再ダウンロードが発生する可能性
+
+**2回目以降のデプロイ**:
+- キャッシュが効くため数秒で起動
+- ヘルスチェックは1-2回目で成功
 
 **参考実装**: `emotion-analysis-feature-extractor-v3` (Kushinadaモデル)
 
