@@ -11,6 +11,7 @@
 | 状況 | 読むべきセクション |
 |-----|------------------|
 | **新しいAPIのCI/CD実装** | [実装ガイド](#実装ガイド新規api向け) を順番に読む |
+| **大きなAIモデルを使用する** | 🚨 [重要：大きなAIモデルを使用する場合の必須対応](#-重要大きなaiモデルを使用する場合の必須対応) を必読 |
 | **エラーが発生した** | [トラブルシューティング](#トラブルシューティング) で症状を検索 |
 | **設定の詳細を知りたい** | [ファイル仕様リファレンス](#ファイル仕様リファレンス) を参照 |
 | **なぜ失敗し続けるのか理解したい** | [基本原則と重要概念](#基本原則と重要概念) を読む |
@@ -378,6 +379,90 @@ docker-compose -f docker-compose.prod.yml down || true
 - エラー耐性（一部失敗しても継続）
 
 ### Dockerfile仕様
+
+#### 🚨 重要：大きなAIモデルを使用する場合の必須対応
+
+**対象API**: Kushinada、Whisper、BERT系モデルなど、1GB以上の大きなモデルを使用するAPI
+
+**問題**:
+- AIモデルのダウンロードに3-5分かかる
+- 実行時にダウンロードするとCI/CDが毎回タイムアウトする
+- ネットワークエラーのリスクがある
+
+**✅ 根本的解決策：ビルド時にモデルをプリロード**
+
+```dockerfile
+# HuggingFaceトークンを引数から受け取る
+ARG HF_TOKEN
+RUN test -n "$HF_TOKEN" || (echo "Error: HF_TOKEN build arg is required" && exit 1)
+
+# ✅ モデルとチェックポイントをビルド時に完全ダウンロード
+# これにより実行時のダウンロード時間（3-5分）を完全に排除
+RUN HF_TOKEN=${HF_TOKEN} python3 -c "\
+from transformers import HubertModel; \
+from huggingface_hub import hf_hub_download; \
+import os; \
+os.environ['HF_TOKEN'] = '${HF_TOKEN}'; \
+print('🔧 モデルをダウンロード中...'); \
+HubertModel.from_pretrained('imprt/kushinada-hubert-large', token='${HF_TOKEN}'); \
+print('✅ モデルダウンロード完了'); \
+print('🔧 チェックポイントをダウンロード中...'); \
+checkpoint_path = hf_hub_download( \
+    repo_id='imprt/kushinada-hubert-large-jtes-er', \
+    filename='s3prl/result/downstream/kushinada-hubert-large-jtes-er_fold1/dev-best.ckpt', \
+    token='${HF_TOKEN}' \
+); \
+print(f'✅ チェックポイントダウンロード完了: {checkpoint_path}'); \
+"
+```
+
+**GitHub Actionsでの設定**:
+```yaml
+- name: Build, tag, and push image to Amazon ECR
+  env:
+    HF_TOKEN: ${{ secrets.HF_TOKEN }}  # ★HF_TOKENを渡す
+  run: |
+    docker buildx build \
+      --platform linux/arm64 \
+      --no-cache \
+      --push \
+      --build-arg HF_TOKEN=$HF_TOKEN \  # ★ビルド引数として渡す
+      -f Dockerfile \
+      -t $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:latest \
+      .
+```
+
+**メリット**:
+- ✅ コンテナ起動時間：3-5分 → 数秒（99%削減）
+- ✅ CI/CD信頼性：毎回失敗 → 安定動作
+- ✅ ネットワークエラーリスク：排除
+- ✅ 本番環境でHF_TOKEN不要
+
+**トレードオフ**:
+- ⚠️ Dockerイメージサイズ：約1.5-2GB増加
+- ⚠️ ビルド時間：約3-5分増加（初回のみ）
+- ✅ 実行時間：3-5分削減（毎回）
+
+**ヘルスチェック設定の調整**:
+```dockerfile
+# モデルが既にイメージに含まれているため、start-periodを短縮
+HEALTHCHECK --interval=30s --timeout=30s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8018/health || exit 1
+```
+
+```yaml
+# docker-compose.prod.ymlも同様に短縮
+healthcheck:
+  test: ["CMD", "curl", "-f", "http://localhost:8018/health"]
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 30s  # モデルは既にイメージに含まれているため短縮
+```
+
+**参考実装**: `emotion-analysis-feature-extractor-v3` (Kushinadaモデル)
+
+---
 
 #### 空ディレクトリ問題の対処
 
