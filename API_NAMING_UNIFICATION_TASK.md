@@ -29,6 +29,7 @@ systemdサービス:  {domain}-{service}
 | Vibe Transcriber | `/vibe-analysis/transcription/` | `vibe-analysis-transcriber` | `watchme-vibe-analysis-transcriber` | ❌ transcription ≠ transcriber |
 | Vibe Aggregator | `/vibe-analysis/aggregation/` | `vibe-analysis-aggregator` | `watchme-api-vibe-aggregator` | ❌ aggregation ≠ aggregator |
 | Vibe Scorer | `/vibe-analysis/scoring/` | `api-gpt-v1` | `watchme-api-vibe-scorer` | ❌ scoring ≠ scorer ≠ api-gpt-v1 |
+| Behavior Aggregator | `/behavior-aggregator/` | `api-sed-aggregator` | `watchme-api-sed-aggregator` | ❌ 階層化なし、名前違い |
 | Behavior Features | `/behavior-analysis/features/` | `behavior-analysis-feature-extractor` | `watchme-behavior-analysis-feature-extractor` | ❌ features ≠ feature-extractor |
 | Emotion Features | `/emotion-analysis/features/` | `emotion-analysis-feature-extractor-v3` | `watchme-emotion-analysis-feature-extractor-v3` | ❌ features ≠ feature-extractor |
 | Emotion Aggregator | `/emotion-analysis/aggregation/` | `emotion-analysis-aggregator` | `watchme-api-opensmile-aggregator` | ❌ aggregation ≠ aggregator |
@@ -42,6 +43,7 @@ systemdサービス:  {domain}-{service}
 | Vibe Transcriber | `/vibe-analysis/transcriber/` | `vibe-analysis-transcriber` | `watchme-vibe-analysis-transcriber` | ✅ 統一 |
 | Vibe Aggregator | `/vibe-analysis/aggregator/` | `vibe-analysis-aggregator` | `watchme-vibe-analysis-aggregator` | ✅ 統一 |
 | Vibe Scorer | `/vibe-analysis/scorer/` | `vibe-analysis-scorer` | `watchme-vibe-analysis-scorer` | ✅ 統一 |
+| Behavior Aggregator | `/behavior-analysis/aggregator/` | `behavior-analysis-aggregator` | `watchme-behavior-analysis-aggregator` | ✅ 統一 |
 | Behavior Feature Extractor | `/behavior-analysis/feature-extractor/` | `behavior-analysis-feature-extractor` | `watchme-behavior-analysis-feature-extractor` | ✅ 統一 |
 | Emotion Feature Extractor | `/emotion-analysis/feature-extractor/` | `emotion-analysis-feature-extractor` | `watchme-emotion-analysis-feature-extractor` | ✅ 統一 |
 | Emotion Aggregator | `/emotion-analysis/aggregator/` | `emotion-analysis-aggregator` | `watchme-emotion-analysis-aggregator` | ✅ 統一 |
@@ -123,7 +125,31 @@ systemdサービス:  {domain}-{service}
 
 ### 🟡 優先度: 中
 
-#### 4. Behavior Feature Extractor
+#### 4. Behavior Aggregator
+
+**現状:**
+- エンドポイント: `/behavior-aggregator/` ❌ **階層化されていない**
+- コンテナ: `api-sed-aggregator` ❌ **完全に違う**
+- ECR: `watchme-api-sed-aggregator` ❌
+- systemd: `api-sed-aggregator` ❌
+
+**修正内容:**
+- [ ] Nginxエンドポイント: `/behavior-aggregator/` → `/behavior-analysis/aggregator/`
+- [ ] コンテナ名: `api-sed-aggregator` → `behavior-analysis-aggregator`
+- [ ] systemd: `api-sed-aggregator` → `behavior-analysis-aggregator`
+- [ ] ECRリポジトリ名: 新しく `watchme-behavior-analysis-aggregator` を作成、旧削除
+- [ ] docker-compose.prod.yml修正
+- [ ] ドキュメント修正
+
+**影響範囲:**
+- コンテナ名: 変更必要（大きな変更）
+- ECRリポジトリ: 再作成必要
+- systemdサービス: 再作成必要
+- ドキュメント: 3ファイル
+
+---
+
+#### 5. Behavior Feature Extractor
 
 **現状:**
 - エンドポイント: `/behavior-analysis/features/` ❌
@@ -165,7 +191,30 @@ systemdサービス:  {domain}-{service}
 
 ---
 
-#### 6. Emotion Aggregator
+#### 6. Emotion Feature Extractor
+
+**現状:**
+- エンドポイント: `/emotion-analysis/features/` ❌
+- コンテナ: `emotion-analysis-feature-extractor-v3` ⚠️（バージョン番号）
+- ECR: `watchme-emotion-analysis-feature-extractor-v3` ⚠️
+- systemd: `emotion-analysis-feature-extractor-v3` ⚠️
+
+**修正内容:**
+- [ ] Nginxエンドポイント: `/emotion-analysis/features/` → `/emotion-analysis/feature-extractor/`
+- [ ] コンテナ名: `-v3` を削除検討（バージョン管理はECRタグで）
+- [ ] ECRリポジトリ名: `-v3` を削除検討
+- [ ] systemd: `-v3` を削除検討
+- [ ] Lambda関数（watchme-audio-worker）のURL修正
+- [ ] ドキュメント修正
+
+**影響範囲:**
+- Lambda関数: 1つ
+- バージョン番号削除: 要検討
+- ドキュメント: 3ファイル
+
+---
+
+#### 7. Emotion Aggregator
 
 **現状:**
 - エンドポイント: `/emotion-analysis/aggregation/` ❌
@@ -227,6 +276,7 @@ systemdサービス:  {domain}-{service}
 
 ### フェーズ3: コンテナ名・systemdも修正（影響大）
 - Vibe Scorer
+- Behavior Aggregator
 
 ---
 
@@ -257,6 +307,7 @@ systemdサービス:  {domain}-{service}
 - [ ] Vibe Transcriber
 - [ ] Vibe Aggregator
 - [ ] Vibe Scorer
+- [ ] Behavior Aggregator
 - [ ] Behavior Feature Extractor
 - [ ] Emotion Feature Extractor
 - [ ] Emotion Aggregator
