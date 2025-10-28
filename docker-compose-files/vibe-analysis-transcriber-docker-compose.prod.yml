@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  vibe-analysis-transcriber:
+    image: 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-vibe-analysis-transcriber:latest
+    container_name: vibe-analysis-transcriber
+    ports:
+      - "127.0.0.1:8013:8013"  # localhostのみにバインド（Nginx経由でアクセス）
+    env_file:
+      - /home/ubuntu/vibe-analysis-transcriber/.env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8013/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - watchme-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  watchme-network:
+    external: true
