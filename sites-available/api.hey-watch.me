@@ -172,32 +172,8 @@ server {
         }
     }
 
-    # Azure Speech Service API - 新しい階層化エンドポイント (推奨)
-    location /vibe-analysis/transcription/ {
-        proxy_pass http://localhost:8013/;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        # タイムアウト設定を追加（180秒）
-        proxy_read_timeout 180s;
-        proxy_connect_timeout 180s;
-        proxy_send_timeout 180s;
-
-        # CORS設定
-        add_header "Access-Control-Allow-Origin" "*";
-        add_header "Access-Control-Allow-Methods" "GET, POST, OPTIONS";
-        add_header "Access-Control-Allow-Headers" "Content-Type, Authorization";
-
-        # OPTIONSリクエストの処理
-        if ($request_method = "OPTIONS") {
-            return 204;
-        }
-    }
-
-    # Azure Speech Service API - 旧エンドポイント (後方互換性のため維持)
-    location /vibe-transcriber-v2/ {
+    # Azure Speech Service API (Vibe Analysis Transcriber)
+    location /vibe-analysis-transcriber/ {
         proxy_pass http://localhost:8013/;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
