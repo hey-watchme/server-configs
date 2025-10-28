@@ -96,7 +96,7 @@
 172.27.0.12 : behavior-analysis-sed-aggregator
 172.27.0.14 : watchme-admin
 172.27.0.15 : watchme-avatar-uploader
-172.27.0.17 : behavior-analysis-feature-extractor-v2
+172.27.0.17 : behavior-analysis-feature-extractor  (v3 PaSST)
 172.27.0.18 : emotion-analysis-feature-extractor-v3
 172.27.0.30 : janitor-api
 ```
@@ -114,23 +114,23 @@
 
 ### サーバーサイドサービス
 
-| サービス | エンドポイント | ポート | systemd | ECRリポジトリ/ローカル | デプロイ方式 | 備考 |
-|---------|--------------|--------|---------|------------------------|------------|------|
-| **Vault** | `https://api.hey-watch.me/` | 8000 | watchme-vault-api | watchme-api-vault | ECR | ✅ 2025-09-04移行済み |
-| **Admin** | `https://admin.hey-watch.me/` | 9000 | watchme-admin | watchme-admin | ECR | ✅ 稼働中 |
-| **API Manager** | `https://api.hey-watch.me/manager/` | 9001 | watchme-api-manager | watchme-api-manager | ECR | ✅ 2025-09-04移行済み |
-| **Scheduler** | `https://api.hey-watch.me/scheduler/` | 8015 | watchme-api-manager | watchme-api-manager-scheduler | ECR | ⚠️ 停止中（Lambdaに移行済み） |
-| **Janitor** | `/janitor/` | 8030 | janitor-api | watchme-api-janitor | ECR | ✅ EventBridge + Lambda (`watchme-janitor-trigger`) 6時間ごと |
-| **Demo Generator** | `/demo/` | 8020 | demo-generator-api | watchme-api-demo-generator | ECR | ✅ EventBridge + Lambda (`demo-data-generator-trigger`) 30分ごと |
-| **Audio Enhancer** | (未公開) | 8016 | audio-enhancer-api | watchme-api-audio-enhancer | ローカル | 🚧 現在未使用（音声品質向上） |
-| **Avatar Uploader** | (内部) | 8014 | watchme-avatar-uploader | watchme-api-avatar-uploader | ECR | ✅ systemd経由 |
-| **Vibe Transcriber** | `/vibe-analysis/transcription/` | 8013 | vibe-analysis-transcriber-v2 | watchme-api-transcriber-v2 | ECR | ✅ 2025-10-22階層化 |
-| **Vibe Aggregator** | `/vibe-analysis/aggregation/` | 8009 | vibe-analysis-aggregator | watchme-api-vibe-aggregator | ECR | ✅ 2025-10-22階層化 |
-| **Vibe Scorer** | `/vibe-analysis/scoring/` | 8002 | api-gpt-v1 | watchme-api-vibe-scorer | ECR | ✅ 2025-10-22階層化 |
-| **Behavior Features** | `/behavior-analysis/features/` | 8017 | behavior-analysis-feature-extractor-v2 | watchme-api-ast | ECR | ✅ 2025-10-22階層化 |
-| **Behavior Aggregator** | `/behavior-aggregator/` | 8010 | api-sed-aggregator | watchme-api-sed-aggregator | ECR | ✅ 2025-09-04移行済み |
-| **Emotion Features** | `/emotion-analysis/features/` | 8018 | emotion-analysis-feature-extractor-v3 | watchme-emotion-analysis-feature-extractor-v3 | ECR | ✅ 2025-10-26 Kushinada移行 |
-| **Emotion Aggregator** | `/emotion-analysis/aggregation/` | 8012 | emotion-analysis-aggregator | watchme-api-opensmile-aggregator | ECR | ✅ 2025-10-22階層化 |
+| サービス | エンドポイント | ポート | EC2ディレクトリ | systemd | ECRリポジトリ/ローカル | デプロイ方式 | 備考 |
+|---------|--------------|--------|---------------|---------|------------------------|------------|------|
+| **Vault** | `https://api.hey-watch.me/` | 8000 | /home/ubuntu/watchme-vault-api | watchme-vault-api | watchme-api-vault | ECR | ✅ 2025-09-04移行済み |
+| **Admin** | `https://admin.hey-watch.me/` | 9000 | /home/ubuntu/admin | watchme-admin | watchme-admin | ECR | ✅ 稼働中 |
+| **API Manager** | `https://api.hey-watch.me/manager/` | 9001 | /home/ubuntu/watchme-api-manager | watchme-api-manager | watchme-api-manager | ECR | ✅ 2025-09-04移行済み |
+| **Scheduler** | `https://api.hey-watch.me/scheduler/` | 8015 | /home/ubuntu/watchme-scheduler | watchme-api-manager | watchme-api-manager-scheduler | ECR | ⚠️ 停止中（Lambdaに移行済み） |
+| **Janitor** | `/janitor/` | 8030 | /home/ubuntu/janitor-api | janitor-api | watchme-api-janitor | ECR | ✅ EventBridge + Lambda (`watchme-janitor-trigger`) 6時間ごと |
+| **Demo Generator** | `/demo/` | 8020 | /home/ubuntu/demo-generator-api | demo-generator-api | watchme-api-demo-generator | ECR | ✅ EventBridge + Lambda (`demo-data-generator-trigger`) 30分ごと |
+| **Audio Enhancer** | (未公開) | 8016 | /home/ubuntu/audio-enhancer-api | audio-enhancer-api | watchme-api-audio-enhancer | ローカル | 🚧 現在未使用（音声品質向上） |
+| **Avatar Uploader** | (内部) | 8014 | /home/ubuntu/watchme-avatar-uploader | watchme-avatar-uploader | watchme-api-avatar-uploader | ECR | ✅ systemd経由 |
+| **Vibe Transcriber** | `/vibe-analysis/transcription/` | 8013 | /home/ubuntu/vibe-analysis-transcriber-v2 | vibe-analysis-transcriber-v2 | watchme-api-transcriber-v2 | ECR | ✅ 2025-10-22階層化 |
+| **Vibe Aggregator** | `/vibe-analysis/aggregation/` | 8009 | /home/ubuntu/vibe-analysis-aggregator | vibe-analysis-aggregator | watchme-api-vibe-aggregator | ECR | ✅ 2025-10-22階層化 |
+| **Vibe Scorer** | `/vibe-analysis/scoring/` | 8002 | /home/ubuntu/api_gen_prompt_mood_chart | api-gpt-v1 | watchme-api-vibe-scorer | ECR | ✅ 2025-10-22階層化 |
+| **Behavior Features** | `/behavior-analysis/features/` | 8017 | /home/ubuntu/behavior-analysis-feature-extractor | behavior-analysis-feature-extractor | watchme-behavior-analysis-feature-extractor | ECR | ✅ 2025-10-28 v3 PaSST移行 |
+| **Behavior Aggregator** | `/behavior-aggregator/` | 8010 | /home/ubuntu/api-sed-aggregator | api-sed-aggregator | watchme-api-sed-aggregator | ECR | ✅ 2025-09-04移行済み |
+| **Emotion Features** | `/emotion-analysis/features/` | 8018 | /home/ubuntu/emotion-analysis-feature-extractor-v3 | emotion-analysis-feature-extractor-v3 | watchme-emotion-analysis-feature-extractor-v3 | ECR | ✅ 2025-10-26 Kushinada移行 |
+| **Emotion Aggregator** | `/emotion-analysis/aggregation/` | 8012 | /home/ubuntu/opensmile-aggregator | emotion-analysis-aggregator | watchme-api-opensmile-aggregator | ECR | ✅ 2025-10-22階層化 |
 
 ## 🎙️ 音声処理API詳細
 

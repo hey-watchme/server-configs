@@ -348,13 +348,13 @@ docker stats --no-stream
 docker network inspect watchme-network | jq '.[0].Containers | keys'
 ```
 
-#### AST APIの管理
+#### Behavior Features API (PaSST v3) の管理
 ```bash
 # 再起動
-cd /home/ubuntu/api_ast && docker-compose restart
+cd /home/ubuntu/behavior-analysis-feature-extractor && docker-compose -f docker-compose.prod.yml restart
 
 # ログ確認
-docker logs ast-api --tail 50 -f
+docker logs behavior-analysis-feature-extractor --tail 50 -f
 
 # ヘルスチェック
 curl http://localhost:8017/health

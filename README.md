@@ -210,11 +210,6 @@ graph TB
 - **利用可能**: 6GB以上（余裕あり）
 - **注意**: 将来t4g.smallに戻す可能性あり
 
-**Whisper API メモリ使用状況**:
-- **アイドル時**: ~580MB (メモリ制限1GB中 57%使用)
-- **処理中**: 800MB-1GB（制限値まで使用）
-- **⚠️ 重要**: baseモデルでも580MB必要、largeモデルは不可
-
 ### 💡 メモリ管理のベストプラクティス
 
 1. **新しいコンテナ追加時の必須チェック**:
@@ -324,7 +319,7 @@ vibe-analysis-transcriber-v2                (172.27.0.11) # Azure Speech
 behavior-analysis-sed-aggregator            (172.27.0.12) # 音声イベント集計
 watchme-admin                               (172.27.0.14) # 管理画面
 watchme-avatar-uploader                     (172.27.0.15) # アバターアップロード
-behavior-analysis-feature-extractor-v2      (172.27.0.17) # 音響イベント検出 ※8017ポート
+behavior-analysis-feature-extractor          (172.27.0.17) # 音響イベント検出 v3 PaSST ※8017ポート
 emotion-analysis-feature-extractor-v3       (172.27.0.18) # 感情認識 ※8018ポート
 janitor-api                                 (172.27.0.30) # 音声ファイル自動削除 ※8030ポート
 ```
@@ -485,7 +480,7 @@ sudo systemctl reload nginx
 
 | サービス名 | ポート | 用途 | Nginxパス | コンテナ名 | 状態 |
 |-----------|--------|------|----------|-----------|------|
-| **Behavior Features** | 8017 | 音響イベント検出（527種類） | /behavior-analysis/features/ | behavior-analysis-feature-extractor-v2 | ✅ 稼働中 |
+| **Behavior Features** | 8017 | 音響イベント検出（527種類、PaSST） | /behavior-analysis/features/ | behavior-analysis-feature-extractor | ✅ 稼働中 |
 | **Emotion Features** | 8018 | 感情認識（8感情） | /emotion-analysis/features/ | emotion-analysis-feature-extractor-v3 | ✅ 稼働中 |
 | **Vibe Transcriber** | 8013 | 音声文字起こし | /vibe-analysis/transcription/ | vibe-analysis-transcriber-v2 | ✅ 稼働中 |
 | **Janitor** | 8030 | 音声ファイル自動削除 | /janitor/ | janitor-api | ✅ 稼働中 |
