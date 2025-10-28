@@ -12,20 +12,21 @@
 - **リージョン**: ap-southeast-2 (Sydney)
 - **IPアドレス**: 3.24.16.82
 
-### リソース状況 （2025-10-26 現在）
+### リソース状況 （2025-10-28 更新）
 
 #### メモリ使用状況
 - **総メモリ**: 7.6GB
-- **使用中**: 2.4GB (31%)
-- **利用可能**: 5.2GB (68%)
-- **Swap使用**: 607MB / 2.0GB (30%)
+- **使用中**: 2.8GB (37%)
+- **利用可能**: 4.8GB (63%)
+- **Swap使用**: 1.0GB / 2.0GB (50%)
 - **バッファ/キャッシュ**: 4.8GB
 
 #### ディスク使用状況
 - **総容量**: 29GB
-- **使用中**: 22GB (77%)
-- **空き容量**: 6.6GB (23%)
-- **⚠️ 警告**: ディスク使用率が高い（80%に近い）
+- **使用中**: 26GB (91%)
+- **空き容量**: 2.8GB (9%)
+- **⚠️ 警告**: ディスク使用率が高い（90%超）
+- **推奨**: ストレージ拡張を検討（30GB → 50GB、月額+$1.60）
 
 #### リソース管理の考慮事項
 
@@ -124,7 +125,7 @@
 | **Demo Generator** | `/demo/` | 8020 | /home/ubuntu/demo-generator-api | demo-generator-api | watchme-api-demo-generator | ECR | ✅ EventBridge + Lambda (`demo-data-generator-trigger`) 30分ごと |
 | **Audio Enhancer** | (未公開) | 8016 | /home/ubuntu/audio-enhancer-api | audio-enhancer-api | watchme-api-audio-enhancer | ローカル | 🚧 現在未使用（音声品質向上） |
 | **Avatar Uploader** | (内部) | 8014 | /home/ubuntu/watchme-avatar-uploader | watchme-avatar-uploader | watchme-api-avatar-uploader | ECR | ✅ systemd経由 |
-| **Vibe Transcriber** | `/vibe-analysis/transcription/` | 8013 | /home/ubuntu/vibe-analysis-transcriber-v2 | vibe-analysis-transcriber-v2 | watchme-api-transcriber-v2 | ECR | ✅ 2025-10-22階層化 |
+| **Vibe Transcriber** | `/vibe-analysis/transcription/` | 8013 | /home/ubuntu/vibe-analysis-transcriber | vibe-analysis-transcriber | watchme-vibe-analysis-transcriber | ECR | ✅ 2025-10-28統一命名規則 |
 | **Vibe Aggregator** | `/vibe-analysis/aggregation/` | 8009 | /home/ubuntu/vibe-analysis-aggregator | vibe-analysis-aggregator | watchme-api-vibe-aggregator | ECR | ✅ 2025-10-22階層化 |
 | **Vibe Scorer** | `/vibe-analysis/scoring/` | 8002 | /home/ubuntu/api_gen_prompt_mood_chart | api-gpt-v1 | watchme-api-vibe-scorer | ECR | ✅ 2025-10-22階層化 |
 | **Behavior Features** | `/behavior-analysis/features/` | 8017 | /home/ubuntu/behavior-analysis-feature-extractor | behavior-analysis-feature-extractor | watchme-behavior-analysis-feature-extractor | ECR | ✅ 2025-10-28 v3 PaSST移行 |
@@ -211,80 +212,15 @@ WatchMeでは3種類のエンドポイントがあります：
 
 ## 📊 監視・メンテナンス
 
-### 日常監視コマンド
+> **運用手順**: 日常監視コマンド、緊急時対応、全体再起動手順などの詳細は [OPERATIONS_GUIDE.md - 監視・メンテナンス](./OPERATIONS_GUIDE.md#5-監視メンテナンス) を参照
 
-```bash
-# システム全体の状態
-free -h && df -h
+## 🔧 設定変更
 
-# 全サービス状態
-sudo systemctl status watchme-*.service | grep -E "●|Active|failed"
+> **運用手順**: systemd設定変更、Nginx設定変更、デプロイ手順などの詳細は [OPERATIONS_GUIDE.md - サーバー構成の変更手順](./OPERATIONS_GUIDE.md#2-サーバー構成の変更手順) を参照
 
-# 全コンテナ状態  
-docker ps --format "table {{.Names}}\t{{.Status}}"
+> **CI/CDプロセス**: GitHub ActionsによるCI/CDプロセスの詳細は [CI/CD標準仕様書](./CICD_STANDARD_SPECIFICATION.md) を参照
 
-# ネットワーク状態
-/home/ubuntu/watchme-server-configs/scripts/check-infrastructure.sh
-```
-
-### 緊急時対応
-
-**メモリ不足時:**
-```bash
-# 低優先度サービス停止
-sudo systemctl stop watchme-admin.service
-
-# リソースクリーンアップ
-docker system prune -f
-```
-
-**全体再起動時:**
-```bash
-# 順序: インフラ → 個別サービス
-sudo systemctl restart watchme-infrastructure.service
-sleep 30
-sudo systemctl restart watchme-vault-api.service
-sudo systemctl restart watchme-api-manager.service
-```
-
-## 🔧 設定変更手順
-
-> **📘 CI/CDプロセス**: GitHub ActionsによるCI/CDプロセスの詳細は[CI/CD標準仕様書](./CICD_STANDARD_SPECIFICATION.md)を参照
-
-### systemd設定変更
-
-```bash
-# 1. ローカルで編集
-cd /Users/kaya.matsumoto/projects/watchme/watchme-server-configs
-nano systemd/[サービス名].service
-
-# 2. コミット・プッシュ
-git add systemd/[サービス名].service
-git commit -m "fix: [サービス名]設定を修正"
-git push origin main
-
-# 3. サーバーで反映
-ssh -i ~/watchme-key.pem ubuntu@3.24.16.82
-cd /home/ubuntu/watchme-server-configs
-git pull origin main
-./setup_server.sh
-sudo systemctl restart [サービス名].service
-```
-
-### Nginx設定変更
-
-```bash
-# 1. 設定テスト
-sudo nginx -t
-
-# 2. 反映
-sudo systemctl reload nginx
-
-# 3. 確認
-curl -I https://api.hey-watch.me/
-```
-
-### Nginxタイムアウト設定
+### Nginxタイムアウト設定（技術仕様）
 
 #### 概要
 
@@ -323,73 +259,18 @@ location /behavior-analysis/features/ {
 
 #### トラブルシューティング
 
-**症状: 504 Gateway Timeout エラー**
-
-**原因**: Nginxのタイムアウトが処理時間より短い
-
-```
-実際の処理時間: 90秒
-Nginxタイムアウト: 60秒（デフォルト）
-結果: 60秒で504エラー（処理は継続中）
-```
-
-**解決方法**: 該当APIのlocationブロックにタイムアウト設定を追加
-
-```nginx
-# 例: 新しいAPIで長時間処理が必要な場合
-location /new-heavy-api/ {
-    proxy_pass http://localhost:8020/;
-    # ... 他の設定 ...
-
-    # タイムアウトを延長
-    proxy_read_timeout 300s;    # 5分まで待機
-    proxy_connect_timeout 30s;  # 接続は30秒
-    proxy_send_timeout 60s;     # 送信は60秒
-}
-```
-
-#### 設定変更時の注意事項
-
-1. **影響範囲の確認**
-   - 必要なAPIのみタイムアウトを延長（全体への影響を避ける）
-   - クライアント側のタイムアウトも確認（Lambda、ブラウザ等）
-
-2. **適切な値の選定**
-   - 平均処理時間の2-3倍を目安に設定
-   - 過度に長い設定はリソース浪費につながる
-
-3. **変更の適用手順**
-   ```bash
-   # 1. このリポジトリで設定を変更
-   # 2. GitHubにプッシュ
-   # 3. 本番サーバーで適用
-   ssh ubuntu@[SERVER_IP]
-   cd /home/ubuntu/watchme-server-configs
-   git pull origin main
-   ./setup_server.sh
-   sudo nginx -t && sudo systemctl reload nginx
-   ```
+**504 Gateway Timeout エラーが発生する場合**:
+- 症状と解決方法は [OPERATIONS_GUIDE.md - Nginxタイムアウト設定の変更](./OPERATIONS_GUIDE.md#-nginxタイムアウト設定の変更) を参照
 
 ---
 
 ## 🎯 ベストプラクティス
 
-1. **必ず本番用設定を使用**
-   - `docker-compose.prod.yml`
-   - `Dockerfile.prod`
+運用上のベストプラクティスは [OPERATIONS_GUIDE.md - ベストプラクティス](./OPERATIONS_GUIDE.md#6-ベストプラクティス) を参照してください。
 
-2. **systemd管理を徹底**
-   - 手動起動は避ける
-   - 必ず有効化する
-
-3. **ネットワーク統一**
-   - `watchme-network` のみ使用
-   - `external: true` 必須
-
-4. **ヘルスチェック実装**
-   - 全APIに `/health` エンドポイント
-   - Dockerfileにcurlインストール
-
-5. **設定の一元管理**
-   - 変更は必ずGit経由
-   - 直接編集禁止
+主な内容:
+- 本番用設定の徹底（docker-compose.prod.yml使用）
+- systemd管理の徹底（手動起動を避ける）
+- ネットワーク統一（watchme-network）
+- ヘルスチェック実装
+- 設定の一元管理（Git経由）
