@@ -54,24 +54,27 @@ systemdサービス:  {domain}-{service}
 
 ### 🔴 優先度: 高
 
-#### 1. Vibe Transcriber
+#### 1. Vibe Transcriber ✅ **完了: 2025-10-28**
 
-**現状:**
-- エンドポイント: `/vibe-analysis/transcription/` ❌
+**完了状態:**
+- エンドポイント: `/vibe-analysis/transcriber/` ✅
 - コンテナ: `vibe-analysis-transcriber` ✅
 - ECR: `watchme-vibe-analysis-transcriber` ✅
 - systemd: `vibe-analysis-transcriber` ✅
+- GitHubリポジトリ: `api-vibe-analysis-transcriber-v2` ✅
 
-**修正内容:**
-- [ ] Nginxエンドポイント: `/vibe-analysis/transcription/` → `/vibe-analysis/transcriber/`
-- [ ] Lambda関数（watchme-audio-worker）のURL修正
-- [ ] TECHNICAL_REFERENCE.mdのエンドポイント修正
-- [ ] PROCESSING_ARCHITECTURE.mdのエンドポイント修正
-- [ ] API_RESTRUCTURE_LOG.mdのエンドポイント修正
+**実施内容:**
+- [x] Nginxエンドポイント: `/vibe-analysis/transcription/` → `/vibe-analysis/transcriber/`
+- [x] Lambda関数（watchme-audio-worker）のURL修正 → デプロイ完了
+- [x] TECHNICAL_REFERENCE.mdのエンドポイント修正（5箇所）
+- [x] PROCESSING_ARCHITECTURE.mdのエンドポイント修正（2箇所）
+- [x] CI/CDワークフロー（deploy-to-ecr.yml）のURL修正
+- [x] Gitリモート: `api-asr-azure` → `api-vibe-analysis-transcriber-v2`
 
-**影響範囲:**
-- Lambda関数: watchme-audio-worker
-- ドキュメント: 3ファイル
+**確認済み:**
+- Lambda: デプロイ済み（CodeSha256: 88K3mC5QMAOpuOvak6pq34BWoS78uibHE7ptphbs4MQ=）
+- Nginx: リロード完了、構文チェックOK
+- エンドポイント: `https://api.hey-watch.me/vibe-analysis/transcriber/docs` で正常応答
 
 ---
 
@@ -304,7 +307,7 @@ systemdサービス:  {domain}-{service}
 
 各サービスの移行完了時にチェック:
 
-- [ ] Vibe Transcriber
+- [x] Vibe Transcriber ✅ **2025-10-28完了**
 - [ ] Vibe Aggregator
 - [ ] Vibe Scorer
 - [ ] Behavior Aggregator
@@ -312,4 +315,4 @@ systemdサービス:  {domain}-{service}
 - [ ] Emotion Feature Extractor
 - [ ] Emotion Aggregator
 
-**すべて完了**: ❌ 未着手
+**進捗状況**: 1/7 完了 (14.3%)
