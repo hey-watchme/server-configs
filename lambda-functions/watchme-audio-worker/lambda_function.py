@@ -79,11 +79,11 @@ def trigger_processing_pipeline(file_path, device_id, date, time_slot):
             
             print(f"Calling Azure Speech API (attempt {retry_count + 1}/{max_retries})...")
             transcribe_response = requests.post(
-                f"{API_BASE_URL}/vibe-analysis/transcription/fetch-and-transcribe",
+                f"{API_BASE_URL}/vibe-analysis/transcriber/fetch-and-transcribe",
                 json={
                     "file_paths": [file_path]
                 },
-                timeout=180
+                timeout=900
             )
             
             # 429/503の場合はリトライ
@@ -184,7 +184,7 @@ def trigger_processing_pipeline(file_path, device_id, date, time_slot):
             json={
                 "file_paths": [file_path]
             },
-            timeout=180
+            timeout=900
         )
         ast_success = ast_response.status_code == 200
         results['ast_behavior'] = {
@@ -202,7 +202,7 @@ def trigger_processing_pipeline(file_path, device_id, date, time_slot):
                         "device_id": device_id,
                         "date": date
                     },
-                    timeout=180
+                    timeout=900
                 )
                 
                 if sed_aggregator_response.status_code == 200:
@@ -241,7 +241,7 @@ def trigger_processing_pipeline(file_path, device_id, date, time_slot):
             json={
                 "file_paths": [file_path]
             },
-            timeout=180
+            timeout=900
         )
         superb_success = superb_response.status_code == 200
         results['superb_emotion'] = {
@@ -259,7 +259,7 @@ def trigger_processing_pipeline(file_path, device_id, date, time_slot):
                         "device_id": device_id,
                         "date": date
                     },
-                    timeout=180
+                    timeout=900
                 )
                 
                 if emotion_aggregator_response.status_code == 200:
@@ -302,7 +302,7 @@ def trigger_processing_pipeline(file_path, device_id, date, time_slot):
                     "failure_reason": "quota_exceeded",
                     "error_message": "Azure Speech API failed"
                 },
-                timeout=30
+                timeout=900
             )
 
             if failed_record_response.status_code == 200:
@@ -336,7 +336,7 @@ def trigger_processing_pipeline(file_path, device_id, date, time_slot):
                     "date": date,
                     "time_block": time_slot
                 },
-                timeout=180
+                timeout=900
             )
             
             if vibe_aggregator_response.status_code == 200:
@@ -365,7 +365,7 @@ def trigger_processing_pipeline(file_path, device_id, date, time_slot):
                                     "date": date,
                                     "time_block": time_slot
                                 },
-                                timeout=180
+                                timeout=900
                             )
                             
                             if vibe_scorer_response.status_code == 200:
