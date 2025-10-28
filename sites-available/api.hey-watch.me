@@ -261,6 +261,25 @@ server {
         }
     }
 
+    # Janitor API - 音声データ自動削除サービス
+    location /janitor/ {
+        proxy_pass http://localhost:8030/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # CORS設定
+        add_header "Access-Control-Allow-Origin" "*";
+        add_header "Access-Control-Allow-Methods" "GET, POST, OPTIONS";
+        add_header "Access-Control-Allow-Headers" "Content-Type, Authorization";
+
+        # OPTIONSリクエストの処理
+        if ($request_method = "OPTIONS") {
+            return 204;
+        }
+    }
+
     listen 443 ssl; # managed by Certbot
     ssl_certificate /etc/letsencrypt/live/api.hey-watch.me/fullchain.pem; # managed by Certbot
     ssl_certificate_key /etc/letsencrypt/live/api.hey-watch.me/privkey.pem; # managed by Certbot
