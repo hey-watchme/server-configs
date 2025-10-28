@@ -548,7 +548,7 @@ graph LR
 
 | カテゴリ | サービス名 | 技術 | ポート | エンドポイント | コンテナ名 | 稼働環境 |
 |---------|-----------|------|--------|--------------|-----------|----------|
-| **音声認識** | Vibe Transcriber | Azure Speech Services | 8013 | /vibe-analysis/transcription | `vibe-analysis-transcriber-v2` | EC2 (Docker) |
+| **音声認識** | Vibe Transcriber | Azure Speech Services | 8013 | /vibe-analysis/transcriber | `vibe-analysis-transcriber` | EC2 (Docker) |
 | **音響分析** | Behavior Features | 音響イベント検出（527種類） | 8017 | /behavior-analysis/features | `behavior-analysis-feature-extractor-v2` | EC2 (Docker) |
 | **感情分析** | Emotion Features | 音声感情認識（8感情） | 8018 | /emotion-analysis/features | `emotion-analysis-feature-extractor-v3` | EC2 (Docker) |
 | **集計** | Behavior Aggregator | 行動パターン分析 | 8010 | /behavior-aggregator | `behavior-analysis-sed-aggregator` | EC2 (Docker) |
@@ -572,7 +572,7 @@ graph LR
      - `http://vibe-analysis-scorer:8002/...`
      - `http://behavior-analysis-feature-extractor-v2:8017/...`
      - `http://emotion-analysis-feature-extractor-v3:8018/...`
-     - `http://vibe-analysis-transcriber-v2:8013/...`
+     - `http://vibe-analysis-transcriber:8013/...`
      - `http://behavior-analysis-sed-aggregator:8010/...`
      - `http://emotion-analysis-aggregator:8012/...`
    - ⚠️ **コンテナ名を変更する場合は、このファイルも更新が必要**

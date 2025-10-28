@@ -93,7 +93,7 @@
 172.27.0.8  : vibe-analysis-aggregator
 172.27.0.9  : vibe-analysis-scorer
 172.27.0.10 : watchme-web-prod
-172.27.0.11 : vibe-analysis-transcriber-v2
+172.27.0.11 : vibe-analysis-transcriber
 172.27.0.12 : behavior-analysis-sed-aggregator
 172.27.0.14 : watchme-admin
 172.27.0.15 : watchme-avatar-uploader
@@ -125,7 +125,7 @@
 | **Demo Generator** | `/demo/` | 8020 | /home/ubuntu/demo-generator-api | demo-generator-api | watchme-api-demo-generator | ECR | ✅ EventBridge + Lambda (`demo-data-generator-trigger`) 30分ごと |
 | **Audio Enhancer** | (未公開) | 8016 | /home/ubuntu/audio-enhancer-api | audio-enhancer-api | watchme-api-audio-enhancer | ローカル | 🚧 現在未使用（音声品質向上） |
 | **Avatar Uploader** | (内部) | 8014 | /home/ubuntu/watchme-avatar-uploader | watchme-avatar-uploader | watchme-api-avatar-uploader | ECR | ✅ systemd経由 |
-| **Vibe Transcriber** | `/vibe-analysis/transcription/` | 8013 | /home/ubuntu/vibe-analysis-transcriber | vibe-analysis-transcriber | watchme-vibe-analysis-transcriber | ECR | ✅ 2025-10-28統一命名規則 |
+| **Vibe Transcriber** | `/vibe-analysis/transcriber/` | 8013 | /home/ubuntu/vibe-analysis-transcriber | vibe-analysis-transcriber | watchme-vibe-analysis-transcriber | ECR | ✅ 2025-10-28統一命名規則 |
 | **Vibe Aggregator** | `/vibe-analysis/aggregation/` | 8009 | /home/ubuntu/vibe-analysis-aggregator | vibe-analysis-aggregator | watchme-api-vibe-aggregator | ECR | ✅ 2025-10-22階層化 |
 | **Vibe Scorer** | `/vibe-analysis/scoring/` | 8002 | /home/ubuntu/api_gen_prompt_mood_chart | api-gpt-v1 | watchme-api-vibe-scorer | ECR | ✅ 2025-10-22階層化 |
 | **Behavior Features** | `/behavior-analysis/features/` | 8017 | /home/ubuntu/behavior-analysis-feature-extractor | behavior-analysis-feature-extractor | watchme-behavior-analysis-feature-extractor | ECR | ✅ 2025-10-28 v3 PaSST移行 |
@@ -191,13 +191,13 @@ WatchMeでは3種類のエンドポイントがあります：
 
 #### 1. 内部通信用（watchme-network内）
 - **形式**: `http://コンテナ名:ポート/endpoint`
-- **例**: `http://vibe-analysis-transcriber-v2:8013/fetch-and-transcribe`
+- **例**: `http://vibe-analysis-transcriber:8013/fetch-and-transcribe`
 - **用途**: watchme-network内でのコンテナ間通信
 - **使用者**: API Manager（スケジューラー）など
 
 #### 2. 外部公開用（Nginx経由）
 - **形式**: `https://api.hey-watch.me/[階層化パス]/`
-- **例**: `https://api.hey-watch.me/vibe-analysis/transcription/`
+- **例**: `https://api.hey-watch.me/vibe-analysis/transcriber/`
 - **用途**: Lambda関数、外部からのアクセス
 - **特徴**: HTTPSで安全、Nginxでルーティング
 
@@ -233,7 +233,7 @@ Nginxがリバースプロキシとして各APIにリクエストを転送する
 |-----|------|------------|-------------|------|
 | **Behavior Features** | /behavior-analysis/features/ | **180秒** | 60-90秒 | 音響イベント検出（大規模モデル） |
 | **Emotion Features** | /emotion-analysis/features/ | **180秒** | 30-60秒 | 感情認識処理 |
-| **Vibe Transcriber** | /vibe-analysis/transcription/ | **180秒** | 15-30秒 | 音声文字起こし |
+| **Vibe Transcriber** | /vibe-analysis/transcriber/ | **180秒** | 15-30秒 | 音声文字起こし |
 | **Vibe Aggregator** | /vibe-analysis/aggregation/ | 60秒（デフォルト） | 5-10秒 | プロンプト生成 |
 | **Vibe Scorer** | /vibe-analysis/scoring/ | 60秒（デフォルト） | 10-15秒 | ChatGPT分析 |
 | **その他のAPI** | - | 60秒（デフォルト） | < 10秒 | 軽量処理 |
