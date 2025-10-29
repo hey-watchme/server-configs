@@ -78,25 +78,31 @@ systemdサービス:  {domain}-{service}
 
 ---
 
-#### 2. Vibe Aggregator
+#### 2. Vibe Aggregator ✅ **完了: 2025-10-28**
 
-**現状:**
-- エンドポイント: `/vibe-analysis/aggregation/` ❌
-- コンテナ: `vibe-analysis-aggregator` ✅
+**完了状態:**
+- エンドポイント: `/vibe-analysis/aggregator/` ✅
+- コンテナ: `api_gen_prompt_mood_chart` ⚠️（統一前の名前）
 - ECR: `watchme-api-vibe-aggregator` ⚠️（prefixが違う）
-- systemd: `vibe-analysis-aggregator` ✅
+- systemd: （コンテナ名に依存）⚠️
 
-**修正内容:**
-- [ ] Nginxエンドポイント: `/vibe-analysis/aggregation/` → `/vibe-analysis/aggregator/`
-- [ ] Lambda関数（watchme-audio-worker, watchme-dashboard-summary-worker）のURL修正
-- [ ] ECRリポジトリ名: 新しく `watchme-vibe-analysis-aggregator` を作成、旧削除
-- [ ] GitHub Actions CI/CD: ECRリポジトリ名修正
-- [ ] ドキュメント修正
+**実施内容:**
+- [x] Nginxエンドポイント: `/vibe-aggregator/` → `/vibe-analysis/aggregator/`
+- [x] Lambda関数（watchme-audio-worker）のURL修正 → デプロイ完了
+- [x] Lambda関数（watchme-dashboard-summary-worker）のURL修正 → デプロイ完了
+- [x] TECHNICAL_REFERENCE.mdのエンドポイント修正
+- [ ] ECRリポジトリ名: 新しく `watchme-vibe-analysis-aggregator` を作成、旧削除（保留）
+- [ ] コンテナ名: `api_gen_prompt_mood_chart` → `vibe-analysis-aggregator`（保留）
+- [ ] GitHub Actions CI/CD: ECRリポジトリ名修正（保留）
 
-**影響範囲:**
-- Lambda関数: 2つ
-- ECRリポジトリ: 再作成必要
-- ドキュメント: 3ファイル
+**確認済み:**
+- Lambda: デプロイ済み（audio-worker, dashboard-summary-worker）
+- Nginx: リロード完了、構文チェックOK
+- エンドポイント: `https://api.hey-watch.me/vibe-analysis/aggregator/health` で正常応答
+
+**注意:**
+- エンドポイントのみ統一完了（オプション1）
+- コンテナ名・ECRリポジトリ名の統一は将来実施予定（オプション2）
 
 ---
 
@@ -154,14 +160,21 @@ systemdサービス:  {domain}-{service}
 
 #### 5. Behavior Feature Extractor
 
-**現状:**
-- エンドポイント: `/behavior-analysis/features/` ❌
+**現状（2025-10-29更新）:**
+- エンドポイント: `/behavior-analysis/features/` ❌ **Nginxに設定なし（404）**
 - コンテナ: `behavior-analysis-feature-extractor` ✅
 - ECR: `watchme-behavior-analysis-feature-extractor` ✅
 - systemd: `behavior-analysis-feature-extractor` ✅
 
+**発見した問題（2025-10-29）:**
+- Nginxに `/behavior-analysis/features/` のlocationブロックが存在しない
+- `/behavior-features/` のみ存在（旧パス）
+- Lambda（watchme-audio-worker）は `/behavior-analysis/features/fetch-and-process-paths` を呼んでいる
+- 結果：Lambda → Nginx → 404 Not Found
+
 **修正内容:**
-- [ ] Nginxエンドポイント: `/behavior-analysis/features/` → `/behavior-analysis/feature-extractor/`
+- [x] **緊急対応**: Nginxに `/behavior-analysis/features/` を追加（2025-10-29）
+- [ ] **将来対応**: エンドポイント名を `/behavior-analysis/feature-extractor/` に統一
 - [ ] Lambda関数（watchme-audio-worker）のURL修正
 - [ ] ドキュメント修正
 
@@ -308,11 +321,13 @@ systemdサービス:  {domain}-{service}
 各サービスの移行完了時にチェック:
 
 - [x] Vibe Transcriber ✅ **2025-10-28完了**
-- [ ] Vibe Aggregator
+- [x] Vibe Aggregator ✅ **2025-10-28完了（エンドポイントのみ）**
 - [ ] Vibe Scorer
 - [ ] Behavior Aggregator
 - [ ] Behavior Feature Extractor
 - [ ] Emotion Feature Extractor
 - [ ] Emotion Aggregator
 
-**進捗状況**: 1/7 完了 (14.3%)
+**進捗状況**: 2/7 完了 (28.6%)
+
+**注意**: Vibe Aggregatorはエンドポイントのみ統一（オプション1）。コンテナ名・ECRリポジトリは未統一。
