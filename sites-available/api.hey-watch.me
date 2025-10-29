@@ -35,13 +35,18 @@ server {
         }
     }
 
-    # VibeGraph Generation API (vibe-scorer)
-    location /vibe-scorer/ {
+    # Vibe Analysis Scorer API - 統一命名規則に従って修正 (2025-10-29)
+    location /vibe-analysis/scoring/ {
         proxy_pass http://localhost:8002/;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+
+        # タイムアウト設定（180秒）
+        proxy_read_timeout 180s;
+        proxy_connect_timeout 180s;
+        proxy_send_timeout 180s;
 
         # CORS設定
         add_header "Access-Control-Allow-Origin" "*";
