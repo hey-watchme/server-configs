@@ -78,7 +78,7 @@ systemdサービス:  {domain}-{service}
 
 ---
 
-#### 2. Vibe Aggregator ✅ **完了: 2025-10-28**
+#### 2. Vibe Aggregator ✅ **完了: 2025-10-29**
 
 **完了状態:**
 - エンドポイント: `/vibe-analysis/aggregator/` ✅
@@ -87,10 +87,11 @@ systemdサービス:  {domain}-{service}
 - systemd: （コンテナ名に依存）⚠️
 
 **実施内容:**
-- [x] Nginxエンドポイント: `/vibe-aggregator/` → `/vibe-analysis/aggregator/`
+- [x] Nginxエンドポイント: `/vibe-aggregator/` → `/vibe-analysis/aggregator/` + タイムアウト設定（180秒）
 - [x] Lambda関数（watchme-audio-worker）のURL修正 → デプロイ完了
 - [x] Lambda関数（watchme-dashboard-summary-worker）のURL修正 → デプロイ完了
 - [x] TECHNICAL_REFERENCE.mdのエンドポイント修正
+- [x] 本番環境反映（git pull + nginx reload）✅ **2025-10-29**
 - [ ] ECRリポジトリ名: 新しく `watchme-vibe-analysis-aggregator` を作成、旧削除（保留）
 - [ ] コンテナ名: `api_gen_prompt_mood_chart` → `vibe-analysis-aggregator`（保留）
 - [ ] GitHub Actions CI/CD: ECRリポジトリ名修正（保留）
@@ -98,7 +99,7 @@ systemdサービス:  {domain}-{service}
 **確認済み:**
 - Lambda: デプロイ済み（audio-worker, dashboard-summary-worker）
 - Nginx: リロード完了、構文チェックOK
-- エンドポイント: `https://api.hey-watch.me/vibe-analysis/aggregator/health` で正常応答
+- エンドポイント: `https://api.hey-watch.me/vibe-analysis/aggregator/health` で正常応答 ✅
 
 **注意:**
 - エンドポイントのみ統一完了（オプション1）
@@ -106,29 +107,30 @@ systemdサービス:  {domain}-{service}
 
 ---
 
-#### 3. Vibe Scorer
+#### 3. Vibe Scorer ✅ **完了: 2025-10-29**
 
-**現状:**
-- エンドポイント: `/vibe-analysis/scoring/` ❌
-- コンテナ: `api-gpt-v1` ❌ **完全に違う**
+**完了状態:**
+- エンドポイント: `/vibe-analysis/scoring/` ✅
+- コンテナ: `api-gpt-v1` ⚠️（統一前の名前）
 - ECR: `watchme-api-vibe-scorer` ⚠️
-- systemd: `api-gpt-v1` ❌
+- systemd: `api-gpt-v1` ⚠️
 
-**修正内容:**
-- [ ] Nginxエンドポイント: `/vibe-analysis/scoring/` → `/vibe-analysis/scorer/`
-- [ ] コンテナ名: `api-gpt-v1` → `vibe-analysis-scorer`
-- [ ] systemd: `api-gpt-v1` → `vibe-analysis-scorer`
-- [ ] ECRリポジトリ名: `watchme-api-vibe-scorer` → `watchme-vibe-analysis-scorer`
-- [ ] Lambda関数（watchme-audio-worker, watchme-dashboard-analysis-worker）のURL修正
-- [ ] docker-compose.prod.yml修正
-- [ ] ドキュメント修正
+**実施内容:**
+- [x] Nginxエンドポイント: `/vibe-scorer/` → `/vibe-analysis/scoring/` + タイムアウト設定（180秒）✅ **2025-10-29**
+- [x] 本番環境反映（git pull + nginx reload）✅ **2025-10-29**
+- [ ] コンテナ名: `api-gpt-v1` → `vibe-analysis-scorer`（保留）
+- [ ] systemd: `api-gpt-v1` → `vibe-analysis-scorer`（保留）
+- [ ] ECRリポジトリ名: `watchme-api-vibe-scorer` → `watchme-vibe-analysis-scorer`（保留）
+- [ ] docker-compose.prod.yml修正（保留）
 
-**影響範囲:**
-- Lambda関数: 2つ
-- コンテナ名: 変更必要（大きな変更）
-- ECRリポジトリ: 再作成必要
-- systemdサービス: 再作成必要
-- ドキュメント: 3ファイル
+**確認済み:**
+- Nginx: リロード完了、構文チェックOK
+- エンドポイント: `https://api.hey-watch.me/vibe-analysis/scoring/health` で正常応答 ✅
+
+**注意:**
+- エンドポイントのみ統一完了（オプション1）
+- Lambda関数は既に `/vibe-analysis/scoring/analyze-timeblock` を使用していた
+- コンテナ名・ECRリポジトリ名の統一は将来実施予定（オプション2）
 
 ---
 
@@ -305,13 +307,13 @@ systemdサービス:  {domain}-{service}
 各サービスの移行完了時にチェック:
 
 - [x] Vibe Transcriber ✅ **2025-10-28完了**
-- [x] Vibe Aggregator ✅ **2025-10-28完了（エンドポイントのみ）**
-- [ ] Vibe Scorer
+- [x] Vibe Aggregator ✅ **2025-10-29完了（エンドポイントのみ）**
+- [x] Vibe Scorer ✅ **2025-10-29完了（エンドポイントのみ）**
 - [ ] Behavior Aggregator
 - [ ] Behavior Feature Extractor
 - [x] Emotion Feature Extractor ✅ **2025-10-29完了（エンドポイントのみ）**
 - [x] Emotion Aggregator ✅ **2025-10-29完了（エンドポイントのみ）**
 
-**進捗状況**: 4/7 完了 (57.1%)
+**進捗状況**: 5/7 完了 (71.4%)
 
-**注意**: Vibe Aggregator、Emotion Feature Extractor、Emotion Aggregatorはエンドポイントのみ統一（オプション1）。コンテナ名・ECRリポジトリは未統一。
+**注意**: Vibe Aggregator、Vibe Scorer、Emotion Feature Extractor、Emotion Aggregatorはエンドポイントのみ統一（オプション1）。コンテナ名・ECRリポジトリは未統一。
