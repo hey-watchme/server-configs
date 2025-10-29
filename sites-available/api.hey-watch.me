@@ -69,43 +69,50 @@ server {
         }
     }
 
-    # SUPERB API (emotion-features) - 新APIに移行済み
+    # Emotion Analysis API - 統一命名規則に従って修正 (2025-10-29)
 
-    # OpenSMILE Aggregator API (emotion-aggregator)
-    location /emotion-aggregator/ {
+    # Emotion Aggregator API
+    location /emotion-analysis/aggregator/ {
         proxy_pass http://localhost:8012/;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        
+
+        # タイムアウト設定（180秒）
+        proxy_read_timeout 180s;
+        proxy_connect_timeout 180s;
+        proxy_send_timeout 180s;
+
         # CORS設定
         add_header "Access-Control-Allow-Origin" "*";
         add_header "Access-Control-Allow-Methods" "GET, POST, OPTIONS, DELETE";
         add_header "Access-Control-Allow-Headers" "Content-Type, Authorization";
-        
+
         # OPTIONSリクエストの処理
         if ($request_method = "OPTIONS") {
             return 204;
         }
     }
-    location /emotion-features/ {
+
+    # Emotion Feature Extractor API (Kushinada)
+    location /emotion-analysis/feature-extractor/ {
         proxy_pass http://localhost:8018/;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        
-        # タイムアウト設定を追加（180秒）
+
+        # タイムアウト設定（180秒）
         proxy_read_timeout 180s;
         proxy_connect_timeout 180s;
         proxy_send_timeout 180s;
-        
+
         # CORS設定
         add_header "Access-Control-Allow-Origin" "*";
         add_header "Access-Control-Allow-Methods" "GET, POST, OPTIONS";
         add_header "Access-Control-Allow-Headers" "Content-Type, Authorization";
-        
+
         # OPTIONSリクエストの処理
         if ($request_method = "OPTIONS") {
             return 204;

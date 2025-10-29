@@ -237,7 +237,7 @@ def trigger_processing_pipeline(file_path, device_id, date, time_slot):
     try:
         print(f"Calling SUPERB API for emotion recognition...")
         superb_response = requests.post(
-            f"{API_BASE_URL}/emotion-analysis/features/process/emotion-features",
+            f"{API_BASE_URL}/emotion-analysis/feature-extractor/process/emotion-features",
             json={
                 "file_paths": [file_path]
             },
@@ -254,7 +254,7 @@ def trigger_processing_pipeline(file_path, device_id, date, time_slot):
             print(f"SUPERB API successful. Starting Emotion Aggregator...")
             try:
                 emotion_aggregator_response = requests.post(
-                    f"{API_BASE_URL}/emotion-analysis/aggregation/analyze/opensmile-aggregator",
+                    f"{API_BASE_URL}/emotion-analysis/aggregator/analyze/opensmile-aggregator",
                     json={
                         "device_id": device_id,
                         "date": date
@@ -294,7 +294,7 @@ def trigger_processing_pipeline(file_path, device_id, date, time_slot):
         print(f"⚠️ Azure API failed. Creating failed record in dashboard table...")
         try:
             failed_record_response = requests.post(
-                f"{API_BASE_URL}/vibe-analysis/aggregation/create-failed-record",
+                f"{API_BASE_URL}/vibe-analysis/aggregator/create-failed-record",
                 params={
                     "device_id": device_id,
                     "date": date,
@@ -330,7 +330,7 @@ def trigger_processing_pipeline(file_path, device_id, date, time_slot):
         print(f"All APIs successful. Starting Vibe Aggregator...")
         try:
             vibe_aggregator_response = requests.get(
-                f"{API_BASE_URL}/vibe-analysis/aggregation/generate-timeblock-prompt",
+                f"{API_BASE_URL}/vibe-analysis/aggregator/generate-timeblock-prompt",
                 params={
                     "device_id": device_id,
                     "date": date,
