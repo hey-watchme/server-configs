@@ -184,71 +184,55 @@ systemdサービス:  {domain}-{service}
 
 ---
 
-#### 5. Emotion Feature Extractor
+#### 6. Emotion Feature Extractor ✅ **完了: 2025-10-29**
 
-**現状:**
-- エンドポイント: `/emotion-analysis/features/` ❌
-- コンテナ: `emotion-analysis-feature-extractor-v3` ⚠️（バージョン番号）
-- ECR: `watchme-emotion-analysis-feature-extractor-v3` ⚠️
-- systemd: `emotion-analysis-feature-extractor-v3` ⚠️
+**完了状態:**
+- エンドポイント: `/emotion-analysis/feature-extractor/` ✅
+- コンテナ: `emotion-analysis-feature-extractor-v3` ⚠️（バージョン番号は保留）
+- ECR: `watchme-emotion-analysis-feature-extractor-v3` ⚠️（バージョン番号は保留）
+- systemd: `emotion-analysis-feature-extractor-v3` ⚠️（バージョン番号は保留）
 
-**修正内容:**
-- [ ] Nginxエンドポイント: `/emotion-analysis/features/` → `/emotion-analysis/feature-extractor/`
-- [ ] コンテナ名: `-v3` を削除検討（バージョン管理はECRタグで）
-- [ ] ECRリポジトリ名: `-v3` を削除検討
-- [ ] systemd: `-v3` を削除検討
-- [ ] Lambda関数（watchme-audio-worker）のURL修正
-- [ ] ドキュメント修正
+**実施内容:**
+- [x] Nginxエンドポイント: `/emotion-features/` → `/emotion-analysis/feature-extractor/`
+- [x] Lambda関数（watchme-audio-worker）のURL修正 → デプロイ完了
+- [x] README.mdの更新（ルーティング詳細セクション追加）
+- [ ] コンテナ名: `-v3` を削除（将来実施）
+- [ ] ECRリポジトリ名: `-v3` を削除（将来実施）
+- [ ] systemd: `-v3` を削除（将来実施）
 
-**影響範囲:**
-- Lambda関数: 1つ
-- バージョン番号削除: 要検討
-- ドキュメント: 3ファイル
+**確認済み:**
+- Lambda: デプロイ済み（CodeSha256: zbah+C5kg8HVONsm3VWgtBSG/54SleapLx+0bn07apw=）
+- Nginx: リロード完了、構文チェックOK
+- エンドポイント: `https://api.hey-watch.me/emotion-analysis/feature-extractor/` で正常応答
 
----
-
-#### 6. Emotion Feature Extractor
-
-**現状:**
-- エンドポイント: `/emotion-analysis/features/` ❌
-- コンテナ: `emotion-analysis-feature-extractor-v3` ⚠️（バージョン番号）
-- ECR: `watchme-emotion-analysis-feature-extractor-v3` ⚠️
-- systemd: `emotion-analysis-feature-extractor-v3` ⚠️
-
-**修正内容:**
-- [ ] Nginxエンドポイント: `/emotion-analysis/features/` → `/emotion-analysis/feature-extractor/`
-- [ ] コンテナ名: `-v3` を削除検討（バージョン管理はECRタグで）
-- [ ] ECRリポジトリ名: `-v3` を削除検討
-- [ ] systemd: `-v3` を削除検討
-- [ ] Lambda関数（watchme-audio-worker）のURL修正
-- [ ] ドキュメント修正
-
-**影響範囲:**
-- Lambda関数: 1つ
-- バージョン番号削除: 要検討
-- ドキュメント: 3ファイル
+**注意:**
+- エンドポイントのみ統一完了（オプション1）
+- コンテナ名・ECRリポジトリ名の統一は将来実施予定（オプション2）
 
 ---
 
-#### 7. Emotion Aggregator
+#### 7. Emotion Aggregator ✅ **完了: 2025-10-29**
 
-**現状:**
-- エンドポイント: `/emotion-analysis/aggregation/` ❌
+**完了状態:**
+- エンドポイント: `/emotion-analysis/aggregator/` ✅
 - コンテナ: `emotion-analysis-aggregator` ✅
-- ECR: `watchme-api-opensmile-aggregator` ❌ **完全に違う**
+- ECR: `watchme-api-opensmile-aggregator` ⚠️（統一前の名前）
 - systemd: `emotion-analysis-aggregator` ✅
 
-**修正内容:**
-- [ ] Nginxエンドポイント: `/emotion-analysis/aggregation/` → `/emotion-analysis/aggregator/`
-- [ ] ECRリポジトリ名: 新しく `watchme-emotion-analysis-aggregator` を作成、旧削除
-- [ ] GitHub Actions CI/CD: ECRリポジトリ名修正
-- [ ] Lambda関数（watchme-audio-worker）のURL修正（Emotion Features成功時に自動起動）
-- [ ] ドキュメント修正
+**実施内容:**
+- [x] Nginxエンドポイント: `/emotion-aggregator/` → `/emotion-analysis/aggregator/`
+- [x] Lambda関数（watchme-audio-worker）のURL修正 → デプロイ完了
+- [ ] ECRリポジトリ名: 新しく `watchme-emotion-analysis-aggregator` を作成、旧削除（保留）
+- [ ] GitHub Actions CI/CD: ECRリポジトリ名修正（保留）
 
-**影響範囲:**
-- Lambda関数: 1つ
-- ECRリポジトリ: 再作成必要
-- ドキュメント: 3ファイル
+**確認済み:**
+- Lambda: デプロイ済み（CodeSha256: zbah+C5kg8HVONsm3VWgtBSG/54SleapLx+0bn07apw=）
+- Nginx: リロード完了、構文チェックOK
+- エンドポイント: `https://api.hey-watch.me/emotion-analysis/aggregator/` で正常応答
+
+**注意:**
+- エンドポイントのみ統一完了（オプション1）
+- ECRリポジトリ名の統一は将来実施予定（オプション2）
 
 ---
 
@@ -325,9 +309,9 @@ systemdサービス:  {domain}-{service}
 - [ ] Vibe Scorer
 - [ ] Behavior Aggregator
 - [ ] Behavior Feature Extractor
-- [ ] Emotion Feature Extractor
-- [ ] Emotion Aggregator
+- [x] Emotion Feature Extractor ✅ **2025-10-29完了（エンドポイントのみ）**
+- [x] Emotion Aggregator ✅ **2025-10-29完了（エンドポイントのみ）**
 
-**進捗状況**: 2/7 完了 (28.6%)
+**進捗状況**: 4/7 完了 (57.1%)
 
-**注意**: Vibe Aggregatorはエンドポイントのみ統一（オプション1）。コンテナ名・ECRリポジトリは未統一。
+**注意**: Vibe Aggregator、Emotion Feature Extractor、Emotion Aggregatorはエンドポイントのみ統一（オプション1）。コンテナ名・ECRリポジトリは未統一。
