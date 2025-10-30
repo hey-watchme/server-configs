@@ -126,8 +126,8 @@
 | **Audio Enhancer** | (未公開) | 8016 | /home/ubuntu/audio-enhancer-api | audio-enhancer-api | watchme-api-audio-enhancer | ローカル | 🚧 現在未使用（音声品質向上） |
 | **Avatar Uploader** | (内部) | 8014 | /home/ubuntu/watchme-avatar-uploader | watchme-avatar-uploader | watchme-api-avatar-uploader | ECR | ✅ systemd経由 |
 | **Vibe Transcriber** | `/vibe-analysis/transcriber/` | 8013 | /home/ubuntu/vibe-analysis-transcriber | vibe-analysis-transcriber | watchme-vibe-analysis-transcriber | ECR | ✅ 2025-10-28統一命名規則 |
-| **Vibe Aggregator** | `/vibe-analysis/aggregation/` | 8009 | /home/ubuntu/vibe-analysis-aggregator | vibe-analysis-aggregator | watchme-api-vibe-aggregator | ECR | ✅ 2025-10-22階層化 |
-| **Vibe Scorer** | `/vibe-analysis/scoring/` | 8002 | /home/ubuntu/api_gen_prompt_mood_chart | api-gpt-v1 | watchme-api-vibe-scorer | ECR | ✅ 2025-10-22階層化 |
+| **Vibe Aggregator** | `/vibe-analysis/aggregator/` | 8009 | /home/ubuntu/vibe-analysis-aggregator | api_gen_prompt_mood_chart | watchme-api-vibe-aggregator | ECR | ✅ 2025-10-28エンドポイント統一 |
+| **Vibe Scorer** | `/vibe-analysis/scoring/` | 8002 | /home/ubuntu/vibe-analysis-scorer | vibe-analysis-scorer | watchme-vibe-analysis-scorer | ECR | ✅ 2025-10-30完全統一 |
 | **Behavior Features** | `/behavior-analysis/features/` | 8017 | /home/ubuntu/behavior-analysis-feature-extractor | behavior-analysis-feature-extractor | watchme-behavior-analysis-feature-extractor | ECR | ✅ 2025-10-28 v3 PaSST移行 |
 | **Behavior Aggregator** | `/behavior-aggregator/` | 8010 | /home/ubuntu/api-sed-aggregator | api-sed-aggregator | watchme-api-sed-aggregator | ECR | ✅ 2025-09-04移行済み |
 | **Emotion Features** | `/emotion-analysis/features/` | 8018 | /home/ubuntu/emotion-analysis-feature-extractor-v3 | emotion-analysis-feature-extractor-v3 | watchme-emotion-analysis-feature-extractor-v3 | ECR | ✅ 2025-10-26 Kushinada移行 |
@@ -234,7 +234,7 @@ Nginxがリバースプロキシとして各APIにリクエストを転送する
 | **Behavior Features** | /behavior-analysis/features/ | **180秒** | 60-90秒 | 音響イベント検出（大規模モデル） |
 | **Emotion Features** | /emotion-analysis/features/ | **180秒** | 30-60秒 | 感情認識処理 |
 | **Vibe Transcriber** | /vibe-analysis/transcriber/ | **180秒** | 15-30秒 | 音声文字起こし |
-| **Vibe Aggregator** | /vibe-analysis/aggregation/ | 60秒（デフォルト） | 5-10秒 | プロンプト生成 |
+| **Vibe Aggregator** | /vibe-analysis/aggregator/ | 60秒（デフォルト） | 5-10秒 | プロンプト生成 |
 | **Vibe Scorer** | /vibe-analysis/scoring/ | 60秒（デフォルト） | 10-15秒 | ChatGPT分析 |
 | **その他のAPI** | - | 60秒（デフォルト） | < 10秒 | 軽量処理 |
 
