@@ -70,7 +70,7 @@ graph TB
             subgraph Processing["🎙️ 音声処理層"]
                 BehaviorFeatures["Behavior Features<br/>:8017<br/>(527種類の音響検出)"]
                 EmotionFeatures["Emotion Features<br/>:8018<br/>(8感情認識)"]
-                VibeTranscriber["Vibe Transcriber<br/>:8013<br/>(Azure Speech)"]
+                VibeTranscriber["Vibe Transcriber<br/>:8013<br/>(Groq Whisper v3)"]
             end
 
             subgraph Aggregation["📊 集計・分析層"]
@@ -161,13 +161,13 @@ graph TB
 | **リバースプロキシ** | Nginx設定、ルーティング | sites-available/ |
 | **プロセス管理** | systemdサービス、自動起動 | systemd/ |
 
-### 🔧 現在の環境
+### 🌏 AWSリージョン構成
 
-| 項目 | 値 |
-|------|-----|
-| **リージョン** | ap-southeast-2 (シドニー) |
-| **状態** | 稼働中 |
-| **移行予定** | ap-northeast-1 (東京) - [移行ガイド](./REGION_MIGRATION_GUIDE.md) 📋 |
+全てのAWSリソース（EC2、ECR、Lambda、S3、EventBridge）は **ap-southeast-2 (Sydney)** に統一されています。
+
+> **詳細情報**: リージョン別リソース一覧、設定の統一、移行計画は [TECHNICAL_REFERENCE.md - AWSリージョン構成](./TECHNICAL_REFERENCE.md#awsリージョン構成-更新-2025-10-26) を参照
+
+> **移行計画**: 東京リージョン (ap-northeast-1) への移行手順は [REGION_MIGRATION_GUIDE.md](./REGION_MIGRATION_GUIDE.md) を参照
 
 ### ⚡ クイックアクセス
 
@@ -192,45 +192,18 @@ graph TB
 
 ## 🖥️ インフラストラクチャ
 
-### EC2インスタンス仕様
-- **インスタンスタイプ**: t4g.large (一時的にアップグレード済み、以前はt4g.small)
-- **CPU**: 2 vCPU (AWS Graviton2 Processor - Neoverse-N1)
-- **メモリ**: 8.0GB RAM (実使用可能: 7.8GB)
-- **ストレージ**: 30GB gp3 SSD
-- **ネットワーク**: 最大 5 Gigabit
-- **リージョン**: ap-southeast-2 (Sydney)
-- **更新日**: 2025-09-19 (t4g.smallからt4g.largeへアップグレード)
+### EC2インスタンス概要
 
-### 📋 リソース使用状況（t4g.large）
+| 項目 | 値 |
+|------|-----|
+| **インスタンスタイプ** | t4g.large (2025-09-19アップグレード) |
+| **CPU** | 2 vCPU (AWS Graviton2) |
+| **メモリ** | 8.0GB RAM |
+| **ストレージ** | 30GB gp3 SSD |
+| **リージョン** | ap-southeast-2 (Sydney) |
+| **IPアドレス** | 3.24.16.82 |
 
-**メモリ状況（大幅改善）**:
-- **総メモリ**: 7.8GB (OS込み)
-- **以前の使用量**: ~1.4GB (t4g.small時代は78%使用率)
-- **Swap**: 2.0GB (必要に応じて調整可能)
-- **利用可能**: 6GB以上（余裕あり）
-- **注意**: 将来t4g.smallに戻す可能性あり
-
-### 💡 メモリ管理のベストプラクティス
-
-1. **新しいコンテナ追加時の必須チェック**:
-   ```bash
-   # メモリ使用量確認
-   docker stats --no-stream
-   free -h
-   
-   # 必要に応じてメモリ制限設定
-   docker run --memory="500m" --cpus="0.5" ...
-   ```
-
-2. **メモリ不足時の対応手順**:
-   ```bash
-   # 不要なコンテナを一時停止
-   docker stop <低優先度コンテナ>
-   
-   # Dockerリソースクリーンアップ
-   docker system prune -f
-   docker image prune -a -f
-   ```
+> **詳細情報**: リソース使用状況、メモリ管理、Kushinada移行によるリソース影響などの詳細は [TECHNICAL_REFERENCE.md - システムアーキテクチャ](./TECHNICAL_REFERENCE.md#🏗️-システムアーキテクチャ) を参照
 
 ## 🔐 リポジトリの役割と制約
 
@@ -293,71 +266,19 @@ watchme-server-configs/
 
 ## 🌐 ネットワークインフラ構成
 
-### 🔗 watchme-network構成
+### watchme-network 概要
 
 全マイクロサービスが相互通信するための共有Dockerネットワークです。
 
-| 設定項目 | 値 | 説明 |
-|---------|-----|------|
-| **ネットワーク名** | watchme-network | 共有ネットワーク |
+| 設定項目 | 値 |
+|---------|-----|
+| **ネットワーク名** | watchme-network |
+| **サブネット** | 172.27.0.0/16 |
+| **ゲートウェイ** | 172.27.0.1 |
+| **管理サービス** | watchme-infrastructure (systemd) |
+| **稼働コンテナ数** | 15サービス |
 
-| **サブネット** | 172.27.0.0/16 | IPアドレス範囲 |
-| **ゲートウェイ** | 172.27.0.1 | デフォルトゲートウェイ |
-| **管理サービス** | watchme-infrastructure | systemdサービス |
-| **作成日** | 2025-08-06 | - |
-
-### 📡 接続コンテナ一覧（2025年10月23日更新）
-```
-watchme-api-manager-prod                    (172.27.0.4)  # API管理UI
-watchme-scheduler-prod                      (172.27.0.5)  # スケジューラー
-emotion-analysis-aggregator                 (172.27.0.6)  # 感情スコア集計
-watchme-vault-api                           (172.27.0.7)  # Gateway API
-vibe-analysis-aggregator                    (172.27.0.8)  # Vibe Aggregator
-vibe-analysis-scorer                        (172.27.0.9)  # スコアリング
-watchme-web-prod                            (172.27.0.10) # Webダッシュボード
-vibe-analysis-transcriber-v2                (172.27.0.11) # Azure Speech
-behavior-analysis-sed-aggregator            (172.27.0.12) # 音声イベント集計
-watchme-admin                               (172.27.0.14) # 管理画面
-watchme-avatar-uploader                     (172.27.0.15) # アバターアップロード
-behavior-analysis-feature-extractor          (172.27.0.17) # 音響イベント検出 v3 PaSST ※8017ポート
-emotion-analysis-feature-extractor-v3       (172.27.0.18) # 感情認識 ※8018ポート
-janitor-api                                 (172.27.0.30) # 音声ファイル自動削除 ※8030ポート
-```
-
-### 📋 システム状態
-
-| 項目 | 状態 | 詳細 |
-|------|------|------|
-| **稼働サービス** | 15サービス | systemd管理下 |
-| **自動起動** | 有効 | サーバー再起動時 |
-| **ポートバインド** | 127.0.0.1 | セキュリティ向上 |
-| **ディスク使用率** | 50% (14GB/29GB) | 余裕あり |
-
-> **ネットワーク移行履歴**: 詳細は [CHANGELOG.md](./CHANGELOG.md#2025年9月19日) を参照
-
-### 🔧 管理コマンド
-
-```bash
-# ネットワーク状態の確認
-bash /home/ubuntu/watchme-server-configs/scripts/check-infrastructure.sh
-
-# Python監視ツールで詳細確認
-python3 /home/ubuntu/watchme-server-configs/scripts/network_monitor.py
-
-# 自動修復モードで実行
-python3 /home/ubuntu/watchme-server-configs/scripts/network_monitor.py --fix
-
-# JSON形式で出力
-python3 /home/ubuntu/watchme-server-configs/scripts/network_monitor.py --json
-```
-
-### 🤖 自動監視設定
-
-```bash
-# Cronジョブ設定（5分ごとに自動チェック）
-crontab -e
-*/5 * * * * /home/ubuntu/watchme-server-configs/scripts/check-infrastructure.sh
-```
+> **詳細情報**: IPアドレス割り当て一覧、管理コマンド、監視設定などの詳細は [TECHNICAL_REFERENCE.md - ネットワーク設計](./TECHNICAL_REFERENCE.md#🌐-ネットワーク設計) を参照
 
 ---
 
@@ -465,68 +386,23 @@ sudo systemctl reload nginx
 
 ---
 
-## 📊 現在稼働中のサービス一覧（2025年10月23日更新）
+## 📊 稼働中のサービス一覧
 
-### クライアントアプリケーション
+WatchMeプラットフォームで稼働中の全サービス（クライアント、API、Lambda関数）の詳細な一覧は以下を参照してください:
 
-| サービス名 | プラットフォーム | 用途 | 録音機能 | 技術スタック | 状態 |
-|-----------|--------------|------|---------|------------|------|
-| **WatchMe App (iOS)** | iOS | ダッシュボード閲覧 + スポット録音分析 | ✅ 手動録音 | Swift | ✅ 本番稼働中 |
-| **Observer** | ウェアラブル/据え置き | 定期自動録音デバイス | ✅ 30分ごとに1分間自動録音 | ESP32 (M5 CORE2) / Arduino | 🧪 プロトタイプ運用中 |
-| **WatchMe Web** | Web | ダッシュボード閲覧専用 | ❌ なし | React + Vite | ✅ 本番稼働中 |
-| **製品サイト** | Web | マーケティング・製品紹介 | - | HTML/CSS/JS (Vercel) | ✅ 公開中 |
+**📖 [TECHNICAL_REFERENCE.md - サービス一覧](./TECHNICAL_REFERENCE.md#📡-サービス一覧)**
 
-### 音声処理API群
+### 主要サービスの概要
 
-| サービス名 | ポート | 用途 | Nginxパス | コンテナ名 | 状態 |
-|-----------|--------|------|----------|-----------|------|
-| **Behavior Features** | 8017 | 音響イベント検出（527種類、PaSST） | /behavior-analysis/features/ | behavior-analysis-feature-extractor | ✅ 稼働中 |
-| **Emotion Features** | 8018 | 感情認識（8感情） | /emotion-analysis/features/ | emotion-analysis-feature-extractor-v3 | ✅ 稼働中 |
-| **Vibe Transcriber** | 8013 | 音声文字起こし | /vibe-analysis/transcription/ | vibe-analysis-transcriber-v2 | ✅ 稼働中 |
-| **Janitor** | 8030 | 音声ファイル自動削除 | /janitor/ | janitor-api | ✅ 稼働中 |
+| カテゴリ | サービス数 | 主な用途 |
+|---------|-----------|---------|
+| **🎯 クライアント** | 4種類 | iOS App、Web Dashboard、Observer Device、製品サイト |
+| **🎙️ 音声処理** | 4 API | 文字起こし、感情認識、行動分析、特徴抽出 |
+| **📊 集計・分析** | 4 API | データ集計、スコアリング、プロンプト生成 |
+| **⚙️ インフラ・管理** | 5 API | Vault、API Manager、Admin、Avatar Uploader、Janitor |
+| **⏰ 自動実行** | 2 Lambda | Janitor（6時間ごと）、Demo Generator（30分ごと） |
 
-### 集計・分析API群
-
-| サービス名 | ポート | 用途 | Nginxパス | コンテナ名 | 状態 |
-|-----------|--------|------|----------|-----------|------|
-| **Vibe Aggregator** | 8009 | プロンプト生成 | /vibe-analysis/aggregation/ | vibe-analysis-aggregator | ✅ 稼働中 |
-| **Vibe Scorer** | 8002 | 心理スコア生成 | /vibe-analysis/scoring/ | vibe-analysis-scorer | ✅ 稼働中 |
-| **Behavior Aggregator** | 8010 | 音声イベント集計 | /behavior-aggregator/ | behavior-analysis-sed-aggregator | ✅ 稼働中 |
-| **Emotion Aggregator** | 8012 | 感情スコア集計 | /emotion-analysis/aggregation/ | emotion-analysis-aggregator | ✅ 稼働中 |
-
-### インフラ・管理系
-
-| サービス名 | ポート | 用途 | Nginxパス | コンテナ名 | 状態 |
-|-----------|--------|------|----------|-----------|------|
-| Vault | 8000 | ファイル管理Gateway | /vault/ | watchme-vault-api | ✅ 稼働中 |
-| API Manager | 9001 | API管理UI | /manager/ | watchme-api-manager-prod | ✅ 稼働中 |
-| Scheduler | 8015 | スケジューラー | /scheduler/ | watchme-scheduler-prod | ⚠️ 停止中（Lambdaに移行済み） |
-| Admin | 9000 | 管理画面 | /admin/ | watchme-admin | ✅ 稼働中 |
-| Avatar Uploader | 8014 | アバター管理 | /avatar/ | watchme-avatar-uploader | ✅ 稼働中 |
-
-### 自動実行サービス（EventBridge + Lambda）
-
-| サービス名 | ポート | 用途 | Lambda関数名 | 実行間隔 | 状態 |
-|-----------|--------|------|-------------|---------|------|
-| Janitor | 8030 | 音声ファイル自動削除 | `watchme-janitor-trigger` | 6時間ごと | ✅ 稼働中 |
-| Demo Generator | 8020 | デモデータ生成 | `demo-data-generator-trigger` | 30分ごと | ✅ 稼働中 |
-
-### その他のAPI
-
-| サービス名 | ポート | 用途 | Nginxパス | コンテナ名 | 状態 |
-|-----------|--------|------|----------|-----------|------|
-| Audio Enhancer | 8016 | 音声品質向上 | (未公開) | audio-enhancer-api | 🚧 現在未使用 |
-
-### メモリ使用状況（概算）
-
-| カテゴリ | サービス | メモリ使用量 |
-|----------|----------|--------------|
-| 重量級 | Behavior Features | ~2.0GB |
-| | Emotion Features | ~1.5GB |
-| | Vibe Transcriber | ~1.0GB |
-| 中量級 | 各種Aggregator | ~500MB each |
-| 軽量級 | Web/Admin UI | ~200MB each |
-| **合計** | | **約6.5GB / 7.8GB** |
+> **詳細情報**: エンドポイント、ポート番号、ECRリポジトリ、systemdサービス名などの技術仕様は [TECHNICAL_REFERENCE.md](./TECHNICAL_REFERENCE.md#📡-サービス一覧) を参照
 
 ## 4. よくある質問
 
@@ -621,110 +497,23 @@ grep -E "proxy_pass|listen" /etc/nginx/sites-available/api.hey-watch.me
 
 ## 🧹 Janitor - 音声データ自動削除サービス
 
-### 概要
-
 処理済み音声ファイルを自動削除し、ユーザーのプライバシーを保護するサービスです。EventBridge + Lambda経由で6時間ごとに自動実行されます。
 
-### 基本情報
+### クイック情報
 
 | 項目 | 値 |
 |------|-----|
 | **外部URL** | https://api.hey-watch.me/janitor/ |
 | **ポート** | 8030 |
-| **コンテナ名** | janitor-api |
-| **ディレクトリ** | /home/ubuntu/janitor/ |
-| **ECRリポジトリ** | watchme-api-janitor |
-| **実行頻度** | 6時間ごと（EventBridge） |
-
-### 自動実行スケジュール
-
-**EventBridge Cron式**: `0 */6 * * ? *` (UTC基準)
-
-**実行時刻（JST）**:
-- 09:00 JST（00:00 UTC）
-- 15:00 JST（06:00 UTC）
-- 21:00 JST（12:00 UTC）
-- 03:00 JST（18:00 UTC）
-
-### アーキテクチャ
-
-```
-EventBridge (6時間ごと)
-  ↓
-Lambda: watchme-janitor-trigger
-  ↓ (HTTPS POST)
-https://api.hey-watch.me/janitor/cleanup
-  ↓
-Janitor API (FastAPI - Docker/EC2)
-  ├─ Supabaseから削除対象を検索
-  ├─ S3からファイル削除
-  └─ Supabaseレコードのfile_statusを'deleted'に更新
-```
-
-### 削除条件
-
-以下の**すべて**を満たすファイルを削除:
-1. `transcriptions_status = 'completed'`（文字起こし完了）
-2. `behavior_features_status = 'completed'`（行動分析完了）
-3. `emotion_features_status = 'completed'`（感情分析完了）
-4. `created_at`が**24時間以上経過**（安全マージン）
-
-### エンドポイント
-
-| メソッド | パス | 説明 |
-|---------|------|------|
-| GET | `/janitor/health` | ヘルスチェック |
-| GET | `/janitor/stats` | 削除対象ファイルの統計情報 |
-| POST | `/janitor/cleanup` | 削除処理を実行 |
-
-### 運用実績（2025-10-19時点）
-
-**Lambda実行履歴（過去24時間）**:
-- 2025-10-19 13:31 JST - 削除0件（対象なし）
-- 2025-10-19 15:00 JST - **削除100件成功**（8.3MB）
-
-**データベース状態**:
-- `file_status = 'deleted'`: 108件
-- すべてのレコードで処理ステータスが完了済み
-
-### 管理コマンド
-
-```bash
-# ヘルスチェック
-curl https://api.hey-watch.me/janitor/health
-
-# 削除対象の統計確認
-curl https://api.hey-watch.me/janitor/stats
-
-# 手動で削除処理を実行
-curl -X POST https://api.hey-watch.me/janitor/cleanup
-
-# コンテナログ確認
-docker logs janitor-api --tail 100 -f
-
-# サービス再起動
-cd /home/ubuntu/janitor
-docker-compose -f docker-compose.prod.yml restart
-```
-
-> **トラブルシューティング**: 削除処理の問題は [運用ガイド](./OPERATIONS_GUIDE.md#🧹-janitor-api-トラブルシューティング) を参照
-
-### プライバシー保護
-
-> **音声データの自動削除について**
->
-> 録音された音声データは、AIによる分析が完了した後、自動的に削除されます。
-> - **保存期間**: 分析完了後、最長24時間以内
-> - **削除頻度**: 6時間ごとに自動削除処理を実行
-> - **削除対象**: 文字起こし、行動分析、感情分析がすべて完了したデータ
->
-> このため、音声データそのものが第三者に閲覧されることはありません。
-> 分析結果（テキスト、グラフデータ）のみがダッシュボードに表示されます。
+| **実行頻度** | 6時間ごと（EventBridge + Lambda） |
+| **状態** | ✅ 本番稼働中 |
 
 ### 詳細ドキュメント
 
+詳しい仕様、運用手順、トラブルシューティングは以下を参照:
+- **完全版README**: [/Users/kaya.matsumoto/projects/watchme/api/janitor/README.md](file:///Users/kaya.matsumoto/projects/watchme/api/janitor/README.md)
 - **GitHubリポジトリ**: https://github.com/hey-watchme/api-janitor
-- **README**: /Users/kaya.matsumoto/projects/watchme/api/janitor/README.md
+- **運用ガイド**: [OPERATIONS_GUIDE.md](./OPERATIONS_GUIDE.md#🧹-janitor-api-トラブルシューティング)
 
 ---
 

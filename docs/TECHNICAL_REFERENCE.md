@@ -125,7 +125,7 @@
 | **Demo Generator** | `/demo/` | 8020 | /home/ubuntu/demo-generator-api | demo-generator-api | watchme-api-demo-generator | ECR | ✅ EventBridge + Lambda (`demo-data-generator-trigger`) 30分ごと |
 | **Audio Enhancer** | (未公開) | 8016 | /home/ubuntu/audio-enhancer-api | audio-enhancer-api | watchme-api-audio-enhancer | ローカル | 🚧 現在未使用（音声品質向上） |
 | **Avatar Uploader** | (内部) | 8014 | /home/ubuntu/watchme-avatar-uploader | watchme-avatar-uploader | watchme-api-avatar-uploader | ECR | ✅ systemd経由 |
-| **Vibe Transcriber** | `/vibe-analysis/transcriber/` | 8013 | /home/ubuntu/vibe-analysis-transcriber | vibe-analysis-transcriber | watchme-vibe-analysis-transcriber | ECR | ✅ 2025-10-28統一命名規則 |
+| **Vibe Transcriber** | `/vibe-analysis/transcriber/` | 8013 | /home/ubuntu/vibe-analysis-transcriber | vibe-analysis-transcriber | watchme-vibe-analysis-transcriber | ECR | ✅ 2025-10-31 Groq Whisper v3移行 |
 | **Vibe Aggregator** | `/vibe-analysis/aggregator/` | 8009 | /home/ubuntu/vibe-analysis-aggregator | api_gen_prompt_mood_chart | watchme-api-vibe-aggregator | ECR | ✅ 2025-10-28エンドポイント統一 |
 | **Vibe Scorer** | `/vibe-analysis/scorer/` | 8002 | /home/ubuntu/vibe-analysis-scorer | vibe-analysis-scorer | watchme-vibe-analysis-scorer | ECR | ✅ 2025-10-30完全統一 |
 | **Behavior Features** | `/behavior-analysis/features/` | 8017 | /home/ubuntu/behavior-analysis-feature-extractor | behavior-analysis-feature-extractor | watchme-behavior-analysis-feature-extractor | ECR | ✅ 2025-10-28 v3 PaSST移行 |
