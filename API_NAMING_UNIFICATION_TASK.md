@@ -107,30 +107,37 @@ systemdサービス:  {domain}-{service}
 
 ---
 
-#### 3. Vibe Scorer ✅ **完了: 2025-10-29**
+#### 3. Vibe Scorer ✅ **完了: 2025-10-30**
 
 **完了状態:**
 - エンドポイント: `/vibe-analysis/scoring/` ✅
-- コンテナ: `api-gpt-v1` ⚠️（統一前の名前）
-- ECR: `watchme-api-vibe-scorer` ⚠️
-- systemd: `api-gpt-v1` ⚠️
+- コンテナ: `vibe-analysis-scorer` ✅ **2025-10-30完了**
+- ECR: `watchme-vibe-analysis-scorer` ✅ **2025-10-30完了**
+- systemd: `vibe-analysis-scorer` ✅ **2025-10-30完了**
+- GitHubリポジトリ: `hey-watchme/api-vibe-analysis-scorer` ✅ **2025-10-30完了**
 
 **実施内容:**
 - [x] Nginxエンドポイント: `/vibe-scorer/` → `/vibe-analysis/scoring/` + タイムアウト設定（180秒）✅ **2025-10-29**
 - [x] 本番環境反映（git pull + nginx reload）✅ **2025-10-29**
-- [ ] コンテナ名: `api-gpt-v1` → `vibe-analysis-scorer`（保留）
-- [ ] systemd: `api-gpt-v1` → `vibe-analysis-scorer`（保留）
-- [ ] ECRリポジトリ名: `watchme-api-vibe-scorer` → `watchme-vibe-analysis-scorer`（保留）
-- [ ] docker-compose.prod.yml修正（保留）
+- [x] コンテナ名: `api-gpt-v1` → `vibe-analysis-scorer` ✅ **2025-10-30**
+- [x] systemd: `api-gpt-v1` → `vibe-analysis-scorer` ✅ **2025-10-30**
+- [x] ECRリポジトリ名: `watchme-api-vibe-scorer` → `watchme-vibe-analysis-scorer` ✅ **2025-10-30**
+- [x] 旧ECRリポジトリ削除（watchme-api-vibe-scorer）✅ **2025-10-30**
+- [x] docker-compose.prod.yml作成（vibe-analysis-scorer-docker-compose.prod.yml）✅ **2025-10-30**
+- [x] GitHub Actionsワークフロー修正 ✅ **2025-10-30**
+- [x] README.mdルーティング詳細セクション追加 ✅ **2025-10-30**
+- [x] GitHubリモートリポジトリ変更 ✅ **2025-10-30**
 
 **確認済み:**
 - Nginx: リロード完了、構文チェックOK
 - エンドポイント: `https://api.hey-watch.me/vibe-analysis/scoring/health` で正常応答 ✅
+- コンテナ: `docker ps | grep vibe-analysis-scorer` で確認 ✅
+- systemd: `sudo systemctl status vibe-analysis-scorer` で動作確認 ✅
+- ECR: `watchme-vibe-analysis-scorer` のみ存在、旧リポジトリ削除済み ✅
 
 **注意:**
-- エンドポイントのみ統一完了（オプション1）
-- Lambda関数は既に `/vibe-analysis/scoring/analyze-timeblock` を使用していた
-- コンテナ名・ECRリポジトリ名の統一は将来実施予定（オプション2）
+- **完全統一完了（オプション2実施済み）** ✅
+- すべての名称が統一命名規則に準拠
 
 ---
 
@@ -306,9 +313,9 @@ systemdサービス:  {domain}-{service}
 
 各サービスの移行完了時にチェック:
 
-- [x] Vibe Transcriber ✅ **2025-10-28完了**
+- [x] Vibe Transcriber ✅ **2025-10-28完了（完全統一）**
 - [x] Vibe Aggregator ✅ **2025-10-29完了（エンドポイントのみ）**
-- [x] Vibe Scorer ✅ **2025-10-29完了（エンドポイントのみ）**
+- [x] Vibe Scorer ✅ **2025-10-30完了（完全統一）**
 - [ ] Behavior Aggregator
 - [ ] Behavior Feature Extractor
 - [x] Emotion Feature Extractor ✅ **2025-10-29完了（エンドポイントのみ）**
@@ -316,4 +323,8 @@ systemdサービス:  {domain}-{service}
 
 **進捗状況**: 5/7 完了 (71.4%)
 
-**注意**: Vibe Aggregator、Vibe Scorer、Emotion Feature Extractor、Emotion Aggregatorはエンドポイントのみ統一（オプション1）。コンテナ名・ECRリポジトリは未統一。
+**完全統一完了**: 2/7 (28.6%)
+- ✅ Vibe Transcriber（2025-10-28）
+- ✅ Vibe Scorer（2025-10-30）
+
+**注意**: Vibe Aggregator、Emotion Feature Extractor、Emotion Aggregatorはエンドポイントのみ統一（オプション1）。コンテナ名・ECRリポジトリは未統一。
