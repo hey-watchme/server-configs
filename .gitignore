@@ -2,3 +2,4 @@
 lambda-functions/*/build/
 *.zip
 __pycache__/
+production/lambda-functions/*/build/
