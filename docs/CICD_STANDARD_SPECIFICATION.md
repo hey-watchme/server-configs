@@ -380,6 +380,59 @@ docker-compose -f docker-compose.prod.yml down || true
 
 ### Dockerfile仕様
 
+#### ⚠️ 必須チェック：アプリケーションファイルのコピー漏れ防止
+
+**問題**: 新規ファイル（例：llm_providers.py）を追加したが、Dockerfileでコピーし忘れる
+
+**症状**:
+```
+ModuleNotFoundError: No module named 'new_module'
+ImportError: cannot import name 'function_name'
+```
+
+**診断方法**:
+```bash
+# 1. アプリケーションで使用されている全Pythonファイルを確認
+ls *.py
+
+# 2. Dockerfileでコピーされているファイルを確認
+grep "COPY.*\.py" Dockerfile Dockerfile.prod
+
+# 3. 差分を確認（コピーされていないファイルがあるか）
+```
+
+**予防策（推奨）**: ワイルドカードでまとめてコピー
+
+```dockerfile
+# ❌ 悪い例：個別にCOPY（追加時に忘れやすい）
+COPY main.py .
+COPY supabase_client.py .
+# llm_providers.py を忘れた！
+
+# ✅ 良い例：パターンマッチでまとめてコピー
+COPY *.py .
+```
+
+**個別COPYが必要な場合**: 明示的にチェックリスト化
+
+```dockerfile
+# アプリケーションファイルのコピー
+# ★新規ファイル追加時は必ずここに追記すること
+COPY main.py .
+COPY supabase_client.py .
+COPY llm_providers.py .
+COPY config.py .
+# TODO: 新規Pythonファイルを追加したらここに追記
+```
+
+**ベストプラクティス**: 実装チェックリスト
+
+新規Pythonファイルを追加したら：
+- [ ] Dockerfileに `COPY {new_file}.py .` を追加
+- [ ] Dockerfile.prodに `COPY {new_file}.py .` を追加（本番用がある場合）
+- [ ] ローカルでDocker動作確認: `docker build -t test . && docker run test`
+- [ ] git push前に必ずローカルDockerテスト
+
 #### 🚨 重要：大きなAIモデルを使用する場合の必須対応
 
 **対象API**: Kushinada、Whisper、BERT系モデルなど、1GB以上の大きなモデルを使用するAPI
