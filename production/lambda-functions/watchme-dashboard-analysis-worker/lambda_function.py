@@ -82,11 +82,11 @@ def call_dashboard_analysis_api(device_id, date, prompt):
     """
     try:
         print(f"Calling Dashboard Analysis API...")
-        print(f"URL: {API_BASE_URL}/vibe-analysis/scoring/analyze-dashboard-summary")
+        print(f"URL: {API_BASE_URL}/vibe-analysis/scorer/analyze-dashboard-summary")
 
         # APIを呼び出し
         response = requests.post(
-            f"{API_BASE_URL}/vibe-analysis/scoring/analyze-dashboard-summary",
+            f"{API_BASE_URL}/vibe-analysis/scorer/analyze-dashboard-summary",
             json={
                 "device_id": device_id,
                 "date": date

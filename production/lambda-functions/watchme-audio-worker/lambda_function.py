@@ -358,7 +358,7 @@ def trigger_processing_pipeline(file_path, device_id, date, time_slot):
                         print(f"Starting Vibe Scorer...")
                         try:
                             vibe_scorer_response = requests.post(
-                                f"{API_BASE_URL}/vibe-analysis/scoring/analyze-timeblock",
+                                f"{API_BASE_URL}/vibe-analysis/scorer/analyze-timeblock",
                                 json={
                                     "prompt": prompt,
                                     "device_id": device_id,

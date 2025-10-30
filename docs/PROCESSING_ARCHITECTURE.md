@@ -510,26 +510,26 @@ graph LR
 
 | 順序 | API | エンドポイント | メソッド | タイムアウト | 備考 |
 |-----|-----|--------------|---------|-----------|------|
-| 1 | Vibe Transcriber | `/vibe-analysis/transcription/fetch-and-transcribe` | POST | 180秒 | リトライ最大3回 |
+| 1 | Vibe Transcriber | `/vibe-analysis/transcriber/fetch-and-transcribe` | POST | 180秒 | リトライ最大3回 |
 | 2 | Behavior Features | `/behavior-analysis/features/fetch-and-process-paths` | POST | 180秒 | 音響イベント検出 |
 | 2.1 | Behavior Aggregator | `/behavior-aggregator/analysis/sed` | POST | 180秒 | Behavior Features成功時に自動起動 |
 | 3 | Emotion Features | `/emotion-analysis/features/process/emotion-features` | POST | 180秒 | 感情認識 |
 | 3.1 | Emotion Aggregator | `/emotion-analysis/aggregation/analyze/opensmile-aggregator` | POST | 180秒 | Emotion Features成功時に自動起動 |
-| 3.5 | Vibe Aggregator（失敗記録） | `/vibe-analysis/aggregation/create-failed-record` | POST | 30秒 | Vibe Transcriber失敗時のみ |
-| 4 | Vibe Aggregator | `/vibe-analysis/aggregation/generate-timeblock-prompt` | GET | 180秒 | 全サービス成功時のみ |
-| 5 | Vibe Scorer | `/vibe-analysis/scoring/analyze-timeblock` | POST | 180秒 | Vibe Aggregator成功時のみ |
+| 3.5 | Vibe Aggregator（失敗記録） | `/vibe-analysis/aggregator/create-failed-record` | POST | 30秒 | Vibe Transcriber失敗時のみ |
+| 4 | Vibe Aggregator | `/vibe-analysis/aggregator/generate-timeblock-prompt` | GET | 180秒 | 全サービス成功時のみ |
+| 5 | Vibe Scorer | `/vibe-analysis/scorer/analyze-timeblock` | POST | 180秒 | Vibe Aggregator成功時のみ |
 
 #### watchme-dashboard-summary-worker が呼び出すAPIエンドポイント
 
 | API | エンドポイント | メソッド | タイムアウト | 備考 |
 |-----|--------------|---------|-----------|------|
-| Vibe Aggregator（dashboard-summary） | `/vibe-analysis/aggregation/generate-dashboard-summary` | GET | 180秒 | プロンプト生成 |
+| Vibe Aggregator（dashboard-summary） | `/vibe-analysis/aggregator/generate-dashboard-summary` | GET | 180秒 | プロンプト生成 |
 
 #### watchme-dashboard-analysis-worker が呼び出すAPIエンドポイント
 
 | API | エンドポイント | メソッド | タイムアウト | 備考 |
 |-----|--------------|---------|-----------|------|
-| Vibe Scorer（dashboard-analysis） | `/vibe-analysis/scoring/analyze-dashboard-summary` | POST | 180秒 | ChatGPT分析 |
+| Vibe Scorer（dashboard-analysis） | `/vibe-analysis/scorer/analyze-dashboard-summary` | POST | 180秒 | ChatGPT分析 |
 
 ### SQSキュー構成（2025年9月25日更新）
 
@@ -553,8 +553,8 @@ graph LR
 | **感情分析** | Emotion Features | 音声感情認識（8感情） | 8018 | /emotion-analysis/features | `emotion-analysis-feature-extractor-v3` | EC2 (Docker) |
 | **集計** | Behavior Aggregator | 行動パターン分析 | 8010 | /behavior-aggregator | `behavior-analysis-sed-aggregator` | EC2 (Docker) |
 | **集計** | Emotion Aggregator | 感情スコア集計 | 8012 | /emotion-analysis/aggregation | `emotion-analysis-aggregator` | EC2 (Docker) |
-| **統合** | Vibe Aggregator | プロンプト生成 | 8009 | /vibe-analysis/aggregation | `vibe-analysis-aggregator` | EC2 (Docker) |
-| **統合** | Vibe Scorer | ChatGPT連携 | 8002 | /vibe-analysis/scoring | `vibe-analysis-scorer` | EC2 (Docker) |
+| **統合** | Vibe Aggregator | プロンプト生成 | 8009 | /vibe-analysis/aggregator | `api_gen_prompt_mood_chart` | EC2 (Docker) |
+| **統合** | Vibe Scorer | ChatGPT連携 | 8002 | /vibe-analysis/scorer | `vibe-analysis-scorer` | EC2 (Docker) |
 
 > **詳細**: EC2のインフラ構成、Dockerネットワーク、Nginx設定については [server-configs/README.md](./README.md) を参照
 
@@ -817,7 +817,7 @@ ORDER BY created_at DESC;
 
 ```bash
 # 特定のファイルを再処理
-curl -X POST https://api.hey-watch.me/vibe-transcriber-v2/fetch-and-transcribe \
+curl -X POST https://api.hey-watch.me/vibe-analysis/transcriber/fetch-and-transcribe \
   -H "Content-Type: application/json" \
   -d '{
     "file_paths": [

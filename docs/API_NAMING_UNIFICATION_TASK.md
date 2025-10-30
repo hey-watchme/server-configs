@@ -110,14 +110,14 @@ systemdサービス:  {domain}-{service}
 #### 3. Vibe Scorer ✅ **完了: 2025-10-30**
 
 **完了状態:**
-- エンドポイント: `/vibe-analysis/scoring/` ✅
+- エンドポイント: `/vibe-analysis/scorer/` ✅
 - コンテナ: `vibe-analysis-scorer` ✅ **2025-10-30完了**
 - ECR: `watchme-vibe-analysis-scorer` ✅ **2025-10-30完了**
 - systemd: `vibe-analysis-scorer` ✅ **2025-10-30完了**
 - GitHubリポジトリ: `hey-watchme/api-vibe-analysis-scorer` ✅ **2025-10-30完了**
 
 **実施内容:**
-- [x] Nginxエンドポイント: `/vibe-scorer/` → `/vibe-analysis/scoring/` + タイムアウト設定（180秒）✅ **2025-10-29**
+- [x] Nginxエンドポイント: `/vibe-scorer/` → `/vibe-analysis/scorer/` + タイムアウト設定（180秒）✅ **2025-10-29**
 - [x] 本番環境反映（git pull + nginx reload）✅ **2025-10-29**
 - [x] コンテナ名: `api-gpt-v1` → `vibe-analysis-scorer` ✅ **2025-10-30**
 - [x] systemd: `api-gpt-v1` → `vibe-analysis-scorer` ✅ **2025-10-30**
@@ -130,7 +130,7 @@ systemdサービス:  {domain}-{service}
 
 **確認済み:**
 - Nginx: リロード完了、構文チェックOK
-- エンドポイント: `https://api.hey-watch.me/vibe-analysis/scoring/health` で正常応答 ✅
+- エンドポイント: `https://api.hey-watch.me/vibe-analysis/scorer/health` で正常応答 ✅
 - コンテナ: `docker ps | grep vibe-analysis-scorer` で確認 ✅
 - systemd: `sudo systemctl status vibe-analysis-scorer` で動作確認 ✅
 - ECR: `watchme-vibe-analysis-scorer` のみ存在、旧リポジトリ削除済み ✅

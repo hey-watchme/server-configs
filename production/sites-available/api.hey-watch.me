@@ -35,8 +35,8 @@ server {
         }
     }
 
-    # Vibe Analysis Scorer API - 統一命名規則に従って修正 (2025-10-29)
-    location /vibe-analysis/scoring/ {
+    # Vibe Analysis Scorer API - 統一命名規則に従って修正 (2025-10-30)
+    location /vibe-analysis/scorer/ {
         proxy_pass http://localhost:8002/;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
