@@ -1,6 +1,6 @@
 # WatchMe 技術仕様書
 
-最終更新: 2025年10月26日 14:00 JST
+最終更新: 2025年10月31日 16:30 JST
 
 ## 🏗️ システムアーキテクチャ
 
@@ -117,7 +117,7 @@
 
 | サービス | エンドポイント | ポート | EC2ディレクトリ | systemd | ECRリポジトリ/ローカル | デプロイ方式 | 備考 |
 |---------|--------------|--------|---------------|---------|------------------------|------------|------|
-| **Vault** | `https://api.hey-watch.me/` | 8000 | /home/ubuntu/watchme-vault-api | watchme-vault-api | watchme-api-vault | ECR | ✅ 2025-09-04移行済み |
+| **Vault** | `https://api.hey-watch.me/` | 8000 | /home/ubuntu/watchme-vault-api | watchme-vault-api | watchme-api-vault | ECR + CI/CD | ✅ 2025-10-31 CI/CD導入完了 |
 | **Admin** | `https://admin.hey-watch.me/` | 9000 | /home/ubuntu/admin | watchme-admin | watchme-admin | ECR | ✅ 稼働中 |
 | **API Manager** | `https://api.hey-watch.me/manager/` | 9001 | /home/ubuntu/watchme-api-manager | watchme-api-manager | watchme-api-manager | ECR | ✅ 2025-09-04移行済み |
 | **Scheduler** | `https://api.hey-watch.me/scheduler/` | 8015 | /home/ubuntu/watchme-scheduler | watchme-api-manager | watchme-api-manager-scheduler | ECR | ⚠️ 停止中（Lambdaに移行済み） |
