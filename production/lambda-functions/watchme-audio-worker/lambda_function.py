@@ -8,9 +8,51 @@ from datetime import datetime
 # 環境変数
 API_BASE_URL = os.environ.get('API_BASE_URL', 'https://api.hey-watch.me')
 DASHBOARD_SUMMARY_QUEUE_URL = os.environ.get('DASHBOARD_SUMMARY_QUEUE_URL', 'https://sqs.ap-southeast-2.amazonaws.com/975050024946/watchme-dashboard-summary-queue')
+SUPABASE_URL = os.environ.get('SUPABASE_URL')
+SUPABASE_KEY = os.environ.get('SUPABASE_KEY')
 
 # SQSクライアント
 sqs = boto3.client('sqs', region_name='ap-southeast-2')
+
+
+def get_transcription_status(file_path: str) -> str:
+    """
+    DBから処理ステータスを取得
+
+    Args:
+        file_path: S3ファイルパス
+
+    Returns:
+        transcriptions_status ('pending', 'skipped', 'completed', 等)
+    """
+    try:
+        response = requests.get(
+            f"{SUPABASE_URL}/rest/v1/audio_files",
+            params={
+                "file_path": f"eq.{file_path}",
+                "select": "transcriptions_status"
+            },
+            headers={
+                "apikey": SUPABASE_KEY,
+                "Authorization": f"Bearer {SUPABASE_KEY}"
+            },
+            timeout=10
+        )
+
+        if response.status_code == 200:
+            data = response.json()
+            if data and len(data) > 0:
+                status = data[0].get('transcriptions_status', 'pending')
+                print(f"📊 Status from DB: {status} (file: {file_path})")
+                return status
+
+        print(f"⚠️ Could not fetch status from DB, defaulting to 'pending'")
+        return 'pending'
+
+    except Exception as e:
+        print(f"⚠️ Error getting transcription status: {e}")
+        return 'pending'  # エラー時はpendingとして処理
+
 
 def lambda_handler(event, context):
     """
@@ -30,21 +72,30 @@ def lambda_handler(event, context):
             device_id = message['device_id']
             date = message['date']
             time_slot = message['time_slot']
-            
+
             print(f"Processing audio: {device_id}/{date}/{time_slot}")
             print(f"File path: {file_path}")
-            
-            # 処理パイプラインを実行
+
+            # 処理パイプラインを実行（SKIPも含めて全て同じフロー）
             results = trigger_processing_pipeline(
                 file_path, device_id, date, time_slot
             )
-            
+
             # 結果をログに出力
             print(f"Processing results: {json.dumps(results)}")
-            
-            # Vibe Scorerが成功した場合、累積分析キューにメッセージを送信
-            if results.get('vibe_scorer', {}).get('success'):
-                trigger_dashboard_summary(device_id, date, time_slot)
+
+            # 処理結果に基づいてログ出力
+            if results.get('status') == 'skipped':
+                print(f"⏭️ Processing skipped (night hours): {device_id}/{date}/{time_slot}")
+            elif results.get('status') == 'failed':
+                print(f"❌ Processing failed: {device_id}/{date}/{time_slot}")
+            else:
+                print(f"✅ Processing completed: {device_id}/{date}/{time_slot}")
+
+            # 累積分析は必ず実行（SKIPでも失敗でも成功でも）
+            # これにより06:00問題が解決される
+            print(f"Triggering dashboard summary (always executed)")
+            trigger_dashboard_summary(device_id, date, time_slot)
             
             # 成功したメッセージは自動的にSQSから削除される
             
@@ -60,10 +111,49 @@ def lambda_handler(event, context):
 
 
 def trigger_processing_pipeline(file_path, device_id, date, time_slot):
-    """各APIを順次呼び出し（現在のロジックをそのまま移植）"""
-    
+    """各APIを順次呼び出し（SKIPも含めて統一的に処理）"""
+
     results = {}
-    
+
+    # ステータスチェック（SKIPかどうか）
+    status = get_transcription_status(file_path)
+
+    # SKIPステータスの場合は、処理をスキップして失敗レコードを作成
+    if status == 'skipped':
+        print(f"📊 Processing skipped for night hours: {file_path}")
+
+        # 失敗レコード作成（SKIPも失敗の一種として扱う）
+        try:
+            response = requests.post(
+                f"{API_BASE_URL}/vibe-analysis/aggregator/create-failed-record",
+                params={
+                    "device_id": device_id,
+                    "date": date,
+                    "time_block": time_slot,
+                    "failure_reason": "night_skip",
+                    "error_message": "Skipped during quiet hours (23:00-05:59)"
+                },
+                timeout=30
+            )
+
+            if response.status_code == 200:
+                print(f"✅ Skip record created successfully")
+            else:
+                print(f"⚠️ Failed to create skip record: {response.status_code}")
+
+        except Exception as e:
+            print(f"⚠️ Error creating skip record: {str(e)}")
+
+        # SKIPステータスを返して終了（累積分析は呼び出し元で実行される）
+        return {
+            'status': 'skipped',
+            'message': 'Night hours skip (23:00-05:59)',
+            'device_id': device_id,
+            'date': date,
+            'time_slot': time_slot
+        }
+
+    # 通常処理（SKIPではない場合）
     # 1. Azure Speech API (音声書き起こし)
     azure_success = False
     max_retries = 3
