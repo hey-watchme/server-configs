@@ -402,9 +402,8 @@ def trigger_processing_pipeline(file_path, device_id, date, time_slot):
                     'success': True
                 }
 
-                # 失敗レコード作成成功時も累積分析をトリガー
-                # （dashboard.status='completed'になっているため、次のプロセスに進める）
-                trigger_dashboard_summary(device_id, date, time_slot)
+                # 累積分析のトリガーは呼び出し元（Line 95-98）で必ず実行されるため、
+                # ここでは呼ばない（重複トリガーを防止）
             else:
                 print(f"❌ Failed to create failed record: {failed_record_response.status_code}")
                 results['failed_record'] = {
