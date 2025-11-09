@@ -1,24 +1,55 @@
 # 🔄 セッション引き継ぎメモ
 
 **作成日時**: 2025-11-09 (最終更新)
-**コンテキスト使用率**: 179k/200k tokens (89%)
+**コンテキスト使用率**: 186k/200k tokens (93%)
 
 ---
 
 ## 📍 次回の開始地点
 
-**Phase 1 完了！次はPhase 2（Aggregator API群）に進みます**
+**Phase 2 進行中！Aggregator API群の2つ目に進みます**
 
-### 次の作業対象: Behavior Aggregator API
-**ディレクトリ**: `/Users/kaya.matsumoto/projects/watchme/api/behavior-analysis/aggregator`
+### 次の作業対象: Emotion Aggregator API
+**ディレクトリ**: `/Users/kaya.matsumoto/projects/watchme/api/emotion-analysis/aggregator`
 
 **修正内容**:
-- テーブル変更: `behavior_summary` → `audio_aggregator`
-- カラム変更: `behavior_aggregator_result`, `behavior_aggregator_summary`, `behavior_aggregator_processed_at`
+- 読み込み元: `emotion_opensmile` → `audio_features.emotion_extractor_result`
+- 保存先: `emotion_opensmile_summary` → `audio_aggregator.emotion_aggregator_result`
+- 1日1レコードで累積更新（Behavior Aggregatorと同じパターン）
 
 ---
 
-## ✅ 今回のセッション（Session 3）で完了したこと
+## ✅ 今回のセッション（Session 4）で完了したこと
+
+### 1. audio_aggregatorテーブルの設計修正 🎉
+- ✅ **設計ミス修正**: `time_block`カラムを削除（30分単位は不要）
+- ✅ **Primary Key変更**: `(device_id, date, time_block)` → `(device_id, date)`
+- ✅ **1日1レコード**で累積更新する設計に修正
+- ✅ 不要カラム削除: `behavior_aggregator_summary`, `vibe_aggregator_*`, `context_data`, `status`, `error_message`
+- ✅ マイグレーション実行完了: `20251109080000_fix_audio_aggregator_schema.sql`
+
+**重要な設計変更**:
+- `summary_ranking`はDBに保存せず、アプリ側で`time_blocks`から計算する
+- タイムブロック単位のデータは`audio_features`に保存（素材）
+- 累積分析結果は`audio_aggregator`に保存（最終成果物、1日1レコード）
+
+### 2. Behavior Aggregator API 完了 🎉
+- ✅ `sed_aggregator.py`修正完了
+- ✅ 読み込み元変更: `behavior_yamnet` → `audio_features.behavior_extractor_result`
+- ✅ 保存先変更: `behavior_summary` → `audio_aggregator.behavior_aggregator_result`
+- ✅ `time_blocks`のみ保存（`summary_ranking`は保存しない）
+- ✅ README.md更新完了
+- ✅ GitHub push完了（デプロイ済み、実行時間: 5分8秒）
+
+### 3. GitHub CLI セットアップ完了
+- ✅ GitHub CLI (gh) インストール・認証完了
+- ✅ `~/.zshrc`にトークン永続化
+- ✅ `gh run list`, `gh run watch`でデプロイ監視可能に
+- ✅ CLAUDE.mdにCLIツール使用方針を追加
+
+---
+
+## ✅ 前回のセッション（Session 3）で完了したこと
 
 ### 1. Vibe Transcriber API (v2) 完了 🎉
 - ✅ `app/services.py`修正完了
@@ -226,13 +257,13 @@ supabase/migrations/
 ✅ Phase 0.6: ドキュメント整備
 
 ✅ Phase 1: Features API群 (3/3 完了) 🎉
-✅ Behavior Features API (v3) - 完了！
-✅ Emotion Features API (v3) - 完了！
-✅ Vibe Transcriber API (v2) - 完了！
+✅ Behavior Features API (v3)
+✅ Emotion Features API (v3)
+✅ Vibe Transcriber API (v2)
 
-Phase 2: Aggregator API群 (0/3 完了) ← 次はここから
-[ ] Behavior Aggregator API
-[ ] Emotion Aggregator API
+Phase 2: Aggregator API群 (1/3 完了) ← 次はここから
+✅ Behavior Aggregator API - 完了！
+[ ] Emotion Aggregator API ← 次の作業
 [ ] Vibe Aggregator API
 
 Phase 3: Scorer API (0/1 完了)
