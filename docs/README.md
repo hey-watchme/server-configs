@@ -194,16 +194,11 @@ graph TB
 
 ### EC2インスタンス概要
 
-| 項目 | 値 |
-|------|-----|
-| **インスタンスタイプ** | t4g.large (2025-09-19アップグレード) |
-| **CPU** | 2 vCPU (AWS Graviton2) |
-| **メモリ** | 8.0GB RAM |
-| **ストレージ** | 30GB gp3 SSD |
-| **リージョン** | ap-southeast-2 (Sydney) |
-| **IPアドレス** | 3.24.16.82 |
+- **インスタンスタイプ**: t4g.large (AWS Graviton2, 2 vCPU, 8.0GB RAM)
+- **リージョン**: ap-southeast-2 (Sydney)
+- **IPアドレス**: 3.24.16.82
 
-> **詳細情報**: リソース使用状況、メモリ管理、Kushinada移行によるリソース影響などの詳細は [TECHNICAL_REFERENCE.md - システムアーキテクチャ](./TECHNICAL_REFERENCE.md#🏗️-システムアーキテクチャ) を参照
+> **詳細情報**: リソース使用状況、メモリ・ディスク管理、Kushinada移行によるリソース影響などの詳細は [TECHNICAL_REFERENCE.md - システムアーキテクチャ](./TECHNICAL_REFERENCE.md#🏗️-システムアーキテクチャ) を参照
 
 ## 🔐 リポジトリの役割と制約
 
@@ -388,21 +383,30 @@ sudo systemctl reload nginx
 
 ## 📊 稼働中のサービス一覧
 
-WatchMeプラットフォームで稼働中の全サービス（クライアント、API、Lambda関数）の詳細な一覧は以下を参照してください:
+WatchMeプラットフォームでは以下のサービスが稼働しています：
 
-**📖 [TECHNICAL_REFERENCE.md - サービス一覧](./TECHNICAL_REFERENCE.md#📡-サービス一覧)**
+- **🎯 クライアント**: iOS App、Web Dashboard、Observer Device、製品サイト
+- **🎙️ 音声処理**: 文字起こし、感情認識、行動分析、特徴抽出（4 API）
+- **📊 集計・分析**: データ集計、スコアリング、プロンプト生成（4 API）
+- **⚙️ インフラ・管理**: Vault、API Manager、Admin、Avatar Uploader、Janitor（5 API）
+- **⏰ 自動実行**: Janitor（6時間ごと）、Demo Generator（30分ごと）（2 Lambda）
 
-### 主要サービスの概要
+> **詳細情報**: 全サービスのエンドポイント、ポート番号、ECRリポジトリ、systemdサービス名などの技術仕様は [TECHNICAL_REFERENCE.md - サービス一覧](./TECHNICAL_REFERENCE.md#📡-サービス一覧) を参照
 
-| カテゴリ | サービス数 | 主な用途 |
-|---------|-----------|---------|
-| **🎯 クライアント** | 4種類 | iOS App、Web Dashboard、Observer Device、製品サイト |
-| **🎙️ 音声処理** | 4 API | 文字起こし、感情認識、行動分析、特徴抽出 |
-| **📊 集計・分析** | 4 API | データ集計、スコアリング、プロンプト生成 |
-| **⚙️ インフラ・管理** | 5 API | Vault、API Manager、Admin、Avatar Uploader、Janitor |
-| **⏰ 自動実行** | 2 Lambda | Janitor（6時間ごと）、Demo Generator（30分ごと） |
+---
 
-> **詳細情報**: エンドポイント、ポート番号、ECRリポジトリ、systemdサービス名などの技術仕様は [TECHNICAL_REFERENCE.md](./TECHNICAL_REFERENCE.md#📡-サービス一覧) を参照
+## 🗄️ データベース管理
+
+### Supabase CLI
+
+| 操作 | ツール | 詳細 |
+|------|--------|------|
+| ✅ **スキーマ変更** | Supabase CLI (`supabase db push`) | [OPERATIONS_GUIDE.md - データベースマイグレーション](./OPERATIONS_GUIDE.md#3-データベースマイグレーション) |
+| ❌ **データ確認** | Supabaseダッシュボード | SQL Editor |
+
+**重要**：Supabase CLIはマイグレーション管理専用。データ確認はブラウザで実行。
+
+---
 
 ## 4. よくある質問
 

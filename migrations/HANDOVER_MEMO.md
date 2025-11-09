@@ -1,25 +1,140 @@
 # 🔄 セッション引き継ぎメモ
 
 **作成日時**: 2025-11-09 (最終更新)
-**コンテキスト使用率**: 186k/200k tokens (93%)
+**コンテキスト使用率**: 176k/200k tokens (88%)
 
 ---
 
 ## 📍 次回の開始地点
 
-**Phase 2 進行中！Aggregator API群の2つ目に進みます**
+**Phase 3 開始！Vibe Scorer API の修正**
 
-### 次の作業対象: Emotion Aggregator API
-**ディレクトリ**: `/Users/kaya.matsumoto/projects/watchme/api/emotion-analysis/aggregator`
+### 次の作業対象: Vibe Scorer API
+**ディレクトリ**: `/Users/kaya.matsumoto/projects/watchme/api/vibe-analysis/scorer`
 
-**修正内容**:
-- 読み込み元: `emotion_opensmile` → `audio_features.emotion_extractor_result`
-- 保存先: `emotion_opensmile_summary` → `audio_aggregator.emotion_aggregator_result`
-- 1日1レコードで累積更新（Behavior Aggregatorと同じパターン）
+### ⚠️ Vibe Aggregatorの特殊性（重要）
+
+このAPIは**3つの異なる責務**を持つエンドポイントで構成されています：
+
+| エンドポイント | 役割 | 現在の保存先 | 新しい保存先 | 作業順序 |
+|---------------|------|------------|------------|---------|
+| `/generate-timeblock-prompt` | 30分単位プロンプト生成 | `dashboard` | `audio_aggregator.vibe_aggregator_result` | **1. 最初** |
+| `/generate-dashboard-summary` | 累積分析プロンプト生成 | `dashboard_summary` | （後で検討） | 2. 次 |
+| `/create-failed-record` | 失敗/スキップレコード作成 | `dashboard` | Vibe Scorer APIへ移動予定 | 3. 最後 |
+
+### 📋 作業計画（Step by Step）
+
+#### Step 1: `/generate-timeblock-prompt`の修正（最優先）
+1. ✅ マイグレーション作成：`audio_aggregator.vibe_aggregator_result`カラムを復活
+2. ✅ 読み込み元変更：`vibe_whisper.transcription` → `audio_features.transcriber_result`
+3. ✅ 保存先変更：`dashboard.prompt` → `audio_aggregator.vibe_aggregator_result`
+4. ✅ README.md更新
+5. ✅ デプロイ・動作確認
+
+#### Step 2: `/generate-dashboard-summary`の分離（次のフェーズ）
+- 新しいAPI「Dashboard Summary API」を作成
+- `/generate-dashboard-summary`エンドポイントを移動
+- Lambda summary-workerの呼び出し先を更新
+
+#### Step 3: `/create-failed-record`の移動（最後）
+- Vibe Scorer APIに移動
+- Lambda audio-workerのエラーハンドリングを更新
+
+### 🎯 設計方針の決定事項（2025-11-09）
+
+**前提**：ユーザー数ゼロ、ダウンタイム無制限、**理想的なアーキテクチャを優先**
+
+**決定事項**：
+1. **妥協なし**：既存システムとの互換性よりも理想的な設計を優先
+2. **マイクロサービス分離**：責務ごとにAPIを分割する方針
+3. **段階的移行**：1エンドポイントずつ確実に移行
+4. **テーブル設計の復活**：削除した`audio_aggregator.vibe_aggregator_result`カラムを復活させる
+
+### 🔤 命名規則の統一（2025-11-09 決定）
+
+**確定した命名パターン**: `{domain}_{technology}_result`
+
+#### audio_features テーブル
+- ✅ `vibe_transcriber_result` (domain: vibe, tech: transcriber) ← **修正完了！**
+- `behavior_extractor_result` (domain: behavior, tech: extractor)
+- `emotion_extractor_result` (domain: emotion, tech: extractor)
+
+#### audio_aggregator テーブル
+- `vibe_aggregator_result` (domain: vibe, tech: aggregator)
+- `behavior_aggregator_result` (domain: behavior, tech: aggregator)
+- `emotion_aggregator_result` (domain: emotion, tech: aggregator)
+
+**3つのドメイン**: vibe, behavior, emotion
+**3つの技術層**: transcriber/extractor, aggregator, scorer
 
 ---
 
-## ✅ 今回のセッション（Session 4）で完了したこと
+## ✅ 今回のセッション（Session 7）で完了したこと
+
+### 1. カラム名の命名規則統一完了 🎉
+
+**マイグレーション**:
+- ✅ `20251109231856_rename_transcriber_to_vibe_transcriber.sql` 実行完了
+- ✅ `audio_features.transcriber_result` → `vibe_transcriber_result`
+- ✅ `audio_features.transcriber_status` → `vibe_transcriber_status`
+- ✅ `audio_features.transcriber_processed_at` → `vibe_transcriber_processed_at`
+
+**Vibe Transcriber API修正**:
+- ✅ `app/services.py`: 書き込み先カラム名変更
+- ✅ `README.md`: v2.1.0として変更履歴追記
+- ✅ GitHub push完了（デプロイ成功、実行時間: 5分22秒）
+
+**Vibe Aggregator API修正**:
+- ✅ `timeblock_endpoint.py`: 読み込み元カラム名変更
+- ✅ `README.md`: v7.1.0として変更履歴追記
+- ✅ GitHub push完了（デプロイ成功、実行時間: 3分39秒）
+
+**重要な成果**:
+- ✅ 命名規則 `{domain}_{technology}_result` への完全移行完了
+- ✅ すべてのカラム名が統一され、一貫性が確保された
+
+---
+
+## ✅ 前回のセッション（Session 6）で完了したこと
+
+### 1. Vibe Aggregator API（`/generate-timeblock-prompt`エンドポイント）完了 🎉
+
+**マイグレーション**:
+- ✅ `20251109222311_restore_vibe_aggregator_columns.sql` 実行完了
+- ✅ `audio_aggregator.vibe_aggregator_result` カラムを復活（TEXT型）
+- ✅ `audio_aggregator.vibe_aggregator_processed_at` カラムを追加
+
+**コード修正**:
+- ✅ `timeblock_endpoint.py` 修正完了
+  - `get_whisper_data()`: `vibe_whisper.transcription` → `audio_features.transcriber_result`
+  - `get_sed_data()`: `behavior_yamnet.events` → `audio_features.behavior_extractor_result`
+  - `get_opensmile_data()`: `emotion_opensmile.selected_features_timeline` → `audio_features.emotion_extractor_result`
+  - `save_prompt_to_dashboard()`: `dashboard.prompt` → `audio_aggregator.vibe_aggregator_result`
+- ✅ `timeblock_endpoint_v2.py` 修正完了
+  - ステータス更新関数呼び出しを削除（Features APIが既に管理しているため）
+- ✅ README.md更新完了（v7.0.0として変更履歴追記）
+- ✅ GitHub push完了（デプロイ成功確認済み）
+
+**重要な設計決定**:
+- **1日1レコード**：`audio_aggregator`のPrimary Key `(device_id, date)`で累積更新
+- **ステータス管理の責務分離**：Features APIが自分でステータスを管理、Aggregatorは不要
+- **段階的移行**：`/generate-timeblock-prompt`のみ修正、他のエンドポイントは次フェーズ
+
+---
+
+## ✅ 前回のセッション（Session 5）で完了したこと
+
+### 1. Emotion Aggregator API 完了 🎉
+- ✅ `supabase_service.py`修正完了
+- ✅ 読み込み元変更: `emotion_opensmile` → `audio_features.emotion_extractor_result`
+- ✅ 保存先変更: `emotion_opensmile_summary` → `audio_aggregator.emotion_aggregator_result`
+- ✅ `opensmile_aggregator.py`修正完了
+- ✅ README.md更新完了（v6.0.0として変更履歴追記）
+- ✅ GitHub push完了（デプロイ成功、実行時間: 4分25秒）
+
+---
+
+## ✅ 前回のセッション（Session 4）で完了したこと
 
 ### 1. audio_aggregatorテーブルの設計修正 🎉
 - ✅ **設計ミス修正**: `time_block`カラムを削除（30分単位は不要）
@@ -261,12 +376,14 @@ supabase/migrations/
 ✅ Emotion Features API (v3)
 ✅ Vibe Transcriber API (v2)
 
-Phase 2: Aggregator API群 (1/3 完了) ← 次はここから
+Phase 2: Aggregator API群 (3/3 完了) 🎉
 ✅ Behavior Aggregator API - 完了！
-[ ] Emotion Aggregator API ← 次の作業
-[ ] Vibe Aggregator API
+✅ Emotion Aggregator API - 完了！
+✅ Vibe Aggregator API - `/generate-timeblock-prompt`のみ完了
+   ⚠️ `/generate-dashboard-summary` - 次のフェーズで新API分離
+   ⚠️ `/create-failed-record` - Vibe Scorer APIへ移動予定
 
-Phase 3: Scorer API (0/1 完了)
+Phase 3: Scorer API (0/1 完了) ← 次はここから
 [ ] Vibe Scorer API
 
 Phase 4: Infrastructure (0/3 完了)

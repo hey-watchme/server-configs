@@ -87,9 +87,182 @@
 5.  **動作確認:**
     関連するサービスの`systemctl status`を確認します。
 
+### 🔧 Nginxタイムアウト設定の変更
+
+長時間処理が必要なAPIで504エラーが発生する場合、Nginxのタイムアウト設定を延長します。
+
+#### 設定変更が必要な症状
+
+**504 Gateway Timeout エラー**が発生し、以下の状況の場合:
+
+```
+実際の処理時間: 90秒
+Nginxタイムアウト: 60秒（デフォルト）
+結果: 60秒で504エラー（処理は継続中）
+```
+
+#### 設定変更手順
+
+1. **このリポジトリで設定を変更**
+
+   `sites-available/api.hey-watch.me`の該当APIのlocationブロックにタイムアウト設定を追加:
+
+   ```nginx
+   location /new-heavy-api/ {
+       proxy_pass http://localhost:8020/;
+       # ... 他の設定 ...
+
+       # タイムアウトを延長
+       proxy_read_timeout 300s;    # 5分まで待機
+       proxy_connect_timeout 30s;  # 接続は30秒
+       proxy_send_timeout 60s;     # 送信は60秒
+   }
+   ```
+
+2. **GitHubにプッシュ**
+
+   ```bash
+   git add sites-available/api.hey-watch.me
+   git commit -m "fix: [API名]のタイムアウトを延長"
+   git push origin main
+   ```
+
+3. **本番サーバーで適用**
+
+   ```bash
+   ssh -i ~/watchme-key.pem ubuntu@3.24.16.82
+   cd /home/ubuntu/watchme-server-configs
+   git pull origin main
+   ./setup_server.sh
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
+
+#### 注意事項
+
+1. **影響範囲の確認**
+   - 必要なAPIのみタイムアウトを延長（全体への影響を避ける）
+   - クライアント側のタイムアウトも確認（Lambda、ブラウザ等）
+
+2. **適切な値の選定**
+   - 平均処理時間の2-3倍を目安に設定
+   - 過度に長い設定はリソース浪費につながる
+
+3. **現在の設定値**
+   - 詳細は [TECHNICAL_REFERENCE.md - Nginxタイムアウト設定](./TECHNICAL_REFERENCE.md#nginxタイムアウト設定技術仕様) を参照
+
 ---
 
-## 3. トラブルシューティング
+## 3. データベースマイグレーション
+
+### 🗄️ Supabase CLIを使用したスキーマ変更
+
+#### ⚠️ 重要：Supabase CLIでできること・できないこと
+
+| 操作 | ツール | コマンド例 |
+|------|--------|-----------|
+| ✅ **スキーマ変更**（テーブル作成、カラム追加等） | **Supabase CLI** | `supabase db push` |
+| ❌ **データ確認**（SELECT等） | Supabaseダッシュボード | SQL Editor |
+
+**覚えておくべきポイント**：
+- Supabase CLI = **マイグレーション管理ツール**（スキーマのバージョン管理）
+- データ確認 = **ブラウザのSQL Editorを使用**（任意のSQLクエリ実行）
+
+---
+
+### セットアップ（初回のみ）
+
+#### 1. Supabase CLIインストール
+```bash
+brew install supabase/tap/supabase
+```
+
+#### 2. アクセストークン取得
+1. https://supabase.com/dashboard/account/tokens にアクセス
+2. "Generate New Token" をクリック
+3. Name: `watchme-cli-token`
+4. Expiry: `Never expires`
+5. トークンをコピー（1回しか表示されません）
+
+#### 3. プロジェクトリンク（プロジェクトルートで実行）
+```bash
+cd /Users/kaya.matsumoto/projects/watchme
+SUPABASE_ACCESS_TOKEN=<your-token> supabase link --project-ref qvtlwotzuzbavrzqhyvt
+```
+
+**注意**：リンクは**プロジェクト全体で1回のみ**。全サブディレクトリから使用可能。
+
+---
+
+### マイグレーション実行手順
+
+#### 1. マイグレーションファイル作成
+```bash
+# タイムスタンプ付きファイル名（自動ソート用）
+touch supabase/migrations/20251109000001_your_migration_name.sql
+```
+
+#### 2. SQLを記述
+```sql
+-- 例：新しいカラムを追加
+ALTER TABLE audio_features ADD COLUMN new_column TEXT;
+```
+
+#### 3. Dry Run（確認のみ、実行しない）
+```bash
+SUPABASE_ACCESS_TOKEN=<your-token> supabase db push --dry-run
+```
+
+#### 4. 本番実行
+```bash
+SUPABASE_ACCESS_TOKEN=<your-token> supabase db push --yes
+```
+
+---
+
+### よくあるエラーと対処法
+
+#### エラー: "view depends on column"
+**原因**：ビューが参照しているカラムを変更しようとした
+
+**対処**：マイグレーション内でビューを一時削除
+```sql
+DROP VIEW IF EXISTS v_processing_pipeline;
+ALTER TABLE audio_features ALTER COLUMN your_column TYPE TEXT;
+-- 必要ならビューを再作成
+```
+
+#### エラー: "already exists"
+**原因**：既にテーブル/カラムが存在している
+
+**対処**：`IF NOT EXISTS`や`IF EXISTS`を使用
+```sql
+CREATE TABLE IF NOT EXISTS your_table (...);
+ALTER TABLE your_table DROP COLUMN IF EXISTS old_column;
+```
+
+---
+
+### 📁 ファイル構成
+
+```
+/Users/kaya.matsumoto/projects/watchme/
+├── supabase/
+│   └── migrations/           # Supabase CLI用（自動実行）
+│       ├── 20251109000001_create_tables.sql
+│       └── 20251109000002_rename_columns.sql
+└── server-configs/
+    └── migrations/           # バックアップ・ドキュメント用
+        ├── 001_create_tables.sql
+        └── 002_rename_columns.sql
+```
+
+**運用方針**：
+- `supabase/migrations/` = CLIで実行するファイル（タイムスタンプ付き）
+- `server-configs/migrations/` = 人間が読むドキュメント（連番）
+
+---
+
+## 4. トラブルシューティング
 
 ### 🌐 ネットワーク関連の問題
 
@@ -544,3 +717,125 @@ crontab -e
 - **アップグレード日**: 2025-09-19
 - **以前**: t4g.small (2GB RAM)
 - **注意**: 一時的なアップグレード、将来的にt4g.smallに戻す可能性あり
+
+---
+
+## 5. 監視・メンテナンス
+
+### 📊 日常監視コマンド
+
+システムの健全性を確認するための定期的な監視コマンドです。
+
+```bash
+# システム全体の状態確認（メモリ・ディスク）
+free -h && df -h
+
+# 全サービスの稼働状態確認
+sudo systemctl status watchme-*.service | grep -E "●|Active|failed"
+
+# 全コンテナの状態確認
+docker ps --format "table {{.Names}}\t{{.Status}}"
+
+# ネットワーク接続状態の確認
+bash /home/ubuntu/watchme-server-configs/scripts/check-infrastructure.sh
+```
+
+### 🚨 緊急時対応
+
+#### メモリ不足時の対応
+
+```bash
+# 1. 低優先度サービスの一時停止
+sudo systemctl stop watchme-admin.service
+
+# 2. Dockerリソースのクリーンアップ
+docker system prune -f
+
+# 3. メモリ使用状況の再確認
+free -h
+docker stats --no-stream
+```
+
+#### 全体再起動時の手順
+
+サーバー全体を再起動する際の推奨順序です。
+
+```bash
+# 1. インフラストラクチャサービスを先に起動
+sudo systemctl restart watchme-infrastructure.service
+
+# 2. ネットワークが完全に起動するまで待機
+sleep 30
+
+# 3. 主要サービスを順次再起動
+sudo systemctl restart watchme-vault-api.service
+sudo systemctl restart watchme-api-manager.service
+
+# 4. 全サービスの状態確認
+sudo systemctl status watchme-*.service | grep -E "●|Active|failed"
+```
+
+---
+
+## 6. ベストプラクティス
+
+### 1. 本番用設定の徹底
+
+- **必ず**`docker-compose.prod.yml`を使用
+- **必ず**`Dockerfile.prod`を使用
+- 開発用設定ファイルは本番サーバーで使用しない
+
+### 2. systemd管理の徹底
+
+```bash
+# ❌ 手動起動は避ける
+docker-compose up -d
+
+# ✅ systemd経由で起動
+sudo systemctl start watchme-vault-api.service
+
+# ✅ 自動起動を有効化
+sudo systemctl enable watchme-vault-api.service
+```
+
+### 3. ネットワーク統一
+
+- **全てのサービス**は`watchme-network`に接続
+- `docker-compose.yml`では必ず`external: true`を指定
+- 独自のネットワークを作成しない
+
+```yaml
+networks:
+  watchme-network:
+    external: true  # 必須
+```
+
+### 4. ヘルスチェックの実装
+
+- 全APIに`/health`エンドポイントを実装
+- Dockerfileに`curl`をインストール
+- docker-compose.ymlにヘルスチェック設定を追加
+
+```yaml
+healthcheck:
+  test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+  interval: 30s
+  timeout: 10s
+  retries: 3
+```
+
+### 5. 設定の一元管理
+
+- **全ての設定変更**はGit経由で行う
+- サーバー上での直接編集は禁止
+- 変更後は必ず`setup_server.sh`を実行
+
+```bash
+# ✅ 正しい手順
+cd /home/ubuntu/watchme-server-configs
+git pull origin main
+./setup_server.sh
+
+# ❌ 避けるべき手順
+sudo nano /etc/nginx/sites-available/api.hey-watch.me  # 直接編集
+```

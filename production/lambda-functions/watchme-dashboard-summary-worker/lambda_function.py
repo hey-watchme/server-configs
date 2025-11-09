@@ -77,12 +77,12 @@ def call_dashboard_summary_api(device_id, date):
     """
     try:
         print(f"Calling Dashboard Summary API...")
-        print(f"URL: {API_BASE_URL}/vibe-analysis/aggregation/generate-dashboard-summary")
+        print(f"URL: {API_BASE_URL}/vibe-analysis/aggregator/generate-dashboard-summary")
         print(f"Parameters: device_id={device_id}, date={date}")
 
         # APIを呼び出し（GET with params)
         response = requests.get(
-            f"{API_BASE_URL}/vibe-analysis/aggregation/generate-dashboard-summary",
+            f"{API_BASE_URL}/vibe-analysis/aggregator/generate-dashboard-summary",
             params={
                 "device_id": device_id,
                 "date": date
