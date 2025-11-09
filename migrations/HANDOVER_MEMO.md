@@ -1,18 +1,43 @@
 # 🔄 セッション引き継ぎメモ
 
-**作成日時**: 2025-11-09
-**コンテキスト使用率**: 157k/200k tokens (79%)
+**作成日時**: 2025-11-09 (最終更新)
+**コンテキスト使用率**: 179k/200k tokens (89%)
 
 ---
 
 ## 📍 次回の開始地点
 
-**作業対象API**: Behavior Features API (SED - Sound Event Detection)
-**ディレクトリ**: `/Users/kaya.matsumoto/projects/watchme/api/behavior-analysis/feature-extractor-v3`
+**作業対象API**: Vibe Transcriber API (v2)
+**ディレクトリ**: `/Users/kaya.matsumoto/projects/watchme/api/vibe-analysis/transcriber-v2`
+
+**修正内容**:
+- テーブル変更: `vibe_whisper` → `audio_features`
+- カラム変更: `transcriber_result`, `transcriber_status`, `transcriber_processed_at`
 
 ---
 
-## ✅ 今回のセッションで完了したこと
+## ✅ 今回のセッション（Session 2）で完了したこと
+
+### 1. Behavior Features API (v3) 完了
+- ✅ `main_supabase.py`修正完了
+- ✅ テーブル変更: `behavior_yamnet` → `audio_features`
+- ✅ 新カラム: `behavior_extractor_result`, `behavior_extractor_status`, `behavior_extractor_processed_at`
+- ✅ README.md更新完了
+- ✅ GitHub push完了（デプロイ済み）
+
+### 2. Emotion Features API (v3) 完了
+- ✅ `supabase_service.py`修正完了
+- ✅ テーブル変更: `emotion_opensmile` → `audio_features`
+- ✅ 新カラム: `emotion_extractor_result`, `emotion_extractor_status`, `emotion_extractor_processed_at`
+- ✅ README.md更新完了
+- ✅ GitHub push完了（デプロイ済み）
+
+### 3. ドキュメント改善
+- ✅ HANDOVER_MEMO.md修正（ローカルテスト不要を明記）
+
+---
+
+## ✅ 前回のセッション（Session 1）で完了したこと
 
 ### 1. データベーススキーマ変更（完了）
 - ✅ `002_rename_columns_for_consistency.sql` 作成・実行完了
@@ -50,45 +75,45 @@
 
 ## 🎯 次回やること
 
-### Phase 1: Behavior Features API (v3) の修正
+### Phase 1: Vibe Transcriber API (v2) の修正
 
 #### 作業内容
-1. **エンドポイント名の統一**
-   - 現在：`/behavior-analysis/features/`
-   - 変更後：`/behavior-analysis/feature-extractor/`
-
-2. **データベース書き込み先の変更**
-   - 現在：`behavior_yamnet`テーブル
-   - 変更後：`audio_features.behavior_extractor_result` カラム（JSONB型）
+1. **データベース書き込み先の変更**
+   - 現在：`vibe_whisper`テーブル
+   - 変更後：`audio_features.transcriber_result` カラム（TEXT型）
    - **旧テーブルへの書き込みは削除**（並行運用なし）
 
-3. **ステータス管理**
-   - `audio_features.behavior_extractor_status = 'completed'` に更新
-   - `audio_features.behavior_extractor_processed_at = NOW()` を設定
+2. **ステータス管理**
+   - `audio_features.transcriber_status = 'completed'` に更新
+   - `audio_features.transcriber_processed_at = NOW()` を設定
+
+3. **データ型の違いに注意**
+   - Behavior/Emotion: JSONB型
+   - **Transcriber: TEXT型**（文字起こし結果はシンプルなテキスト）
 
 #### 修正箇所
 ```bash
-cd /Users/kaya.matsumoto/projects/watchme/api/behavior-analysis/feature-extractor-v3
+cd /Users/kaya.matsumoto/projects/watchme/api/vibe-analysis/transcriber-v2
 ```
 
 **確認すべきファイル**:
 1. Supabase接続部分
-2. `behavior_yamnet`テーブルへの書き込み処理
+2. `vibe_whisper`テーブルへの書き込み処理
 3. エンドポイント定義（FastAPI）
 
 **修正パターン**:
 ```python
 # 旧コード（削除）
-supabase.table('behavior_yamnet').upsert({...})
+supabase.table('vibe_whisper').upsert({...})
 
 # 新コード（追加）
 supabase.table('audio_features').upsert({
     'device_id': device_id,
     'date': date,
     'time_block': time_block,
-    'behavior_extractor_result': events_json,  # JSONB形式
-    'behavior_extractor_status': 'completed',
-    'behavior_extractor_processed_at': datetime.now().isoformat()
+    'transcriber_result': transcription_text,  # TEXT形式（注意：JSONBではない）
+    'transcriber_status': 'completed',
+    'transcriber_processed_at': datetime.now().isoformat()
 })
 ```
 
@@ -178,10 +203,10 @@ supabase/migrations/
 ✅ Phase 0.5: Supabase CLI環境構築
 ✅ Phase 0.6: ドキュメント整備
 
-Phase 1: Features API群
-[ ] Behavior Features API (v3) ← 次はここから
-[ ] Emotion Features API (v2)
-[ ] Vibe Transcriber API (v2)
+Phase 1: Features API群 (3/3 完了)
+✅ Behavior Features API (v3) - 完了！
+✅ Emotion Features API (v3) - 完了！
+[ ] Vibe Transcriber API (v2) ← 次はここから
 
 Phase 2: Aggregator API群
 [ ] Behavior Aggregator API
