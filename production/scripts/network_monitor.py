@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 REQUIRED_CONTAINERS = [
     'watchme-scheduler-prod',
     'watchme-api-manager-prod',
-    'api_gen_prompt_mood_chart',
+    'vibe-analysis-aggregator',
     'api-transcriber',
     'api-gpt-v1',
     'opensmile-api',
