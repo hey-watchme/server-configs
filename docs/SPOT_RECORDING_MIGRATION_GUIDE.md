@@ -34,128 +34,75 @@ devices.timezone を使ってクライアント側で変換
 
 ---
 
-## 📋 進捗状況（2025-11-11 22:30）
+## 📋 進捗状況（2025-11-11 最終更新）
 
-### ✅ 完了した作業
+### ✅ Phase 1完了: サーバー側API修正（UTC統一アーキテクチャ）
 
 #### 1. データベース修正
 - ✅ `audio_files.local_datetime` カラム削除
 - ✅ `spot_features.local_datetime` カラム削除
+- ✅ `devices.timezone` カラム存在確認（例: `Asia/Tokyo`）
 
 #### 2. iOSアプリ修正
-- ✅ `UploaderService.swift`: `recorded_at` をUTCで送信するように変更
-- ✅ コミット・プッシュ完了
-- ✅ ビルド成功確認
+- ✅ `UploaderService.swift`: `recorded_at` をUTCで送信
+- ✅ コミット・プッシュ・ビルド成功確認
 
-#### 3. 確認済み
-- ✅ `devices` テーブルに `timezone` カラムが存在（例: `Asia/Tokyo`）
+#### 3. Vault API修正（完全完了）
+- ✅ `local_datetime` 保存処理を削除
+- ✅ S3パス構造を変更: `{HH-MM}` → `{HH-MM-SS}` (秒単位精度)
+  - 理由: 30分以内の複数録音が上書きされる問題を解決
+  - 旧: `files/{device_id}/{YYYY-MM-DD}/{HH-MM}/audio.wav`
+  - 新: `files/{device_id}/{YYYY-MM-DD}/{HH-MM-SS}/audio.wav`
+- ✅ README.md完全更新（UTC統一・HH-MM-SS形式を反映）
+- ✅ コミット: 2件（app.py + README.md）
+
+#### 4. Vibe Transcriber修正
+- ✅ `audio_features` → `spot_features` に変更
+- ✅ キー変更: `(device_id, date, time_block)` → `(device_id, recorded_at)`
+- ✅ コミット完了
+
+#### 5. Behavior Features修正
+- ✅ `audio_features` → `spot_features` に変更
+- ✅ `audio_files` テーブルから `recorded_at` を取得
+- ✅ コミット完了
+
+#### 6. Emotion Features修正
+- ✅ `supabase_service.py`: `audio_features` → `spot_features` に変更
+- ✅ `main.py`: `audio_files` から `recorded_at` を取得
+- ✅ 完全移行完了、コミット: 2件
 
 ---
 
-### 🚧 進行中・未完了
+### 🚧 残タスク（Phase 2-3）
 
-#### 4. Vault API修正（次のタスク）
-- ⏳ `local_datetime` の保存処理を削除
-- ⏳ README.md更新（UTC統一を反映）
+#### Phase 2: Aggregator API修正
+- ⏳ `devices.timezone` を使ってUTC→ローカル時間に変換
+- ⏳ プロンプト生成時にローカル時間情報を含める
 
-#### 5. 3つのFeatures API修正
-- ⏳ Vibe Transcriber: `audio_features` → `spot_features` に変更
-- ⏳ Behavior Features: `audio_features` → `spot_features` に変更
-- ⏳ Emotion Features: `audio_features` → `spot_features` に変更
-
-#### 6. Aggregator API修正
-- ⏳ `devices.timezone` を取得してローカル時間に変換
-- ⏳ プロンプト生成時に時間情報を正しく反映
-
-#### 7. 表示ロジック修正
-- ⏳ iOSアプリ: UTCをローカル時間に変換して表示
+#### Phase 3: クライアント側修正
+- ⏳ iOSアプリ: 表示時にUTC→ローカル時間変換
 - ⏳ Webダッシュボード: 同様
 
 ---
 
 ## 🎯 次セッションの TODO
 
-### Phase 1: サーバー側の修正（優先）
+### ✅ Phase 1完了: サーバー側API修正
 
-#### ✅ Task 1: Vault API修正
-**ファイル**: `/Users/kaya.matsumoto/projects/watchme/api/vault/app.py`
+**完了した内容**:
+1. ✅ Vault API: `local_datetime` 削除 + S3パス秒単位精度化
+2. ✅ Vibe Transcriber: `spot_features` 移行
+3. ✅ Behavior Features: `spot_features` 移行
+4. ✅ Emotion Features: `spot_features` 移行（完全）
 
-**修正内容**:
-```python
-# Before:
-audio_file_data = {
-    "device_id": device_id,
-    "recorded_at": recorded_at.isoformat(),
-    "local_datetime": recorded_at.isoformat(),  # ← 削除
-    "file_path": s3_key,
-    ...
-}
-
-# After:
-audio_file_data = {
-    "device_id": device_id,
-    "recorded_at": recorded_at.isoformat(),  # UTC
-    "file_path": s3_key,
-    ...
-}
-```
-
-**確認方法**:
-```bash
-cd /Users/kaya.matsumoto/projects/watchme/api/vault
-git diff app.py
-python3 -m py_compile app.py
-git commit && git push
-```
+**重要な追加修正**:
+- ✅ S3パス構造変更: `{HH-MM-SS}` 形式（30分以内の上書き問題を解決）
 
 ---
 
-#### ✅ Task 2: Vibe Transcriber修正
-**ファイル**: `/Users/kaya.matsumoto/projects/watchme/api/vibe-analysis/transcriber-v2/app/services.py`
+### 🚀 Phase 2: Aggregator API修正（次のタスク）
 
-**修正内容**:
-```python
-# audio_features → spot_features に変更
-# キー: (device_id, recorded_at)
-
-data = {
-    "device_id": device_id,
-    "recorded_at": audio_file['recorded_at'],  # UTC
-    "vibe_transcriber_result": transcription_text,
-    "vibe_transcriber_status": "completed",
-    "vibe_transcriber_processed_at": datetime.now(timezone.utc).isoformat()
-}
-
-response = self.supabase.table('spot_features').upsert(data).execute()
-```
-
-**テスト**:
-1. iOSアプリで録音
-2. Supabase確認: `spot_features.vibe_transcriber_result` にデータがあるか
-
----
-
-#### ✅ Task 3: Behavior Features修正
-**ファイル**: `/Users/kaya.matsumoto/projects/watchme/api/behavior-analysis/features/`
-
-同様のパターン:
-- `audio_features` → `spot_features`
-- `behavior_extractor_result` カラムに保存
-
----
-
-#### ✅ Task 4: Emotion Features修正
-**ファイル**: `/Users/kaya.matsumoto/projects/watchme/api/emotion-analysis/features/`
-
-同様のパターン:
-- `audio_features` → `spot_features`
-- `emotion_extractor_result` カラムに保存
-
----
-
-### Phase 2: Aggregator API修正
-
-#### ✅ Task 5: devices.timezone取得
+#### Task 1: Vibe Aggregator - devices.timezone取得
 **ファイル**: `/Users/kaya.matsumoto/projects/watchme/api/aggregator/services/data_fetcher.py`
 
 **修正内容**:
@@ -294,6 +241,13 @@ let localString = formatter.string(from: utcTime)
 ---
 
 ## 📝 変更履歴
+
+### 2025-11-11 最終セッション
+- **Phase 1完全完了**: サーバー側API修正を完了
+- Vault API: `local_datetime` 削除 + S3パス秒単位精度化（`{HH-MM-SS}` 形式）
+- Vibe Transcriber, Behavior Features, Emotion Features: `spot_features` 移行完了
+- **重要な発見と修正**: S3パス構造を30分ブロックから秒単位精度に変更（上書き問題を解決）
+- 全APIのコミット・プッシュ完了（計8コミット）
 
 ### 2025-11-11 22:30
 - **方針転換**: `local_datetime` 廃止、UTC統一アーキテクチャに移行
