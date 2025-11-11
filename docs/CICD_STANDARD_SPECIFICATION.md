@@ -282,17 +282,17 @@ docker logs {container-name} --tail 100
 
 ### GitHub Actionsワークフロー仕様
 
-#### 必須ステップ（deploy-to-ec2ジョブ）
+#### ⚠️ deploy-to-ec2ジョブの必須ステップチェックリスト
 
-```yaml
-# ステップ1: SSHエージェントのセットアップ
-# ステップ2: コードのチェックアウト
-# ステップ3: Known Hostsの追加
-# ステップ4: EC2にディレクトリ作成（べき等性のため常に実行）
-# ステップ5: docker-compose.prod.ymlとrun-prod.shをEC2にコピー
-# ステップ6: EC2に.envファイルを作成/更新
-# ステップ7: docker-composeでコンテナ再起動
-```
+**以下のステップが順番通りに実装されているか確認してください：**
+
+- [ ] ステップ1: コードのチェックアウト（`actions/checkout@v4`）← **忘れやすい**
+- [ ] ステップ2: SSHエージェントのセットアップ（`webfactory/ssh-agent@v0.9.0`）
+- [ ] ステップ3: Known Hostsの追加（`ssh-keyscan`）
+- [ ] ステップ4: EC2にディレクトリ作成（`mkdir -p`）
+- [ ] ステップ5: ファイルをEC2にコピー（`scp docker-compose.prod.yml run-prod.sh`）← **忘れやすい**
+- [ ] ステップ6: .envファイル作成/更新（`echo "VAR=value" > .env`）
+- [ ] ステップ7: デプロイスクリプト実行（`./run-prod.sh`）
 
 #### Dockerイメージビルドの標準テンプレート
 
