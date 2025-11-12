@@ -34,175 +34,270 @@ devices.timezone を使ってクライアント側で変換
 
 ---
 
-## 📋 進捗状況（2025-11-12 13:50 最終更新）
+## 📋 進捗状況（2025-11-12 最終更新）
 
-### ✅ Phase 1完了: サーバー側API修正（UTC統一アーキテクチャ）
+### ✅ Phase 1完了: 録音（iOS → S3 → Vault API）
 
 #### 1. データベース修正
 - ✅ `audio_files.local_datetime` カラム削除
 - ✅ `spot_features.local_datetime` カラム削除
-- ✅ `spot_features` テーブルに不足カラム追加:
-  - `behavior_extractor_status`, `behavior_extractor_processed_at`
-  - `emotion_extractor_status`, `emotion_extractor_processed_at`
-  - `vibe_transcriber_status`, `vibe_transcriber_processed_at`
-- ✅ `spot_features` テーブルのRLS無効化（内部API専用テーブルのため）
-- ✅ `devices.timezone` カラム存在確認（例: `Asia/Tokyo`）
+- ✅ `spot_features` テーブルに不足カラム追加
+- ✅ `spot_features` テーブルのRLS無効化
+- ✅ `spot_results` テーブル作成（新規）
+- ✅ `spot_aggregators` テーブル作成（新規）
+- ✅ `devices.timezone` カラム存在確認
 
 #### 2. iOSアプリ修正
 - ✅ `UploaderService.swift`: `recorded_at` をUTCで送信
 - ✅ コミット・プッシュ・ビルド成功確認
 
-#### 3. Vault API修正（完全完了）
+#### 3. Vault API修正
 - ✅ `local_datetime` 保存処理を削除
 - ✅ S3パス構造を変更: `{HH-MM}` → `{HH-MM-SS}` (秒単位精度)
 - ✅ README.md完全更新
 
-#### 4. Vibe Transcriber修正（完了・本番動作確認済み）🎉
+---
+
+### ✅ Phase 2完了: 特徴抽出（ASR + SED + SER → spot_features）
+
+#### 4. Vibe Transcriber（ASR）修正
 - ✅ `audio_files` テーブルから `device_id`, `recorded_at` 取得
 - ✅ `spot_features` テーブルに保存
 - ✅ キー変更: `(device_id, date, time_block)` → `(device_id, recorded_at)`
-- ✅ **バグ修正（2回）**:
-  - 1回目: `time_block` 未定義エラー修正
-  - 2回目: `recorded_at` 未定義エラー修正（既存インターフェース対応）
-- ✅ **本番動作確認済み**: spot_featuresにデータ保存成功 🎉
+- ✅ 本番動作確認済み 🎉
 
-#### 5. Behavior Features修正（完了・動作確認済み）
-- ✅ `audio_features` → `spot_features` に変更
+#### 5. Behavior Features（SED）修正
+- ✅ `spot_features` に保存
 - ✅ `save_to_spot_features()` 関数実装
-- ✅ `audio_files` ステータス更新処理追加
-- ✅ **本番動作確認済み**: spot_featuresにデータ保存成功 🎉
+- ✅ 本番動作確認済み 🎉
 
-#### 6. Emotion Feature Extractor v2修正（完了・デプロイ済み）🎉
-- ✅ `supabase_service.py`: `emotion_opensmile` → `spot_features` に完全移行
-- ✅ `main.py`: `audio_files` テーブルから `device_id`, `recorded_at` 取得
-- ✅ キー変更: `(device_id, date, time_block)` → `(device_id, recorded_at)`
-- ✅ コミット・プッシュ・本番デプロイ完了
-
-#### 7. Vibe Aggregator API修正（完了）
-- ✅ `data_fetcher.py`: `get_device_timezone()` 実装
-- ✅ `prompt_generator.py`: pytzでUTC→ローカル時間変換実装
-- ✅ `spot_aggregator.py`: timezone_str引数に変更
-- ✅ `requirements.txt`: pytz追加
-- ✅ Dockerビルド・ローカルテスト成功
-- ✅ コミット・プッシュ・本番デプロイ完了
+#### 6. Emotion Feature Extractor v2（SER）修正
+- ✅ `emotion_opensmile` → `spot_features` に完全移行
+- ✅ 本番動作確認済み 🎉
 
 ---
 
-### 🚧 残タスク（Phase 2-3）- 残り5%
+### ✅ Phase 3完了: 統合・プロンプト生成（Aggregator API）
 
-#### Phase 2: Aggregator API修正（残り2つ）
-- 🚧 **Behavior Aggregator**: `devices.timezone` 対応（進行中）
-  - 現状: `audio_features` + `date`/`time_block` ベース
-  - 修正: `spot_features` + `recorded_at` (UTC) + timezone変換
-  - 参考実装: Vibe Aggregator API
+#### 7. Aggregator API修正
+- ✅ `spot_features` からASR+SED+SERデータ取得
+- ✅ `devices.timezone` 対応
+- ✅ UTC→ローカル時間変換（pytz使用）
+- ✅ 統合プロンプト生成
+- ✅ `spot_aggregators` に保存
+- ✅ 本番動作確認済み 🎉
 
-- ⏳ **Emotion Aggregator**: `devices.timezone` 対応
-  - 同様の修正が必要
+---
 
-#### Phase 3: クライアント側修正
-- ⏳ iOSアプリ: 表示時にUTC→ローカル時間変換
-- ⏳ Webダッシュボード: 同様
+### 🚧 Phase 4進行中: LLM分析（Scorer API）- 残り10%
+
+#### 8. Scorer API修正（進行中）
+**現状**:
+- ✅ プロンプト形式は完成（`/api/aggregator/services/prompt_generator.py`）
+- ✅ LLM呼び出しロジック完成（`/api/vibe-analysis/scorer/main.py`）
+- ❌ 保存先テーブルが `audio_scorer` のまま（旧アーキテクチャ）
+
+**必要な修正**:
+- 🚧 入力元変更: `audio_aggregator.vibe_aggregator_result` → `spot_aggregators.aggregated_prompt`
+- 🚧 保存先変更: `audio_scorer` → `spot_results`
+- 🚧 リクエストパラメータ変更: `(device_id, date, time_block)` → `(device_id, recorded_at)`
+- 🚧 動作確認
+
+**参考**:
+- 既存エンドポイント: `/analyze-timeblock`（行299-496）
+- 新エンドポイント: `/analyze-spot`（新規作成が必要）
+
+---
+
+### ⏳ Phase 5未着手: クライアント側表示
+
+#### 9. iOS アプリ表示ロジック
+- ⏳ `spot_results` からデータ取得
+- ⏳ UTC → ローカル時間変換
+- ⏳ ダッシュボード画面の実装
+
+#### 10. Web ダッシュボード
+- ⏳ 同様の修正（優先度低・休止中）
 
 ---
 
 ## 🎯 次セッションの TODO
 
-### ✅ 完了済み
+### ✅ 完了済み（Phase 1-3）
 
 1. ✅ Vault API: `local_datetime` 削除 + S3パス秒単位精度化
-2. ✅ Vibe Transcriber: `spot_features` 移行 + バグ修正（2回）+ 本番動作確認済み 🎉
-3. ✅ Behavior Features: `spot_features` 移行 + 本番動作確認済み 🎉
-4. ✅ Vibe Aggregator API: devices.timezone対応 + UTC→ローカル時間変換
-5. ✅ Emotion Feature Extractor v2: `spot_features` 移行 + デプロイ完了 🎉
+2. ✅ Vibe Transcriber（ASR）: `spot_features` 移行 + 本番動作確認済み 🎉
+3. ✅ Behavior Features（SED）: `spot_features` 移行 + 本番動作確認済み 🎉
+4. ✅ Emotion Feature Extractor v2（SER）: `spot_features` 移行 + 本番動作確認済み 🎉
+5. ✅ Aggregator API: `spot_features` からASR+SED+SER統合 + 本番動作確認済み 🎉
 
 ---
 
-### 🚀 次のタスク（優先度順）- 残り5%
+### 🚀 次のタスク（優先度順）- 残り10%
 
-#### 1. Behavior Aggregator修正（進行中）
+#### 1. Scorer API修正（最優先）
 
-**ファイル**: `/Users/kaya.matsumoto/projects/watchme/api/behavior-analysis/aggregator/sed_aggregator.py`
+**ファイル**: `/Users/kaya.matsumoto/projects/watchme/api/vibe-analysis/scorer/main.py`
 
-**現状**:
-- `audio_features` テーブル使用（旧テーブル）
-- `date`, `time_block` ベースの取得
-- `audio_aggregator` テーブルに保存
+**必要な修正**:
 
-**修正内容**: Vibe Aggregator APIと同様の実装
-- `fetch_all_data()`: `audio_features` → `spot_features`, `date`/`time_block` → `recorded_at`
-- `get_device_timezone()`: 新規メソッド追加
-- UTC→ローカル時間変換: `pytz`を使用して30分スロット計算
-- `save_to_supabase()`: 保存先テーブル確認
+1. **新エンドポイント作成**: `/analyze-spot`
+   - リクエスト: `(device_id, recorded_at)`
+   - 入力元: `spot_aggregators.aggregated_prompt`
+   - 保存先: `spot_results`
 
-**参考実装**: `/Users/kaya.matsumoto/projects/watchme/api/vibe-analysis/aggregator`
+2. **既存エンドポイント参考**: `/analyze-timeblock`（行388-496）
+   - 同様のロジックをコピーして修正
+
+3. **保存処理の変更**:
+   ```python
+   # 旧
+   supabase.table('audio_scorer').upsert({...})
+
+   # 新
+   supabase.table('spot_results').upsert({
+     'device_id': request.device_id,
+     'recorded_at': request.recorded_at,
+     'vibe_score': analysis_result.get('vibe_score'),
+     'vibe_summary': analysis_result.get('summary'),
+     'vibe_behavior': analysis_result.get('behavioral_analysis', {}).get('behavior_pattern'),
+     'psychological_analysis': analysis_result.get('psychological_analysis'),
+     'behavioral_analysis': analysis_result.get('behavioral_analysis'),
+     'acoustic_metrics': analysis_result.get('acoustic_metrics'),
+     'key_observations': analysis_result.get('key_observations'),
+     'vibe_scorer_result': analysis_result,
+     'vibe_analyzed_at': datetime.now().isoformat()
+   })
+   ```
+
+4. **プロンプト取得の変更**:
+   ```python
+   # 旧
+   result = supabase.table('audio_aggregator').select('vibe_aggregator_result')...
+
+   # 新
+   result = supabase.table('spot_aggregators').select('aggregated_prompt')...
+   ```
 
 **推定作業時間**: 30-60分
 
 ---
 
-#### 2. Emotion Aggregator修正
+#### 2. Lambda関数の修正（Scorer API呼び出し）
 
-**ファイル**: `/Users/kaya.matsumoto/projects/watchme/api/emotion-analysis/aggregator`
+**ファイル**: Lambda関数 `audio-worker` のコード
 
-**修正内容**: Behavior Aggregatorと同様の修正
+**必要な修正**:
+- エンドポイント変更: `/analyze-timeblock` → `/analyze-spot`
+- リクエストパラメータ: `(device_id, date, time_block)` → `(device_id, recorded_at)`
 
-**推定作業時間**: 30-60分
+**推定作業時間**: 15-30分
 
 ---
 
-### Phase 3: クライアント側の修正
+#### 3. iOS アプリ表示ロジック（Phase 5）
 
-#### ✅ Task 6: iOSアプリ表示ロジック
 **対象**:
 - ダッシュボード画面
 - 録音履歴画面
 
 **修正内容**:
 ```swift
-// Get device timezone
-let device = // Supabaseから取得
+// 1. Get spot_results from Supabase
+let results = supabase
+  .from("spot_results")
+  .select("*")
+  .eq("device_id", deviceId)
+  .order("recorded_at", ascending: false)
+  .execute()
+
+// 2. Get device timezone
+let device = supabase.from("devices").select("timezone").eq("device_id", deviceId).single().execute()
 let timezone = TimeZone(identifier: device.timezone)  // "Asia/Tokyo"
 
-// Convert UTC to local time
-let recordedAtUTC = // Supabaseから取得
-let localTime = recordedAtUTC.convertTo(timezone: timezone)
+// 3. Convert UTC to local time
+for result in results {
+  let recordedAtUTC = result.recorded_at  // UTC timestamp
+  let localTime = recordedAtUTC.convertTo(timezone: timezone)
 
-// Display
-Text(localTime.formatted())
+  // Display
+  Text(localTime.formatted())
+  Text(result.vibe_summary)
+  Text("Score: \(result.vibe_score)")
+}
 ```
+
+**推定作業時間**: 2-3時間
 
 ---
 
 ## 🗄️ データベーススキーマ（最終版）
 
-### audio_files
+### 1. audio_files - 録音ファイル情報（Phase 1: 録音）
 ```sql
 CREATE TABLE audio_files (
   device_id TEXT NOT NULL,
   recorded_at TIMESTAMPTZ NOT NULL,  -- UTC
   file_path TEXT NOT NULL,
-  transcriptions_status TEXT DEFAULT 'pending',
-  behavior_features_status TEXT DEFAULT 'pending',
-  emotion_features_status TEXT DEFAULT 'pending',
+  vibe_transcriber_status TEXT DEFAULT 'pending',
+  behavior_extractor_status TEXT DEFAULT 'pending',
+  emotion_extractor_status TEXT DEFAULT 'pending',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   PRIMARY KEY (device_id, recorded_at)
 );
 ```
 
-### spot_features
+### 2. spot_features - 特徴抽出結果（Phase 2: 分析）
 ```sql
 CREATE TABLE spot_features (
   device_id TEXT NOT NULL,
   recorded_at TIMESTAMPTZ NOT NULL,  -- UTC
-  vibe_transcriber_result TEXT,
-  behavior_extractor_result JSONB,
-  emotion_extractor_result JSONB,
+  vibe_transcriber_result TEXT,          -- ASR: 文字起こし
+  behavior_extractor_result JSONB,       -- SED: 527種類の音響イベント
+  emotion_extractor_result JSONB,        -- SER: 8感情スコア
+  vibe_transcriber_status TEXT,
+  vibe_transcriber_processed_at TIMESTAMPTZ,
+  behavior_extractor_status TEXT,
+  behavior_extractor_processed_at TIMESTAMPTZ,
+  emotion_extractor_status TEXT,
+  emotion_extractor_processed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   PRIMARY KEY (device_id, recorded_at)
 );
 ```
 
-### devices（既存）
+### 3. spot_aggregators - 統合プロンプト（Phase 3: 統合）
+```sql
+CREATE TABLE spot_aggregators (
+  device_id TEXT NOT NULL,
+  recorded_at TIMESTAMPTZ NOT NULL,  -- UTC
+  aggregated_prompt TEXT,             -- LLM分析用プロンプト（ASR+SED+SER統合）
+  context_data JSONB,                 -- メタデータ（timezone, subject_infoなど）
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (device_id, recorded_at)
+);
+```
+
+### 4. spot_results - LLM分析結果（Phase 4: スコアリング）
+```sql
+CREATE TABLE spot_results (
+  device_id TEXT NOT NULL,
+  recorded_at TIMESTAMPTZ NOT NULL,  -- UTC
+  vibe_score INTEGER,                 -- -100〜+100
+  vibe_summary TEXT,                  -- 2-3文の要約
+  vibe_behavior TEXT,                 -- 行動パターン
+  psychological_analysis JSONB,       -- 心理分析詳細
+  behavioral_analysis JSONB,          -- 行動分析詳細
+  acoustic_metrics JSONB,             -- 音響メトリクス
+  key_observations JSONB,             -- 重要な観察事項
+  vibe_scorer_result JSONB,           -- LLMの完全レスポンス
+  vibe_analyzed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (device_id, recorded_at)
+);
+```
+
+### 5. devices（既存テーブル）
 ```sql
 -- timezone カラムを使用
 SELECT device_id, timezone FROM devices;
@@ -214,23 +309,33 @@ SELECT device_id, timezone FROM devices;
 ## 📊 データフロー（最終版）
 
 ```
-【録音】
-iOS → recorded_at (UTC) → Vault API → audio_files (UTC保存)
+【Phase 1: 録音】
+iOS/Observer → S3 → Vault API → audio_files (UTC保存)
 
-【分析】
-Lambda → 3つのFeatures API → spot_features (UTC保存)
+【Phase 2: 特徴抽出（並列実行）】
+Lambda (audio-worker) → 3つの分析APIを並列実行:
+  ├─ ASR (Vibe Transcriber)     → spot_features.vibe_transcriber_result
+  ├─ SED (Behavior Features)    → spot_features.behavior_extractor_result
+  └─ SER (Emotion Features)     → spot_features.emotion_extractor_result
 
-【集計】
-Aggregator API:
-  1. spot_features から recorded_at (UTC) 取得
+【Phase 3: 統合・プロンプト生成】
+Aggregator API (/api/aggregator):
+  1. spot_features から ASR+SED+SER データ取得
   2. devices.timezone 取得
   3. UTC → ローカル時間に変換
-  4. プロンプト生成（時間情報を含む）
-  5. spot_aggregators に保存
+  4. subject_info（年齢・性別）取得
+  5. 統合プロンプト生成（時間コンテキスト含む）
+  6. spot_aggregators に保存
 
-【表示】
+【Phase 4: LLM分析】
+Scorer API (/api/vibe-analysis/scorer):
+  1. spot_aggregators.aggregated_prompt 取得
+  2. ChatGPT/Groq でLLM分析実行
+  3. spot_results に保存
+
+【Phase 5: 表示】
 iOS/Web:
-  1. recorded_at (UTC) 取得
+  1. spot_results から分析結果取得
   2. devices.timezone 取得
   3. UTC → ローカル時間に変換
   4. ユーザーに表示
@@ -267,19 +372,22 @@ let localString = formatter.string(from: utcTime)
 
 ## 📝 変更履歴
 
-### 2025-11-12 13:00-13:50（このセッション）- Phase 2 ほぼ完了 🎉
-- **Emotion Feature Extractor v2修正完了**:
-  - `emotion_opensmile` → `spot_features` に完全移行
-  - `supabase_service.py` 全面書き換え
-  - `main.py` を `audio_files` テーブルベースに変更
-  - コミット・プッシュ・デプロイ完了
-- **Vibe Transcriber修正完了**:
-  - バグ修正（2回）: `time_block` 未定義エラー、`recorded_at` 未定義エラー
-  - 本番動作確認済み 🎉
-- **Behavior Aggregator修正開始**:
-  - 現状把握完了（`sed_aggregator.py` の構造分析）
-  - 修正方針確定（Vibe Aggregator APIを参考に実装）
-- **進捗**: Phase 2 残り5% - Aggregator API 2つのみ
+### 2025-11-12 最終セッション - アーキテクチャ整理完了 🎉
+- **認識の統一**:
+  - 旧Behavior/Emotion Aggregator APIは使用しない（個別集計は不要）
+  - 統合Aggregator API (`/api/aggregator`) が3つの分析結果を統合
+  - Scorer API (`/api/vibe-analysis/scorer`) が既存のLLM処理を担当
+- **ドキュメント全面更新**:
+  - SPOT_RECORDING_MIGRATION_GUIDE.md を正しいアーキテクチャに修正
+  - データフローを5フェーズで明確化（録音→特徴抽出→統合→LLM分析→表示）
+  - データベーススキーマを4テーブル構成に整理
+  - 残タスクを明確化（Scorer API修正が最優先）
+- **進捗**: Phase 1-3 完了（90%）、Phase 4 進行中（残り10%）
+
+### 2025-11-12 13:00-13:50 - Phase 2-3 完了 🎉
+- **Emotion Feature Extractor v2修正完了**
+- **Vibe Transcriber修正完了**（バグ修正2回）
+- **Aggregator API修正完了**（ASR+SED+SER統合）
 
 ### 2025-11-12 00:00-01:00
 - **Vibe Aggregator API修正完了**: devices.timezone対応 + UTC→ローカル時間変換
