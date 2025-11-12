@@ -83,19 +83,19 @@
 │   ├─ POST /daily-profiler                                    │
 │   │  ├─ 入力: spot_results（1日分）                           │
 │   │  ├─ 処理: LLM累積分析（1日の心理トレンド）                 │
-│   │  ├─ 出力: daily_results                                   │
+│   │  ├─ 出力: summary_daily                                   │
 │   │  └─ 説明: 1日分のspot録音を統合し、日次の心理状態を分析     │
 │   │                                                           │
 │   ├─ POST /weekly-profiler 🆕                                │
-│   │  ├─ 入力: daily_results（7日分）                          │
+│   │  ├─ 入力: summary_daily（7日分）                          │
 │   │  ├─ 処理: LLM週次分析（1週間の心理変動）                   │
-│   │  ├─ 出力: weekly_results                                  │
+│   │  ├─ 出力: summary_weekly                                  │
 │   │  └─ 説明: 週単位の心理トレンド、週内の変動パターン分析       │
 │   │                                                           │
 │   └─ POST /monthly-profiler 🆕                               │
-│      ├─ 入力: daily_results（30日分）                         │
+│      ├─ 入力: summary_daily（30日分）                         │
 │      ├─ 処理: LLM月次分析（1ヶ月の長期トレンド）               │
-│      ├─ 出力: monthly_results                                 │
+│      ├─ 出力: summary_monthly                                 │
 │      └─ 説明: 月単位の心理変化、生活リズム、長期的傾向分析       │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -174,21 +174,21 @@ Profiler API (/api/profiler) 🚧 新規作成予定
 │  1. spot_results（1日分）取得
 │  2. 累積分析プロンプト生成
 │  3. ChatGPT/Groq LLM実行
-│  4. daily_results に保存
+│  4. summary_daily に保存
 │  ⏱️ 処理時間: 約5-10秒
 │
 ├─ Weekly Profiler 🆕
-│  1. daily_results（7日分）取得
+│  1. summary_daily（7日分）取得
 │  2. 週次分析プロンプト生成
 │  3. ChatGPT/Groq LLM実行
-│  4. weekly_results に保存
+│  4. summary_weekly に保存
 │  ⏱️ 処理時間: 約10-15秒
 │
 └─ Monthly Profiler 🆕
-   1. daily_results（30日分）取得
+   1. summary_daily（30日分）取得
    2. 月次分析プロンプト生成
    3. ChatGPT/Groq LLM実行
-   4. monthly_results に保存
+   4. summary_monthly に保存
    ⏱️ 処理時間: 約15-20秒
 ```
 
@@ -201,9 +201,9 @@ iOS/Web Dashboard
 
 1. 各resultsテーブルからデータ取得
    - spot_results: スポット分析結果
-   - daily_results: 日次分析結果
-   - weekly_results: 週次分析結果
-   - monthly_results: 月次分析結果
+   - summary_daily: 日次分析結果
+   - summary_weekly: 週次分析結果
+   - summary_monthly: 月次分析結果
 
 2. devices.timezone 取得
 
@@ -325,10 +325,10 @@ CREATE TABLE spot_results (
 
 ---
 
-### 5. daily_results - 日次分析結果（既存）
+### 5. summary_daily - 日次分析結果（既存）
 
 ```sql
-CREATE TABLE daily_results (
+CREATE TABLE summary_daily (
   device_id TEXT NOT NULL,
   date DATE NOT NULL,
 
@@ -354,10 +354,10 @@ CREATE TABLE daily_results (
 
 ---
 
-### 6. weekly_results - 週次分析結果 🆕
+### 6. summary_weekly - 週次分析結果 🆕
 
 ```sql
-CREATE TABLE weekly_results (
+CREATE TABLE summary_weekly (
   device_id TEXT NOT NULL,
   week_start_date DATE NOT NULL,      -- 週の開始日（月曜日）
   week_end_date DATE NOT NULL,        -- 週の終了日（日曜日）
@@ -384,10 +384,10 @@ CREATE TABLE weekly_results (
 
 ---
 
-### 7. monthly_results - 月次分析結果 🆕
+### 7. summary_monthly - 月次分析結果 🆕
 
 ```sql
-CREATE TABLE monthly_results (
+CREATE TABLE summary_monthly (
   device_id TEXT NOT NULL,
   year INTEGER NOT NULL,
   month INTEGER NOT NULL,
@@ -495,9 +495,9 @@ SELECT device_id, timezone FROM devices;
 | エンドポイント | 入力 | 出力 | 説明 | 作業 |
 |-------------|------|------|------|------|
 | `/spot-profiler` | `spot_aggregators` | `spot_results` | スポット録音の心理分析 | 既存Scorerから移植 |
-| `/daily-profiler` | `spot_results`（1日分） | `daily_results` | 日次累積分析 | 既存Scorerから移植 |
-| `/weekly-profiler` | `daily_results`（7日分） | `weekly_results` | 週次トレンド分析 | 🆕新規実装 |
-| `/monthly-profiler` | `daily_results`（30日分） | `monthly_results` | 月次長期分析 | 🆕新規実装 |
+| `/daily-profiler` | `spot_results`（1日分） | `summary_daily` | 日次累積分析 | 既存Scorerから移植 |
+| `/weekly-profiler` | `summary_daily`（7日分） | `summary_weekly` | 週次トレンド分析 | 🆕新規実装 |
+| `/monthly-profiler` | `summary_daily`（30日分） | `summary_monthly` | 月次長期分析 | 🆕新規実装 |
 
 ---
 
@@ -556,10 +556,10 @@ cd profiler
 @router.post("/weekly-profiler")
 async def analyze_weekly(request: WeeklyProfilerRequest):
     """
-    1週間分のdaily_resultsを取得
+    1週間分のsummary_dailyを取得
     週次分析プロンプト生成
     LLM実行
-    weekly_resultsに保存
+    summary_weeklyに保存
     """
 ```
 
@@ -568,10 +568,10 @@ async def analyze_weekly(request: WeeklyProfilerRequest):
 @router.post("/monthly-profiler")
 async def analyze_monthly(request: MonthlyProfilerRequest):
     """
-    1ヶ月分のdaily_resultsを取得
+    1ヶ月分のsummary_dailyを取得
     月次分析プロンプト生成
     LLM実行
-    monthly_resultsに保存
+    summary_monthlyに保存
     """
 ```
 
@@ -613,9 +613,9 @@ git push origin main
 
 各resultsテーブルからデータ取得:
 - `spot_results`: スポット分析結果
-- `daily_results`: 日次分析結果
-- `weekly_results`: 週次分析結果
-- `monthly_results`: 月次分析結果
+- `summary_daily`: 日次分析結果
+- `summary_weekly`: 週次分析結果
+- `summary_monthly`: 月次分析結果
 
 ---
 
@@ -659,7 +659,7 @@ let localString = formatter.string(from: utcTime)
   - ファイル名変更: `SPOT_RECORDING_MIGRATION_GUIDE.md` → `ARCHITECTURE_AND_MIGRATION_GUIDE.md`
   - 3レイヤー設計思想の詳細説明を追加
   - Profiler API（4エンドポイント）の設計仕様を明記
-  - weekly_results, monthly_results テーブルスキーマを追加
+  - summary_weekly, summary_monthly テーブルスキーマを追加
   - 残タスクを再整理（Profiler API新規作成が最優先）
 
 - **進捗の再評価**:
