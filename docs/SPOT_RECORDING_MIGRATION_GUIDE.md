@@ -34,7 +34,7 @@ devices.timezone を使ってクライアント側で変換
 
 ---
 
-## 📋 進捗状況（2025-11-12 最終更新）
+## 📋 進捗状況（2025-11-12 13:50 最終更新）
 
 ### ✅ Phase 1完了: サーバー側API修正（UTC統一アーキテクチャ）
 
@@ -57,10 +57,14 @@ devices.timezone を使ってクライアント側で変換
 - ✅ S3パス構造を変更: `{HH-MM}` → `{HH-MM-SS}` (秒単位精度)
 - ✅ README.md完全更新
 
-#### 4. Vibe Transcriber修正（完了）
-- ✅ `audio_features` → `spot_features` に変更
+#### 4. Vibe Transcriber修正（完了・本番動作確認済み）🎉
+- ✅ `audio_files` テーブルから `device_id`, `recorded_at` 取得
+- ✅ `spot_features` テーブルに保存
 - ✅ キー変更: `(device_id, date, time_block)` → `(device_id, recorded_at)`
-- ✅ コミット完了
+- ✅ **バグ修正（2回）**:
+  - 1回目: `time_block` 未定義エラー修正
+  - 2回目: `recorded_at` 未定義エラー修正（既存インターフェース対応）
+- ✅ **本番動作確認済み**: spot_featuresにデータ保存成功 🎉
 
 #### 5. Behavior Features修正（完了・動作確認済み）
 - ✅ `audio_features` → `spot_features` に変更
@@ -68,7 +72,13 @@ devices.timezone を使ってクライアント側で変換
 - ✅ `audio_files` ステータス更新処理追加
 - ✅ **本番動作確認済み**: spot_featuresにデータ保存成功 🎉
 
-#### 6. Aggregator API修正（完了）
+#### 6. Emotion Feature Extractor v2修正（完了・デプロイ済み）🎉
+- ✅ `supabase_service.py`: `emotion_opensmile` → `spot_features` に完全移行
+- ✅ `main.py`: `audio_files` テーブルから `device_id`, `recorded_at` 取得
+- ✅ キー変更: `(device_id, date, time_block)` → `(device_id, recorded_at)`
+- ✅ コミット・プッシュ・本番デプロイ完了
+
+#### 7. Vibe Aggregator API修正（完了）
 - ✅ `data_fetcher.py`: `get_device_timezone()` 実装
 - ✅ `prompt_generator.py`: pytzでUTC→ローカル時間変換実装
 - ✅ `spot_aggregator.py`: timezone_str引数に変更
@@ -78,18 +88,16 @@ devices.timezone を使ってクライアント側で変換
 
 ---
 
-### 🚧 残タスク（Phase 2-3）
-
-#### Phase 2: Feature Extractor API修正（残り2つ）
-- ⏳ **Emotion Feature Extractor v2**: `spot_features` 対応が必要
-  - 現状: `emotion_opensmile` テーブル使用（旧テーブル）
-  - 修正: Behavior Features v3と同様の実装に変更
-- ⏳ **Vibe Transcriber**: 動作確認が必要
-  - コードは修正済みだが本番動作未確認
+### 🚧 残タスク（Phase 2-3）- 残り5%
 
 #### Phase 2: Aggregator API修正（残り2つ）
-- ⏳ **Behavior Aggregator**: `devices.timezone` 対応
+- 🚧 **Behavior Aggregator**: `devices.timezone` 対応（進行中）
+  - 現状: `audio_features` + `date`/`time_block` ベース
+  - 修正: `spot_features` + `recorded_at` (UTC) + timezone変換
+  - 参考実装: Vibe Aggregator API
+
 - ⏳ **Emotion Aggregator**: `devices.timezone` 対応
+  - 同様の修正が必要
 
 #### Phase 3: クライアント側修正
 - ⏳ iOSアプリ: 表示時にUTC→ローカル時間変換
@@ -102,47 +110,43 @@ devices.timezone を使ってクライアント側で変換
 ### ✅ 完了済み
 
 1. ✅ Vault API: `local_datetime` 削除 + S3パス秒単位精度化
-2. ✅ Vibe Transcriber: `spot_features` 移行（コード修正済み、動作未確認）
+2. ✅ Vibe Transcriber: `spot_features` 移行 + バグ修正（2回）+ 本番動作確認済み 🎉
 3. ✅ Behavior Features: `spot_features` 移行 + 本番動作確認済み 🎉
-4. ✅ Aggregator API: devices.timezone対応 + UTC→ローカル時間変換
+4. ✅ Vibe Aggregator API: devices.timezone対応 + UTC→ローカル時間変換
+5. ✅ Emotion Feature Extractor v2: `spot_features` 移行 + デプロイ完了 🎉
 
 ---
 
-### 🚀 次のタスク（優先度順）
+### 🚀 次のタスク（優先度順）- 残り5%
 
-#### 1. Emotion Feature Extractor v2の修正（最優先）
+#### 1. Behavior Aggregator修正（進行中）
 
-**現状**: 旧アーキテクチャ（タイムブロック方式）のまま
-- `emotion_opensmile` テーブル使用（旧テーブル）
-- `date`, `time_block` ベースの保存
+**ファイル**: `/Users/kaya.matsumoto/projects/watchme/api/behavior-analysis/aggregator/sed_aggregator.py`
 
-**修正内容**: Behavior Features v3と同様の実装に変更
-- `supabase_service.py`: 完全書き換え（`spot_features`対応）
-- `main.py`: `process_emotion_features()` を修正
-- `audio_files`: ステータス更新処理追加
+**現状**:
+- `audio_features` テーブル使用（旧テーブル）
+- `date`, `time_block` ベースの取得
+- `audio_aggregator` テーブルに保存
 
-**参考実装**: `/Users/kaya.matsumoto/projects/watchme/api/behavior-analysis/feature-extractor-v3/main_supabase.py`
+**修正内容**: Vibe Aggregator APIと同様の実装
+- `fetch_all_data()`: `audio_features` → `spot_features`, `date`/`time_block` → `recorded_at`
+- `get_device_timezone()`: 新規メソッド追加
+- UTC→ローカル時間変換: `pytz`を使用して30分スロット計算
+- `save_to_supabase()`: 保存先テーブル確認
 
-#### 2. Vibe Transcriberの動作確認
+**参考実装**: `/Users/kaya.matsumoto/projects/watchme/api/vibe-analysis/aggregator`
 
-**現状**: コード修正済みだが本番動作未確認
+**推定作業時間**: 30-60分
 
-**確認手順**:
-1. 録音を実行
-2. audio_filesの`transcriptions_status`を確認
-3. spot_featuresの`vibe_transcriber_result`を確認
+---
 
-#### 3. Behavior Aggregator修正
-
-**ファイル**: `/Users/kaya.matsumoto/projects/watchme/api/behavior-analysis/aggregator`
-
-**修正内容**: Aggregator APIと同様に`devices.timezone`対応
-
-#### 4. Emotion Aggregator修正
+#### 2. Emotion Aggregator修正
 
 **ファイル**: `/Users/kaya.matsumoto/projects/watchme/api/emotion-analysis/aggregator`
 
-**修正内容**: Aggregator APIと同様に`devices.timezone`対応
+**修正内容**: Behavior Aggregatorと同様の修正
+
+**推定作業時間**: 30-60分
 
 ---
 
@@ -263,8 +267,22 @@ let localString = formatter.string(from: utcTime)
 
 ## 📝 変更履歴
 
-### 2025-11-12 00:00-01:00（このセッション）
-- **Aggregator API修正完了**: devices.timezone対応 + UTC→ローカル時間変換
+### 2025-11-12 13:00-13:50（このセッション）- Phase 2 ほぼ完了 🎉
+- **Emotion Feature Extractor v2修正完了**:
+  - `emotion_opensmile` → `spot_features` に完全移行
+  - `supabase_service.py` 全面書き換え
+  - `main.py` を `audio_files` テーブルベースに変更
+  - コミット・プッシュ・デプロイ完了
+- **Vibe Transcriber修正完了**:
+  - バグ修正（2回）: `time_block` 未定義エラー、`recorded_at` 未定義エラー
+  - 本番動作確認済み 🎉
+- **Behavior Aggregator修正開始**:
+  - 現状把握完了（`sed_aggregator.py` の構造分析）
+  - 修正方針確定（Vibe Aggregator APIを参考に実装）
+- **進捗**: Phase 2 残り5% - Aggregator API 2つのみ
+
+### 2025-11-12 00:00-01:00
+- **Vibe Aggregator API修正完了**: devices.timezone対応 + UTC→ローカル時間変換
 - **Behavior Features動作確認**: spot_featuresへのデータ保存成功 🎉
 - **データベース修正**: spot_featuresテーブルに不足カラム追加 + RLS無効化
 - **トラブルシューティング**:
@@ -286,6 +304,6 @@ let localString = formatter.string(from: utcTime)
 - 次セッション用のTODOリスト作成
 
 ### 2025-11-11 17:00
-- Aggregator API実装完了
+- Vibe Aggregator API実装完了
 - データベーススキーマ作成
 - 上流API修正の必要性を特定
