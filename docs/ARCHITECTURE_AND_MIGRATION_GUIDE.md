@@ -2,8 +2,8 @@
 
 **プロジェクト**: 心理・感情モニタリングプラットフォーム
 **作成日**: 2025-11-11
-**最終更新**: 2025-11-12
-**ステータス**: 🚧 Phase 4 進行中（残り20%）
+**最終更新**: 2025-11-12 午後
+**ステータス**: ✅ Phase 3完了（80%） / 🚧 Phase 4 進行中（残り20%）
 
 ---
 
@@ -276,21 +276,24 @@ CREATE TABLE spot_features (
 CREATE TABLE spot_aggregators (
   device_id TEXT NOT NULL,
   recorded_at TIMESTAMPTZ NOT NULL,  -- UTC
-  aggregated_prompt TEXT NOT NULL,    -- LLM分析用統合プロンプト
+  prompt TEXT NOT NULL,               -- LLM分析用統合プロンプト（旧: aggregated_prompt）
   context_data JSONB,                 -- メタデータ（timezone, subject_info等）
-  created_at TIMESTAMPTZ DEFAULT NOW(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),  -- 旧: aggregated_at
   PRIMARY KEY (device_id, recorded_at)
 );
 ```
 
 **役割**: Layer 2（統合層）の出力データ保存
 
-**aggregated_prompt の内容**:
+**重要**: RLS（Row Level Security）は無効化（内部API専用テーブル）
+
+**prompt の内容**（約4700文字）:
 - ASR（文字起こし）
 - SED（音響イベント）統計
 - SER（感情）タイムライン
-- 時間コンテキスト（季節、曜日、時間帯）
-- subject_info（年齢、性別）
+- 時間コンテキスト（季節、曜日、時間帯、祝日）
+- subject_info（年齢、性別、メモ）
+- LLM分析用スコアリングガイドライン
 
 ---
 
@@ -446,11 +449,23 @@ SELECT device_id, timezone FROM devices;
 
 ---
 
-### ✅ Phase 3完了: 統合・プロンプト生成
+### ✅ Phase 3完了: 統合・プロンプト生成（2025-11-12 完了）
 
 - ✅ Aggregator API: ASR+SED+SER統合、timezone対応、プロンプト生成完了
 - ✅ `spot_aggregators` テーブルに保存
+  - `prompt` カラム（旧 aggregated_prompt）
+  - `context_data` カラム（JSONB）
+  - `created_at` カラム（旧 aggregated_at）
+  - RLS無効化完了
+- ✅ UTC統一アーキテクチャ対応完了
+  - `local_date`, `local_time` カラム削除
+  - UTC→ローカル時間変換はプロンプト生成時のみ実施
+- ✅ Nginx設定追加完了
+  - `/aggregator/` → `http://localhost:8050/aggregator/`
 - ✅ 本番動作確認済み 🎉
+  - URL: https://api.hey-watch.me/aggregator/spot
+  - プロンプト長: 4700文字程度
+  - 処理時間: 1-2秒
 
 ---
 
@@ -648,7 +663,35 @@ let localString = formatter.string(from: utcTime)
 
 ## 📝 変更履歴
 
-### 2025-11-12 最終セッション - 3レイヤー設計の明確化 🎉
+### 2025-11-12 午後セッション - Phase 3完了 🎉
+
+- **Aggregator API本番稼働開始**:
+  - エンドポイント: `https://api.hey-watch.me/aggregator/spot`
+  - 処理時間: 1-2秒
+  - プロンプト長: 約4700文字
+
+- **データベース修正**:
+  - `spot_aggregators` テーブル修正完了
+  - カラム名変更: `aggregated_prompt` → `prompt`, `aggregated_at` → `created_at`
+  - 不要カラム削除: `local_date`, `local_time`（UTC統一アーキテクチャ対応）
+  - RLS無効化完了
+
+- **Nginx設定追加**:
+  - `/aggregator/` → `http://localhost:8050/aggregator/`
+  - proxy_pass設定修正（FastAPIの内部パス構造に対応）
+
+- **コード修正**:
+  - UTC統一アーキテクチャ対応
+  - `local_date`, `local_time` の計算・保存処理削除
+  - カラム名を `prompt` に変更
+
+- **ドキュメント更新**:
+  - `/api/aggregator/README.md` 全面更新
+  - 本番環境情報、データフロー、トラブルシューティング追加
+
+---
+
+### 2025-11-12 午前セッション - 3レイヤー設計の明確化 🎉
 
 - **重要な設計思想の再確認**:
   - 3レイヤーアーキテクチャ: Feature Extraction → Aggregation → **Profiler**
