@@ -129,9 +129,9 @@
 | **Vibe Aggregator** | `/vibe-analysis/aggregator/` | 8009 | /home/ubuntu/vibe-analysis-aggregator | vibe-analysis-aggregator | watchme-vibe-analysis-aggregator | ECR + CI/CD | ✅ 2025-11-09完全統一 |
 | **Vibe Scorer** | `/vibe-analysis/scorer/` | 8002 | /home/ubuntu/vibe-analysis-scorer | vibe-analysis-scorer | watchme-vibe-analysis-scorer | ECR | ✅ 2025-10-30完全統一 |
 | **Behavior Features** | `/behavior-analysis/features/` | 8017 | /home/ubuntu/behavior-analysis-feature-extractor | behavior-analysis-feature-extractor | watchme-behavior-analysis-feature-extractor | ECR | ✅ 2025-10-28 v3 PaSST移行 |
-| **Behavior Aggregator** | `/behavior-aggregator/` | 8010 | /home/ubuntu/api-sed-aggregator | api-sed-aggregator | watchme-api-sed-aggregator | ECR | ✅ 2025-09-04移行済み |
+| **Behavior Aggregator** | `/behavior-aggregator/` | 8010 | /home/ubuntu/api-sed-aggregator | api-sed-aggregator | watchme-behavior-analysis-aggregator | ECR | ✅ 2025-11-10命名統一 |
 | **Emotion Features** | `/emotion-analysis/features/` | 8018 | /home/ubuntu/emotion-analysis-feature-extractor-v3 | emotion-analysis-feature-extractor-v3 | watchme-emotion-analysis-feature-extractor-v3 | ECR | ✅ 2025-10-26 Kushinada移行 |
-| **Emotion Aggregator** | `/emotion-analysis/aggregation/` | 8012 | /home/ubuntu/opensmile-aggregator | emotion-analysis-aggregator | watchme-api-opensmile-aggregator | ECR | ✅ 2025-10-22階層化 |
+| **Emotion Aggregator** | `/emotion-analysis/aggregation/` | 8012 | /home/ubuntu/opensmile-aggregator | emotion-analysis-aggregator | watchme-emotion-analysis-aggregator | ECR | ✅ 2025-11-10命名統一 |
 
 ## 🎙️ 音声処理API詳細
 
