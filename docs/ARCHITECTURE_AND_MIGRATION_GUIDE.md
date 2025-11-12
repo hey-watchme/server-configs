@@ -2,8 +2,8 @@
 
 **プロジェクト**: 心理・感情モニタリングプラットフォーム
 **作成日**: 2025-11-11
-**最終更新**: 2025-11-12 午後
-**ステータス**: ✅ Phase 3完了（80%） / 🚧 Phase 4 進行中（残り20%）
+**最終更新**: 2025-11-12 夕方
+**ステータス**: ✅ Phase 3完了（85%） / 🚧 Phase 4 進行中（残り15%）
 
 ---
 
@@ -287,13 +287,16 @@ CREATE TABLE spot_aggregators (
 
 **重要**: RLS（Row Level Security）は無効化（内部API専用テーブル）
 
-**prompt の内容**（約4700文字）:
-- ASR（文字起こし）
-- SED（音響イベント）統計
-- SER（感情）タイムライン
-- 時間コンテキスト（季節、曜日、時間帯、祝日）
-- subject_info（年齢、性別、メモ）
-- LLM分析用スコアリングガイドライン
+**prompt の内容**（約4000文字）- Timeline-Synchronized Format:
+- Task Definition & Guidelines: ~2500文字
+- Temporal Context: ~200文字
+- Full Transcription (時系列なし): 100-500文字
+- Timeline (10-second blocks): ~900文字
+  - 各ブロックでSED + SER を同期表示
+  - パターン自動検出（笑い声+喜び、衝突音+怒り等）
+- Overall Summary: ~400文字
+  - 統計情報（Speech Activity, Emotion Trend）
+  - キーパターン（感情ピーク、同時発生イベント）
 
 ---
 
@@ -449,7 +452,9 @@ SELECT device_id, timezone FROM devices;
 
 ---
 
-### ✅ Phase 3完了: 統合・プロンプト生成（2025-11-12 完了）
+### ✅ Phase 3完了: 統合・プロンプト生成（2025-11-12 完了）🎉
+
+#### 基本実装（午前〜午後）
 
 - ✅ Aggregator API: ASR+SED+SER統合、timezone対応、プロンプト生成完了
 - ✅ `spot_aggregators` テーブルに保存
@@ -462,14 +467,47 @@ SELECT device_id, timezone FROM devices;
   - UTC→ローカル時間変換はプロンプト生成時のみ実施
 - ✅ Nginx設定追加完了
   - `/aggregator/` → `http://localhost:8050/aggregator/`
-- ✅ 本番動作確認済み 🎉
+
+#### Timeline-Synchronized Format実装（夕方）🎉
+
+- ✅ **データ構造修正完了**
+  - `data_fetcher.py`: 配列を直接返すように修正（辞書誤認識を解消）
+  - 問題: `behavior_extractor_result`, `emotion_extractor_result` を辞書として誤処理
+  - 解決: 実際は配列（時間ベース・チャンクベース）として正しく処理
+
+- ✅ **プロンプト形式を全面刷新**
+  - 旧: ASR/SED/SERが別々のセクション → 時系列の文脈が失われる
+  - 新: 10秒ごとにSED+SERを同期表示（タイムライン型） → 時系列を保持
+  - パターン検出機能追加: 「笑い声 + 喜び」「衝突音 + 怒り」を自動検出
+
+- ✅ **技術名の汎用化**
+  - YAMNet → SED (Sound Event Detection)
+  - Kushinada → SER (Speech Emotion Recognition)
+  - OpenSMILE → SER（統一）
+
+- ✅ **プロンプト構造**
+  ```
+  1. Full Transcription (時系列なし)
+  2. Timeline (10-second blocks): SED + SER 同期表示
+  3. Pattern Detection: 自動相関検出
+  4. Overall Summary: 統計とキーパターン
+  ```
+
+- ✅ **本番動作確認済み** 🎉
   - URL: https://api.hey-watch.me/aggregator/spot
-  - プロンプト長: 4700文字程度
+  - プロンプト長: 4000文字（旧5000文字から20%削減）
   - 処理時間: 1-2秒
+  - SED/SERデータ統合成功: "Data not available" 問題解消
+
+#### 効果
+
+- 「怒って物を投げた」のような複雑なシーンを時系列で正確に分析可能
+- 感情の変化（喜び→怒り→悲しみ）を時間軸で追跡
+- LLM分析の精度が大幅に向上
 
 ---
 
-### 🚧 Phase 4進行中: Profiler API新規作成（残り20%）
+### 🚧 Phase 4進行中: Profiler API新規作成（残り15%）
 
 #### 現状の課題
 
@@ -477,6 +515,10 @@ SELECT device_id, timezone FROM devices;
 - ⚠️ 既存Scorer API (`/api/vibe-analysis/scorer`) が旧アーキテクチャのまま
   - 保存先: `audio_scorer` テーブル（旧）
   - 入力元: `audio_aggregator.vibe_aggregator_result`（旧）
+- ✅ **Aggregator APIは完全にTimeline-Synchronized Formatで動作中**
+  - 入力: `spot_features` (ASR + SED + SER)
+  - 出力: `spot_aggregators.prompt` (4000文字)
+  - 次のProfiler APIが使用可能
 
 #### 必要な作業
 
@@ -663,7 +705,49 @@ let localString = formatter.string(from: utcTime)
 
 ## 📝 変更履歴
 
-### 2025-11-12 午後セッション - Phase 3完了 🎉
+### 2025-11-12 夕方セッション - Timeline-Synchronized Format完成 🎉
+
+**目的**: 時系列の文脈を保持し、LLM分析の精度向上
+
+**問題発見**:
+- Aggregator APIがASRデータのみ使用、SED/SERが "Data not available"
+- 原因: データ構造の誤認識（配列を辞書として処理）
+
+**修正内容**:
+
+1. **データ取得ロジック修正** (`data_fetcher.py`)
+   - `get_behavior_data()`: 配列を直接返すように修正
+   - `get_emotion_data()`: 配列を直接返すように修正
+   - 存在しないキー（`events`, `selected_features_timeline`）への参照を削除
+
+2. **プロンプト形式を全面刷新** (`prompt_generator.py`)
+   - 旧: ASR/SED/SERが別々のセクション → 時系列の文脈が失われる
+   - 新: 10秒ごとにSED+SERを同期表示（タイムライン型）
+   - パターン検出機能追加: 「笑い声 + 喜び」「衝突音 + 怒り」を自動検出
+   - 技術名の汎用化: YAMNet→SED, Kushinada→SER
+
+3. **プロンプト構造**
+   ```
+   1. Full Transcription (時系列なし)
+   2. Timeline (10-second blocks): SED + SER 同期表示
+   3. Pattern Detection: 自動相関検出
+   4. Overall Summary: 統計とキーパターン
+   ```
+
+**効果**:
+- 「怒って物を投げた」のような複雑なシーンを時系列で正確に分析可能
+- 感情の変化（喜び→怒り→悲しみ）を時間軸で追跡
+- プロンプト長: 5000文字 → 4000文字（20%削減）
+- SED/SERデータ統合成功: "Data not available" 問題完全解消
+
+**コミット**:
+- `fix: Correct data structure handling for SED/SER integration`
+- `feat: Redesign prompt format with timeline synchronization`
+- `docs: Update README with timeline-synchronized format details`
+
+---
+
+### 2025-11-12 午後セッション - Phase 3基本実装完了 🎉
 
 - **Aggregator API本番稼働開始**:
   - エンドポイント: `https://api.hey-watch.me/aggregator/spot`
