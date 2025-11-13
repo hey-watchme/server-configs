@@ -2,8 +2,8 @@
 
 **プロジェクト**: 心理・感情モニタリングプラットフォーム
 **作成日**: 2025-11-11
-**最終更新**: 2025-11-12 夕方
-**ステータス**: ✅ Phase 3完了（85%） / 🚧 Phase 4 進行中（残り15%）
+**最終更新**: 2025-11-13
+**ステータス**: ✅ Phase 3完了（85%） / ✅ Phase 4-1完了（Spot Profiler + 日本語出力）（95%）
 
 ---
 
@@ -72,10 +72,10 @@
 │ 役割: LLM分析による心理プロファイリング（複数時間軸）             │
 │ 技術: ChatGPT/Groq, 累積分析, 長期トレンド分析                  │
 │                                                               │
-│ /api/profiler 🚧 新規作成予定                                 │
+│ /api/profiler ✅ 本番稼働中（2025-11-13）                       │
 │                                                               │
-│   ├─ POST /spot-profiler                                     │
-│   │  ├─ 入力: spot_aggregators.aggregated_prompt             │
+│   ├─ POST /spot-profiler ✅                                   │
+│   │  ├─ 入力: spot_aggregators.prompt                        │
 │   │  ├─ 処理: LLM分析（スポット録音の心理分析）                │
 │   │  ├─ 出力: spot_results                                    │
 │   │  └─ 説明: 1回の録音（任意の長さ：3秒〜10分）の心理分析       │
@@ -307,20 +307,14 @@ CREATE TABLE spot_results (
   device_id TEXT NOT NULL,
   recorded_at TIMESTAMPTZ NOT NULL,  -- UTC
 
-  -- 基本スコア
-  vibe_score INTEGER CHECK (vibe_score >= -100 AND vibe_score <= 100),
-  vibe_summary TEXT,                  -- 2-3文の要約
-  vibe_behavior TEXT,                 -- 行動パターン
-
-  -- 詳細分析
-  psychological_analysis JSONB,       -- 心理分析詳細
-  behavioral_analysis JSONB,          -- 行動分析詳細
-  acoustic_metrics JSONB,             -- 音響メトリクス
-  key_observations JSONB,             -- 重要な観察事項
+  -- 分析結果
+  vibe_score DOUBLE PRECISION NULL,  -- 心理スコア (-100 to +100)
+  profile_result JSONB NOT NULL,     -- LLMの完全分析結果
+  summary TEXT,                       -- ✅ NEW (2025-11-13): ダッシュボード表示用サマリー（日本語）
+  behavior TEXT,                      -- ✅ NEW (2025-11-13): 主要行動パターン（カンマ区切り、3つ）
 
   -- メタ情報
-  vibe_scorer_result JSONB,           -- LLMの完全レスポンス
-  vibe_analyzed_at TIMESTAMPTZ,
+  llm_model TEXT NULL,               -- 使用したLLMモデル (e.g., "groq/openai/gpt-oss-120b")
   created_at TIMESTAMPTZ DEFAULT NOW(),
 
   PRIMARY KEY (device_id, recorded_at)
@@ -328,6 +322,21 @@ CREATE TABLE spot_results (
 ```
 
 **役割**: Layer 3（Profiler - Spot）の出力データ保存
+
+**新カラム (2025-11-13追加)**:
+- `summary` (TEXT): 日本語サマリー（2-3文、例："朝食の時間。家族と一緒に食事をしている。"）
+- `behavior` (TEXT): 主要行動パターン3つ（カンマ区切り、例："会話, 食事, 家族団らん"）
+  - 会話が検出された場合は必ず「会話」を含める
+
+**profile_result JSONB構造**:
+- `summary`: 状況の概要（日本語）
+- `behavior`: 行動パターン（日本語、カンマ区切り）
+- `psychological_analysis`: 心理分析（mood_state, mood_description[日本語], emotion_changes[日本語]）
+- `behavioral_analysis`: 行動分析（detected_activities, behavior_pattern[日本語], situation_context[日本語]）
+- `acoustic_metrics`: 音響メトリクス（speech_time_ratio, average_loudness_db, voice_stability_score等）
+- `key_observations`: 重要な観察事項（日本語配列）
+
+**RLS**: 無効（内部API専用）
 
 ---
 
@@ -507,64 +516,49 @@ SELECT device_id, timezone FROM devices;
 
 ---
 
-### 🚧 Phase 4進行中: Profiler API新規作成（残り15%）
+### ✅ Phase 4-1完了: Profiler API - Spot Profiler本番稼働開始（2025-11-13）
 
-#### 現状の課題
+#### 完了した作業
 
-- ❌ Profiler API (`/api/profiler`) が未作成
-- ⚠️ 既存Scorer API (`/api/vibe-analysis/scorer`) が旧アーキテクチャのまま
-  - 保存先: `audio_scorer` テーブル（旧）
-  - 入力元: `audio_aggregator.vibe_aggregator_result`（旧）
-- ✅ **Aggregator APIは完全にTimeline-Synchronized Formatで動作中**
-  - 入力: `spot_features` (ASR + SED + SER)
-  - 出力: `spot_aggregators.prompt` (4000文字)
-  - 次のProfiler APIが使用可能
-
-#### 必要な作業
-
-**1. Profiler API新規作成**（最優先）
+**1. Profiler API新規作成・本番デプロイ完了**
 
 ディレクトリ: `/Users/kaya.matsumoto/projects/watchme/api/profiler`
 
-```
-/api/profiler/
-├── main.py
-├── endpoints/
-│   ├── spot_profiler.py       # 既存Scorerから移植
-│   ├── daily_profiler.py      # 既存Scorerから移植
-│   ├── weekly_profiler.py     # 新規実装
-│   └── monthly_profiler.py    # 新規実装
-├── services/
-│   ├── llm_client.py          # 既存Scorerから移植
-│   └── supabase_client.py
-├── docker-compose.prod.yml
-├── Dockerfile.prod
-├── requirements.txt
-└── README.md
-```
+- ✅ Spot Profiler実装完了（`/spot-profiler` エンドポイント）
+- ✅ 入力元: `spot_aggregators.prompt`（Timeline-Synchronized Format）
+- ✅ 出力先: `spot_results` テーブル（新スキーマ）
+- ✅ LLMプロバイダー抽象化（OpenAI/Groq対応）
+- ✅ CI/CD自動デプロイ構築（GitHub Actions → ECR → EC2）
+- ✅ 本番環境での動作確認完了
 
-**推定作業時間**: 3-4時間
+**インフラ構成**:
+- Container: `profiler-api` (port 8051)
+- ECR: `watchme-profiler`
+- systemd: `profiler-api.service`
+- Nginx: `/profiler/` → `http://localhost:8051/`
+- Health check: `/health`
+- External URL: `https://api.hey-watch.me/profiler/`
 
----
+**LLM設定**:
+- Provider: Groq
+- Model: openai/gpt-oss-120b (reasoning model)
+- Reasoning Effort: medium
 
-**2. 4つのエンドポイント実装**
+**データベーススキーマ最終版**:
+- 旧カラム削除完了: `local_date`, `local_time`, `behavior_score`, `emotion_score`, `composite_score`
+- カラム名統一: `profiled_at` → `created_at`
+- ✅ **新カラム追加** (2025-11-13): `summary` (TEXT), `behavior` (TEXT)
+- RLS無効化（内部API専用）
 
-| エンドポイント | 入力 | 出力 | 説明 | 作業 |
-|-------------|------|------|------|------|
-| `/spot-profiler` | `spot_aggregators` | `spot_results` | スポット録音の心理分析 | 既存Scorerから移植 |
-| `/daily-profiler` | `spot_results`（1日分） | `summary_daily` | 日次累積分析 | 既存Scorerから移植 |
-| `/weekly-profiler` | `summary_daily`（7日分） | `summary_weekly` | 週次トレンド分析 | 🆕新規実装 |
-| `/monthly-profiler` | `summary_daily`（30日分） | `summary_monthly` | 月次長期分析 | 🆕新規実装 |
+#### 残作業（Phase 4-2以降）
 
----
+**2. 累積分析エンドポイント追加**（今後の拡張）
 
-**3. Lambda関数の修正**
+- 🚧 Daily Profiler: `/daily-profiler`（日次分析）
+- 🚧 Weekly Profiler: `/weekly-profiler`（週次分析）
+- 🚧 Monthly Profiler: `/monthly-profiler`（月次分析）
 
-`audio-worker` Lambda関数:
-- エンドポイント変更: `/analyze-timeblock` → `/spot-profiler`
-- URL変更: `https://api.hey-watch.me/vibe-analysis/scorer/` → `https://api.hey-watch.me/profiler/`
-
-**推定作業時間**: 30分
+**推定作業時間**: 各2-3時間
 
 ---
 
@@ -579,100 +573,18 @@ SELECT device_id, timezone FROM devices;
 
 ## 🚀 次のタスク（優先度順）
 
-### Task 1: Profiler API新規作成（最優先）
+### Task 1: 累積分析エンドポイント実装
 
-**ステップ1: ディレクトリ・基本構造作成**
+Phase 4-2以降で実装予定：
+- Daily Profiler: `/daily-profiler`
+- Weekly Profiler: `/weekly-profiler`
+- Monthly Profiler: `/monthly-profiler`
 
-```bash
-cd /Users/kaya.matsumoto/projects/watchme/api
-mkdir -p profiler/{endpoints,services}
-cd profiler
-```
+### Task 2: クライアント側表示実装
 
----
-
-**ステップ2: 既存Scorerからロジックを移植**
-
-参考ファイル:
-- `/Users/kaya.matsumoto/projects/watchme/api/vibe-analysis/scorer/main.py`
-- `/Users/kaya.matsumoto/projects/watchme/api/vibe-analysis/scorer/llm_providers.py`
-- `/Users/kaya.matsumoto/projects/watchme/api/vibe-analysis/scorer/supabase_client.py`
-
-移植内容:
-1. `llm_providers.py` → `services/llm_client.py`
-2. `supabase_client.py` → `services/supabase_client.py`
-3. `/analyze-timeblock` → `endpoints/spot_profiler.py`
-4. `/analyze-dashboard-summary` → `endpoints/daily_profiler.py`
-
----
-
-**ステップ3: 新規エンドポイント実装**
-
-`endpoints/weekly_profiler.py`:
-```python
-@router.post("/weekly-profiler")
-async def analyze_weekly(request: WeeklyProfilerRequest):
-    """
-    1週間分のsummary_dailyを取得
-    週次分析プロンプト生成
-    LLM実行
-    summary_weeklyに保存
-    """
-```
-
-`endpoints/monthly_profiler.py`:
-```python
-@router.post("/monthly-profiler")
-async def analyze_monthly(request: MonthlyProfilerRequest):
-    """
-    1ヶ月分のsummary_dailyを取得
-    月次分析プロンプト生成
-    LLM実行
-    summary_monthlyに保存
-    """
-```
-
----
-
-**ステップ4: Docker・CI/CD設定**
-
-1. `docker-compose.prod.yml` 作成
-2. `Dockerfile.prod` 作成
-3. `.github/workflows/deploy-to-ecr.yml` 作成
-4. systemdサービスファイル作成
-
----
-
-**ステップ5: デプロイ・動作確認**
-
-```bash
-# ローカルテスト
-docker-compose up --build
-
-# 本番デプロイ
-git add .
-git commit -m "feat: Create Profiler API with 4 endpoints"
-git push origin main
-```
-
----
-
-### Task 2: Lambda関数修正
-
-`audio-worker` の修正:
-- Scorer API呼び出し → Profiler API呼び出しに変更
-- エンドポイント: `/spot-profiler`
-- URL: `https://api.hey-watch.me/profiler/spot-profiler`
-
----
-
-### Task 3: iOS表示ロジック実装
-
-各resultsテーブルからデータ取得:
-- `spot_results`: スポット分析結果
-- `summary_daily`: 日次分析結果
-- `summary_weekly`: 週次分析結果
-- `summary_monthly`: 月次分析結果
+各resultsテーブルからデータ取得・表示:
+- iOS アプリでの実装
+- Web ダッシュボードでの実装（優先度低）
 
 ---
 
@@ -772,6 +684,76 @@ let localString = formatter.string(from: utcTime)
 - **ドキュメント更新**:
   - `/api/aggregator/README.md` 全面更新
   - 本番環境情報、データフロー、トラブルシューティング追加
+
+---
+
+### 2025-11-13 午後 - Japanese Output + Behavior Field 🎉
+
+**目的**: ダッシュボード表示用に日本語出力とbehaviorフィールドを追加
+
+**変更内容**:
+
+1. **データベース修正**
+   - `spot_results` テーブルに `summary` (TEXT), `behavior` (TEXT) カラム追加
+   - Supabaseダッシュボードで手動実行
+
+2. **Aggregator API修正** (`/api/aggregator`)
+   - プロンプトに `behavior` フィールド追加（3つの行動パターン、カンマ区切り）
+   - 全テキスト出力を日本語化（summary, mood_description, behavior_pattern等）
+   - 会話検出時は必ず「会話」を含めるよう明示
+   - プロンプト自体は英語（LLM効率のため）
+
+3. **Profiler API修正** (`/api/profiler`)
+   - LLMレスポンスから `summary` と `behavior` を抽出
+   - データベース保存時に2つのカラムに保存
+   - `profile_result` (JSONB) にも完全なデータを保存
+
+4. **デプロイ・動作確認**
+   - 両API本番環境にデプロイ完了
+   - 実データでテスト成功
+   - 出力例:
+     - summary: "幼稚園の年長さんが食べ物や遊びについて自分で話している様子です。"
+     - behavior: "会話, 食事, 遊び"
+     - vibe_score: 35
+
+5. **ドキュメント更新**
+   - `/api/aggregator/README.md` に変更履歴追加
+   - `/api/profiler/README.md` にv1.1.0 Changelog追加
+   - 両READMEのスキーマ情報更新
+
+**効果**:
+- iOSアプリ・Webダッシュボードで直接日本語表示可能
+- 行動パターンの視覚化が容易
+- ユーザーフレンドリーな説明
+
+**進捗更新**:
+- Phase 1-3: 完了（85%）✅
+- Phase 4-1: 完了（Spot Profiler + 日本語出力）✅ **95%達成**
+- Phase 4-2以降: Daily/Weekly/Monthly Profiler未実装（残り3%）🚧
+- Phase 5: クライアント側表示未着手（残り2%）⏳
+
+---
+
+### 2025-11-13 午前 - Phase 4-1 完了: Profiler API本番稼働開始 🎉
+
+**Profiler API (Spot Profiler) デプロイ完了**:
+- ✅ `/spot-profiler` エンドポイント本番稼働開始
+- ✅ 入力: `spot_aggregators.prompt` (Timeline-Synchronized Format)
+- ✅ 出力: `spot_results` テーブル（スキーマ確定）
+- ✅ LLM: Groq OpenAI GPT-OSS-120B (reasoning model, medium effort)
+- ✅ CI/CD自動デプロイパイプライン構築完了
+- ✅ 本番環境での動作確認・DB保存成功
+
+**インフラ**:
+- Container: `profiler-api` (port 8051)
+- External URL: `https://api.hey-watch.me/profiler/`
+- ECR: `watchme-profiler`
+- systemd: `profiler-api.service`
+
+**データベース最終調整**:
+- 旧カラム削除: `local_date`, `local_time`, `behavior_score`, `emotion_score`, `composite_score`
+- カラム名統一: `profiled_at` → `created_at`
+- RLS無効化（内部API専用）
 
 ---
 
