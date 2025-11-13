@@ -1,0 +1,27 @@
+[Unit]
+Description=Profiler API Docker Container
+After=docker.service watchme-infrastructure.service
+Requires=docker.service watchme-infrastructure.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/profiler-api
+TimeoutStartSec=0
+Restart=always
+RestartSec=10
+
+# ECR login
+ExecStartPre=-/bin/bash -c 'aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS --password-stdin 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com'
+
+# Pull latest image
+ExecStartPre=-/usr/local/bin/docker-compose -f /home/ubuntu/watchme-server-configs/production/docker-compose-files/profiler-api-docker-compose.prod.yml pull
+
+# Start with Docker Compose
+ExecStartPre=-/usr/local/bin/docker-compose -f /home/ubuntu/watchme-server-configs/production/docker-compose-files/profiler-api-docker-compose.prod.yml down
+ExecStart=/usr/local/bin/docker-compose -f /home/ubuntu/watchme-server-configs/production/docker-compose-files/profiler-api-docker-compose.prod.yml up
+ExecStop=/usr/local/bin/docker-compose -f /home/ubuntu/watchme-server-configs/production/docker-compose-files/profiler-api-docker-compose.prod.yml down
+
+[Install]
+WantedBy=multi-user.target

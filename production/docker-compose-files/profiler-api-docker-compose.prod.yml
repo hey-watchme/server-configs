@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  api:
+    image: 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-profiler:latest
+    container_name: profiler-api
+    ports:
+      - "127.0.0.1:8051:8051"
+    env_file:
+      - /home/ubuntu/profiler-api/.env
+    restart: always
+    networks:
+      - watchme-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8051/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  watchme-network:
+    external: true
