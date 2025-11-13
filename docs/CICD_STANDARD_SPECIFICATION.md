@@ -162,18 +162,142 @@ exit
 
 #### 3-1. ディレクトリ構成
 
+⚠️ **重要**: WatchMeプロジェクトでは、設定ファイルは **server-configs リポジトリで集中管理** します。
+
+**APIリポジトリ（例: api-profiler）:**
 ```
 /your-api-repository/
 ├── .github/
 │   └── workflows/
-│       └── deploy-to-ecr.yml    # CI/CDワークフロー
-├── docker-compose.prod.yml      # 本番用Docker Compose設定
-├── run-prod.sh                  # デプロイスクリプト
-├── Dockerfile                   # Dockerイメージ定義
-└── .env.example                 # 環境変数のサンプル（.envは.gitignore）
+│       └── deploy-ecr.yml       # CI/CDワークフロー（APIリポジトリに配置）
+├── Dockerfile.prod              # Dockerイメージ定義
+├── main.py                      # アプリケーションコード
+└── requirements.txt
 ```
 
-#### 3-2. `.github/workflows/deploy-to-ecr.yml` の作成
+**server-configs リポジトリ（設定ファイルの集中管理）:**
+```
+/watchme-server-configs/production/
+├── docker-compose-files/
+│   └── {api-name}-docker-compose.prod.yml  # Docker Compose設定
+├── systemd/
+│   └── {api-name}.service                  # systemdサービス定義
+└── sites-available/
+    └── api.hey-watch.me                    # Nginx設定（全API共通）
+```
+
+**なぜ集中管理するのか:**
+- ✅ すべてのAPI設定を1箇所で管理（一貫性の保証）
+- ✅ EC2上で `git pull` するだけで全API設定を更新可能
+- ✅ Nginx設定は全APIで共有（1ファイルで管理）
+- ✅ systemdサービスは統一されたパスを参照
+
+#### 3-2. `server-configs/production/docker-compose-files/{api-name}-docker-compose.prod.yml` の作成
+
+**ファイルパス**: `/path/to/server-configs/production/docker-compose-files/{api-name}-docker-compose.prod.yml`
+
+```yaml
+version: '3.8'
+
+services:
+  api:
+    image: 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-{api-name}:latest
+    container_name: {api-name}
+    ports:
+      - "127.0.0.1:{port}:{port}"  # localhostのみ公開（Nginx経由でアクセス）
+    env_file:
+      - /home/ubuntu/{api-directory-name}/.env  # 絶対パスで指定
+    restart: always
+    networks:
+      - watchme-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:{port}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  watchme-network:
+    external: true
+```
+
+**重要ポイント:**
+- `env_file`: 絶対パスで `/home/ubuntu/{api-directory-name}/.env` を指定
+- `ports`: セキュリティのため `127.0.0.1:{port}:{port}` 形式（外部直接アクセス不可）
+- `container_name`: システム全体で一意の名前
+
+#### 3-3. `server-configs/production/systemd/{api-name}.service` の作成
+
+**ファイルパス**: `/path/to/server-configs/production/systemd/{api-name}.service`
+
+```ini
+[Unit]
+Description={API Name} Docker Container
+After=docker.service watchme-infrastructure.service
+Requires=docker.service watchme-infrastructure.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/{api-directory-name}
+TimeoutStartSec=0
+Restart=always
+RestartSec=10
+
+# ECR login
+ExecStartPre=-/bin/bash -c 'aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS --password-stdin 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com'
+
+# Pull latest image
+ExecStartPre=-/usr/local/bin/docker-compose -f /home/ubuntu/watchme-server-configs/production/docker-compose-files/{api-name}-docker-compose.prod.yml pull
+
+# Start with Docker Compose
+ExecStartPre=-/usr/local/bin/docker-compose -f /home/ubuntu/watchme-server-configs/production/docker-compose-files/{api-name}-docker-compose.prod.yml down
+ExecStart=/usr/local/bin/docker-compose -f /home/ubuntu/watchme-server-configs/production/docker-compose-files/{api-name}-docker-compose.prod.yml up
+ExecStop=/usr/local/bin/docker-compose -f /home/ubuntu/watchme-server-configs/production/docker-compose-files/{api-name}-docker-compose.prod.yml down
+
+[Install]
+WantedBy=multi-user.target
+```
+
+**重要ポイント:**
+- Docker Composeファイルのパスは `watchme-server-configs` 内を参照
+- `WorkingDirectory` は `/home/ubuntu/{api-directory-name}`（.envファイルの配置場所）
+
+#### 3-4. `server-configs/production/sites-available/api.hey-watch.me` へのlocation追加
+
+**既存のNginx設定ファイルに追加**:
+
+```nginx
+# {API Name} - {説明} (YYYY-MM-DD)
+location /{api-path}/ {
+    proxy_pass http://localhost:{port}/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # タイムアウト設定（180秒）
+    proxy_read_timeout 180s;
+    proxy_connect_timeout 180s;
+    proxy_send_timeout 180s;
+
+    # CORS設定
+    add_header "Access-Control-Allow-Origin" "*";
+    add_header "Access-Control-Allow-Methods" "GET, POST, OPTIONS";
+    add_header "Access-Control-Allow-Headers" "Content-Type, Authorization";
+
+    # OPTIONSリクエストの処理
+    if ($request_method = "OPTIONS") {
+        return 204;
+    }
+}
+```
+
+**外部URL**: `https://api.hey-watch.me/{api-path}/`
+
+#### 3-5. `.github/workflows/deploy-ecr.yml` の作成
 
 完全なテンプレートは [GitHub Actionsワークフロー仕様](#github-actionsワークフロー仕様) を参照。
 
@@ -212,57 +336,63 @@ env:
     ENDSSH
 ```
 
-#### 3-3. `docker-compose.prod.yml` の作成
+### ステップ4: server-configs リポジトリへの設定ファイルのコミット
 
-```yaml
-version: '3.8'
-
-services:
-  api:
-    image: 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-{api-name}:latest  # ★ECR_REPOSITORYと一致
-    container_name: {unique-container-name}  # ★システム全体で一意の名前
-    ports:
-      - "127.0.0.1:{port}:{port}"
-    env_file:
-      - .env  # ★環境変数ファイルを参照
-    networks:
-      - watchme-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:{port}/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
-networks:
-  watchme-network:
-    external: true
-```
-
-#### 3-4. `run-prod.sh` の作成
-
-テンプレートは [run-prod.sh仕様](#run-prodsh仕様) を参照。
-
-**必須要件:**
-- docker-composeを使用
-- .envファイルを参照
-- 既存コンテナの完全削除
-- ヘルスチェック実施
-
-### ステップ4: デプロイ実行
+**重要**: まず server-configs リポジトリに設定ファイルをコミットします。
 
 ```bash
-# すべてのファイルをコミット＆プッシュ
-git add .github/workflows/deploy-to-ecr.yml docker-compose.prod.yml run-prod.sh Dockerfile
-git commit -m "Add CI/CD configuration"
+# server-configs リポジトリで作業
+cd /path/to/server-configs
+
+# 作成した設定ファイルを追加
+git add production/docker-compose-files/{api-name}-docker-compose.prod.yml
+git add production/systemd/{api-name}.service
+git add production/sites-available/api.hey-watch.me
+
+# コミット＆プッシュ
+git commit -m "feat: Add {API Name} configuration"
+git push origin main
+```
+
+### ステップ5: EC2へ設定ファイルの反映
+
+```bash
+# EC2に接続
+ssh -i ~/watchme-key.pem ubuntu@{EC2_HOST}
+
+# server-configs を最新化
+cd /home/ubuntu/watchme-server-configs
+git pull origin main
+
+# systemd サービスをインストール
+sudo cp production/systemd/{api-name}.service /etc/systemd/system/{api-name}.service
+sudo systemctl daemon-reload
+sudo systemctl enable {api-name}
+
+# Nginx 設定を反映（server-configs内のファイルはシンボリックリンクで既に反映されている場合が多い）
+sudo nginx -t  # 設定テスト
+sudo systemctl reload nginx
+
+# ログアウト
+exit
+```
+
+### ステップ6: APIリポジトリのCI/CD設定とデプロイ実行
+
+```bash
+# APIリポジトリで作業
+cd /path/to/your-api-repository
+
+# GitHub Actions ワークフローを追加
+git add .github/workflows/deploy-ecr.yml
+git commit -m "feat: Add CI/CD configuration"
 git push origin main
 
 # GitHub Actionsの実行を確認
 # https://github.com/{organization}/{repository}/actions
 ```
 
-### ステップ5: 動作確認
+### ステップ7: 動作確認
 
 ```bash
 # EC2でコンテナが起動しているか確認
@@ -775,10 +905,13 @@ grep -h "ECR_REPOSITORY\|image:" *.yml *.sh .github/workflows/*.yml | grep -o "w
 
 ## 適用対象API一覧
 
-| API名 | ディレクトリ | ポート | 現状 |
-|------|------------|--------|------|
-| api-sed-aggregator | /home/ubuntu/api-sed-aggregator | 8010 | ✅ 完全対応 |
-| api_ast | /home/ubuntu/api_ast | 8017 | ⚠️ 要修正 |
-| opensmile-aggregator | /home/ubuntu/opensmile-aggregator | 8012 | ⚠️ 要確認 |
-| api_gen_prompt_mood_chart | /home/ubuntu/watchme-api-vibe-aggregator | 8009 | ✅ 正常 |
-| emotion-analysis-feature-extractor-v3 | /home/ubuntu/emotion-analysis-feature-extractor-v3 | 8018 | ✅ 正常 |
+| API名 | ディレクトリ | ポート | 外部URL | 現状 |
+|------|------------|--------|---------|------|
+| profiler-api | /home/ubuntu/profiler-api | 8051 | /profiler/ | ✅ 完全対応 (2025-11-13) |
+| vibe-analysis-scorer | /home/ubuntu/vibe-analysis-scorer | 8002 | /vibe-analysis/scorer/ | ✅ 完全対応 |
+| aggregator | /home/ubuntu/aggregator | 8050 | /aggregator/ | ✅ 完全対応 |
+| api-sed-aggregator | /home/ubuntu/api-sed-aggregator | 8010 | /behavior-aggregator/ | ✅ 完全対応 |
+| emotion-analysis-feature-extractor-v3 | /home/ubuntu/emotion-analysis-feature-extractor-v3 | 8018 | /emotion-analysis/feature-extractor/ | ✅ 正常 |
+| api_gen_prompt_mood_chart | /home/ubuntu/watchme-api-vibe-aggregator | 8009 | /vibe-analysis/aggregator/ | ✅ 正常 |
+| api_ast | /home/ubuntu/api_ast | 8017 | /behavior-analysis/features/ | ⚠️ 要修正 |
+| opensmile-aggregator | /home/ubuntu/opensmile-aggregator | 8012 | /emotion-analysis/aggregator/ | ⚠️ 要確認 |
