@@ -5,25 +5,25 @@ import os
 import time
 from datetime import datetime
 
-# 環境変数
+# Environment variables
 API_BASE_URL = os.environ.get('API_BASE_URL', 'https://api.hey-watch.me')
 DASHBOARD_SUMMARY_QUEUE_URL = os.environ.get('DASHBOARD_SUMMARY_QUEUE_URL', 'https://sqs.ap-southeast-2.amazonaws.com/975050024946/watchme-dashboard-summary-queue')
 SUPABASE_URL = os.environ.get('SUPABASE_URL')
 SUPABASE_KEY = os.environ.get('SUPABASE_KEY')
 
-# SQSクライアント
+# SQS client
 sqs = boto3.client('sqs', region_name='ap-southeast-2')
 
 
 def get_transcription_status(file_path: str) -> str:
     """
-    DBから処理ステータスを取得
+    Get processing status from DB
 
     Args:
-        file_path: S3ファイルパス
+        file_path: S3 file path
 
     Returns:
-        transcriptions_status ('pending', 'skipped', 'completed', 等)
+        transcriptions_status ('pending', 'skipped', 'completed', etc)
     """
     try:
         response = requests.get(
@@ -43,93 +43,92 @@ def get_transcription_status(file_path: str) -> str:
             data = response.json()
             if data and len(data) > 0:
                 status = data[0].get('transcriptions_status', 'pending')
-                print(f"📊 Status from DB: {status} (file: {file_path})")
+                print(f"Status from DB: {status} (file: {file_path})")
                 return status
 
-        print(f"⚠️ Could not fetch status from DB, defaulting to 'pending'")
+        print(f"Warning: Could not fetch status from DB, defaulting to 'pending'")
         return 'pending'
 
     except Exception as e:
-        print(f"⚠️ Error getting transcription status: {e}")
-        return 'pending'  # エラー時はpendingとして処理
+        print(f"Warning: Error getting transcription status: {e}")
+        return 'pending'  # Default to pending on error
 
 
 def lambda_handler(event, context):
     """
-    SQSメッセージを処理して音声処理パイプラインを実行
-    SQSのリトライ機能により、失敗時は自動的に再試行される
+    Process SQS messages and execute audio processing pipeline
+    Automatically retried by SQS on failure
     """
-    
+
     print(f"Processing SQS messages: {len(event['Records'])} messages")
-    
-    # SQSメッセージを処理
+
+    # Process SQS messages
     for record in event['Records']:
         try:
-            # メッセージ本文を解析
+            # Parse message body
             message = json.loads(record['body'])
-            
+
             file_path = message['file_path']
             device_id = message['device_id']
-            date = message['date']
-            time_slot = message['time_slot']
+            recorded_at = message['recorded_at']  # Now using recorded_at instead of date/time_slot
 
-            print(f"Processing audio: {device_id}/{date}/{time_slot}")
+            print(f"Processing audio: {device_id} at {recorded_at}")
             print(f"File path: {file_path}")
 
-            # 処理パイプラインを実行（SKIPも含めて全て同じフロー）
+            # Execute processing pipeline (including SKIP handling)
             results = trigger_processing_pipeline(
-                file_path, device_id, date, time_slot
+                file_path, device_id, recorded_at
             )
 
-            # 結果をログに出力
+            # Log results
             print(f"Processing results: {json.dumps(results)}")
 
-            # 処理結果に基づいてログ出力
+            # Log based on processing results
             if results.get('status') == 'skipped':
-                print(f"⏭️ Processing skipped (night hours): {device_id}/{date}/{time_slot}")
+                print(f"Processing skipped (night hours): {device_id} at {recorded_at}")
             elif results.get('status') == 'failed':
-                print(f"❌ Processing failed: {device_id}/{date}/{time_slot}")
+                print(f"Processing failed: {device_id} at {recorded_at}")
             else:
-                print(f"✅ Processing completed: {device_id}/{date}/{time_slot}")
+                print(f"Processing completed: {device_id} at {recorded_at}")
 
-            # 累積分析は必ず実行（SKIPでも失敗でも成功でも）
-            # これにより06:00問題が解決される
+            # Always trigger cumulative analysis (even for SKIP or failure)
+            # This resolves the 06:00 issue
             print(f"Triggering dashboard summary (always executed)")
-            trigger_dashboard_summary(device_id, date, time_slot)
-            
-            # 成功したメッセージは自動的にSQSから削除される
-            
+            trigger_dashboard_summary(device_id, recorded_at)
+
+            # Successfully processed messages are automatically deleted from SQS
+
         except Exception as e:
             print(f"Error processing message: {str(e)}")
-            # 例外を再発生させてSQSのリトライを有効にする
+            # Re-raise exception to enable SQS retry
             raise
-    
+
     return {
         'statusCode': 200,
         'body': json.dumps('Processing completed')
     }
 
 
-def trigger_processing_pipeline(file_path, device_id, date, time_slot):
-    """各APIを順次呼び出し（SKIPも含めて統一的に処理）"""
+def trigger_processing_pipeline(file_path, device_id, recorded_at):
+    """Call each API sequentially (unified processing including SKIP)"""
 
     results = {}
 
-    # ステータスチェック（SKIPかどうか）
+    # Check status (whether to SKIP or not)
     status = get_transcription_status(file_path)
 
-    # SKIPステータスの場合は、処理をスキップして失敗レコードを作成
+    # If SKIP status, create failure record and skip processing
     if status == 'skipped':
-        print(f"📊 Processing skipped for night hours: {file_path}")
+        print(f"Processing skipped for night hours: {file_path}")
 
-        # 失敗レコード作成（SKIPも失敗の一種として扱う）
+        # Create failure record (treat SKIP as a type of failure)
         try:
+            # Note: This endpoint might need to be updated to use recorded_at
             response = requests.post(
                 f"{API_BASE_URL}/vibe-analysis/aggregator/create-failed-record",
                 params={
                     "device_id": device_id,
-                    "date": date,
-                    "time_block": time_slot,
+                    "recorded_at": recorded_at,
                     "failure_reason": "night_skip",
                     "error_message": "Skipped during quiet hours (23:00-05:59)"
                 },
@@ -137,37 +136,37 @@ def trigger_processing_pipeline(file_path, device_id, date, time_slot):
             )
 
             if response.status_code == 200:
-                print(f"✅ Skip record created successfully")
+                print(f"Skip record created successfully")
             else:
-                print(f"⚠️ Failed to create skip record: {response.status_code}")
+                print(f"Warning: Failed to create skip record: {response.status_code}")
 
         except Exception as e:
-            print(f"⚠️ Error creating skip record: {str(e)}")
+            print(f"Warning: Error creating skip record: {str(e)}")
 
-        # SKIPステータスを返して終了（累積分析は呼び出し元で実行される）
+        # Return SKIP status (cumulative analysis will be triggered by caller)
         return {
             'status': 'skipped',
             'message': 'Night hours skip (23:00-05:59)',
             'device_id': device_id,
-            'date': date,
-            'time_slot': time_slot
+            'recorded_at': recorded_at
         }
 
-    # 通常処理（SKIPではない場合）
-    # 1. Azure Speech API (音声書き起こし)
-    azure_success = False
+    # Normal processing (not SKIP)
+
+    # 1. ASR API (Speech-to-text) - Vibe Transcriber
+    asr_success = False
     max_retries = 3
     retry_count = 0
-    
-    while retry_count < max_retries and not azure_success:
+
+    while retry_count < max_retries and not asr_success:
         try:
             if retry_count > 0:
-                # 指数バックオフ
+                # Exponential backoff
                 wait_time = min(30, 5 * (2 ** (retry_count - 1)))
                 print(f"Retry {retry_count}/{max_retries} after {wait_time} seconds...")
                 time.sleep(wait_time)
-            
-            print(f"Calling Azure Speech API (attempt {retry_count + 1}/{max_retries})...")
+
+            print(f"Calling ASR API (attempt {retry_count + 1}/{max_retries})...")
             transcribe_response = requests.post(
                 f"{API_BASE_URL}/vibe-analysis/transcriber/fetch-and-transcribe",
                 json={
@@ -175,372 +174,255 @@ def trigger_processing_pipeline(file_path, device_id, date, time_slot):
                 },
                 timeout=900
             )
-            
-            # 429/503の場合はリトライ
+
+            # Retry on 429/503
             if transcribe_response.status_code in [429, 503]:
                 print(f"Received {transcribe_response.status_code}, will retry...")
                 retry_count += 1
                 continue
 
-            # HTTP 200の場合、レスポンス本文を解析してファイル単位で判定
+            # Parse response for HTTP 200
             if transcribe_response.status_code == 200:
                 try:
                     response_data = transcribe_response.json()
-                    print(f"Azure Speech API response: {response_data}")
+                    print(f"ASR API response: {response_data}")
 
-                    # 【重要】該当ファイルが成功したか失敗したかを判定
+                    # Check if file was processed successfully
                     processed_files = response_data.get('processed_files', [])
                     error_files = response_data.get('error_files', [])
 
-                    # ファイル単位で成功/失敗を判定
                     if file_path in processed_files:
-                        # ✅ 成功
-                        azure_success = True
-                        results['transcription'] = {
+                        # Success
+                        asr_success = True
+                        results['asr'] = {
                             'status_code': 200,
                             'success': True,
-                            'response': response_data,
-                            'retry_count': retry_count
+                            'response': response_data
                         }
-                        print(f"✅ Azure Speech API: File successfully processed")
+                        print(f"ASR API: File successfully processed")
 
                     elif file_path in error_files:
-                        # ❌ 失敗（クォーター超過など）
-                        azure_success = False
-                        results['transcription'] = {
+                        # Failure
+                        asr_success = False
+                        results['asr'] = {
                             'status_code': 200,
                             'success': False,
                             'error_type': 'processing_failed',
-                            'response': response_data,
-                            'retry_count': retry_count,
-                            'message': 'File was in error_files list'
+                            'response': response_data
                         }
-                        print(f"⚠️ Azure Speech API: File processing failed")
+                        print(f"Warning: ASR API: File processing failed")
 
                     else:
-                        # ファイルがどちらのリストにもない場合はsummary.errorsで判定
+                        # Check errors count if file not in either list
                         errors_count = response_data.get('summary', {}).get('errors', 0)
-                        azure_success = (errors_count == 0)
+                        asr_success = (errors_count == 0)
 
-                        results['transcription'] = {
+                        results['asr'] = {
                             'status_code': 200,
-                            'success': azure_success,
-                            'response': response_data,
-                            'retry_count': retry_count,
-                            'message': f'Errors: {errors_count}' if not azure_success else 'Success'
+                            'success': asr_success,
+                            'response': response_data
                         }
-                        print(f"{'✅' if azure_success else '⚠️'} Azure Speech API: {results['transcription']['message']}")
+                        print(f"{'✓' if asr_success else 'Warning:'} ASR API: Errors: {errors_count}")
 
-                    break  # レスポンス解析完了、ループを抜ける
+                    break  # Exit loop after parsing response
 
                 except Exception as e:
-                    print(f"Error parsing Azure response: {str(e)}")
-                    azure_success = False
-                    results['transcription'] = {
+                    print(f"Error parsing ASR response: {str(e)}")
+                    asr_success = False
+                    results['asr'] = {
                         'status_code': 200,
                         'success': False,
                         'error': f'Response parsing error: {str(e)}'
                     }
                     break
             else:
-                # HTTP 200以外のエラー
-                print(f"Azure API failed with status: {transcribe_response.status_code}")
-                azure_success = False
-                results['transcription'] = {
+                # HTTP error
+                print(f"ASR API failed with status: {transcribe_response.status_code}")
+                asr_success = False
+                results['asr'] = {
                     'status_code': transcribe_response.status_code,
                     'success': False,
                     'error': f'HTTP {transcribe_response.status_code}'
                 }
                 break
-                
+
         except requests.Timeout:
-            print("Transcription API timeout")
+            print("ASR API timeout")
             retry_count += 1
             if retry_count >= max_retries:
-                results['transcription'] = {'error': 'Timeout after retries', 'success': False}
-                
+                results['asr'] = {'error': 'Timeout after retries', 'success': False}
+
         except Exception as e:
-            print(f"Transcription API error: {str(e)}")
+            print(f"ASR API error: {str(e)}")
             retry_count += 1
             if retry_count >= max_retries:
-                results['transcription'] = {'error': str(e), 'success': False}
-    
-    # 2. AST API (音響イベント検出)
-    ast_success = False
+                results['asr'] = {'error': str(e), 'success': False}
+
+    # 2. SED API (Sound Event Detection) - Behavior Features
+    sed_success = False
     try:
-        print(f"Calling AST API for audio event detection...")
-        ast_response = requests.post(
+        print(f"Calling SED API for sound event detection...")
+        sed_response = requests.post(
             f"{API_BASE_URL}/behavior-analysis/features/fetch-and-process-paths",
             json={
                 "file_paths": [file_path]
             },
             timeout=900
         )
-        ast_success = ast_response.status_code == 200
-        results['ast_behavior'] = {
-            'status_code': ast_response.status_code,
-            'success': ast_success
+        sed_success = sed_response.status_code == 200
+        results['sed'] = {
+            'status_code': sed_response.status_code,
+            'success': sed_success
         }
-        
-        # AST処理が成功したら、SED Aggregatorを自動起動
-        if ast_response.status_code == 200:
-            print(f"AST API successful. Starting SED Aggregator...")
-            try:
-                sed_aggregator_response = requests.post(
-                    f"{API_BASE_URL}/behavior-aggregator/analysis/sed",
-                    json={
-                        "device_id": device_id,
-                        "date": date
-                    },
-                    timeout=900
-                )
-                
-                if sed_aggregator_response.status_code == 200:
-                    response_data = sed_aggregator_response.json()
-                    task_id = response_data.get('task_id')
-                    print(f"SED Aggregator started. Task ID: {task_id}")
-                    results['sed_aggregator'] = {
-                        'status_code': sed_aggregator_response.status_code,
-                        'success': True,
-                        'task_id': task_id
-                    }
-                else:
-                    print(f"SED Aggregator failed: {sed_aggregator_response.status_code}")
-                    results['sed_aggregator'] = {
-                        'status_code': sed_aggregator_response.status_code,
-                        'success': False
-                    }
-                    
-            except Exception as e:
-                print(f"SED Aggregator error: {str(e)}")
-                results['sed_aggregator'] = {'error': str(e), 'success': False}
-                
+
+        if sed_success:
+            print(f"SED API successful")
+        else:
+            print(f"SED API failed: {sed_response.status_code}")
+
     except requests.Timeout:
-        print("AST API timeout")
-        results['ast_behavior'] = {'error': 'Timeout', 'success': False}
+        print("SED API timeout")
+        results['sed'] = {'error': 'Timeout', 'success': False}
     except Exception as e:
-        print(f"AST API error: {str(e)}")
-        results['ast_behavior'] = {'error': str(e), 'success': False}
-    
-    # 3. SUPERB API (感情認識)
-    superb_success = False
+        print(f"SED API error: {str(e)}")
+        results['sed'] = {'error': str(e), 'success': False}
+
+    # 3. SER API (Speech Emotion Recognition) - Emotion Features
+    ser_success = False
     try:
-        print(f"Calling SUPERB API for emotion recognition...")
-        superb_response = requests.post(
+        print(f"Calling SER API for emotion recognition...")
+        ser_response = requests.post(
             f"{API_BASE_URL}/emotion-analysis/feature-extractor/process/emotion-features",
             json={
                 "file_paths": [file_path]
             },
             timeout=900
         )
-        superb_success = superb_response.status_code == 200
-        results['superb_emotion'] = {
-            'status_code': superb_response.status_code,
-            'success': superb_success
+        ser_success = ser_response.status_code == 200
+        results['ser'] = {
+            'status_code': ser_response.status_code,
+            'success': ser_success
         }
-        
-        # SUPERB処理が成功したら、Emotion Aggregatorを自動起動
-        if superb_response.status_code == 200:
-            print(f"SUPERB API successful. Starting Emotion Aggregator...")
-            try:
-                emotion_aggregator_response = requests.post(
-                    f"{API_BASE_URL}/emotion-analysis/aggregator/analyze/opensmile-aggregator",
-                    json={
-                        "device_id": device_id,
-                        "date": date
-                    },
-                    timeout=900
-                )
-                
-                if emotion_aggregator_response.status_code == 200:
-                    response_data = emotion_aggregator_response.json()
-                    task_id = response_data.get('task_id')
-                    print(f"Emotion Aggregator started. Task ID: {task_id}")
-                    results['emotion_aggregator'] = {
-                        'status_code': emotion_aggregator_response.status_code,
-                        'success': True,
-                        'task_id': task_id
-                    }
-                else:
-                    print(f"Emotion Aggregator failed: {emotion_aggregator_response.status_code}")
-                    results['emotion_aggregator'] = {
-                        'status_code': emotion_aggregator_response.status_code,
-                        'success': False
-                    }
-                    
-            except Exception as e:
-                print(f"Emotion Aggregator error: {str(e)}")
-                results['emotion_aggregator'] = {'error': str(e), 'success': False}
-                
+
+        if ser_success:
+            print(f"SER API successful")
+        else:
+            print(f"SER API failed: {ser_response.status_code}")
+
     except requests.Timeout:
-        print("SUPERB API timeout")
-        results['superb_emotion'] = {'error': 'Timeout', 'success': False}
+        print("SER API timeout")
+        results['ser'] = {'error': 'Timeout', 'success': False}
     except Exception as e:
-        print(f"SUPERB API error: {str(e)}")
-        results['superb_emotion'] = {'error': str(e), 'success': False}
-    
-    # 3.5. Azure失敗時の処理: dashboardテーブルに失敗レコードを作成
-    if not azure_success:
-        print(f"⚠️ Azure API failed. Creating failed record in dashboard table...")
+        print(f"SER API error: {str(e)}")
+        results['ser'] = {'error': str(e), 'success': False}
+
+    # 4. Aggregator API (if all 3 APIs succeeded)
+    if asr_success and sed_success and ser_success:
+        print(f"All feature extraction APIs successful. Starting Aggregator...")
         try:
-            failed_record_response = requests.post(
-                f"{API_BASE_URL}/vibe-analysis/aggregator/create-failed-record",
-                params={
+            aggregator_response = requests.post(
+                f"{API_BASE_URL}/aggregator/spot",
+                json={
                     "device_id": device_id,
-                    "date": date,
-                    "time_block": time_slot,
-                    "failure_reason": "quota_exceeded",
-                    "error_message": "Azure Speech API failed"
+                    "recorded_at": recorded_at
                 },
-                timeout=900
+                timeout=180
             )
 
-            if failed_record_response.status_code == 200:
-                print(f"✅ Failed record created successfully in dashboard table")
-                results['failed_record'] = {
-                    'status_code': failed_record_response.status_code,
+            if aggregator_response.status_code == 200:
+                print(f"Aggregator API successful")
+                results['aggregator'] = {
+                    'status_code': 200,
                     'success': True
                 }
 
-                # 累積分析のトリガーは呼び出し元（Line 95-98）で必ず実行されるため、
-                # ここでは呼ばない（重複トリガーを防止）
-            else:
-                print(f"❌ Failed to create failed record: {failed_record_response.status_code}")
-                results['failed_record'] = {
-                    'status_code': failed_record_response.status_code,
-                    'success': False
-                }
-        except Exception as e:
-            print(f"❌ Error creating failed record: {str(e)}")
-            results['failed_record'] = {'error': str(e), 'success': False}
-
-    # 4. Vibe Aggregator（3つのAPIが全て成功した場合のみ）
-    if azure_success and ast_success and superb_success:
-        print(f"All APIs successful. Starting Vibe Aggregator...")
-        try:
-            vibe_aggregator_response = requests.get(
-                f"{API_BASE_URL}/vibe-analysis/aggregator/generate-timeblock-prompt",
-                params={
-                    "device_id": device_id,
-                    "date": date,
-                    "time_block": time_slot
-                },
-                timeout=900
-            )
-            
-            if vibe_aggregator_response.status_code == 200:
-                print(f"Vibe Aggregator successful")
-                
+                # 5. Profiler API (LLM Analysis)
+                print(f"Starting Profiler (LLM analysis)...")
                 try:
-                    aggregator_data = vibe_aggregator_response.json()
-                    prompt = aggregator_data.get('prompt', '')
-                    
-                    if prompt:
-                        print(f"Prompt generated. Length: {len(prompt)} chars")
-                        results['vibe_aggregator'] = {
-                            'status_code': vibe_aggregator_response.status_code,
+                    profiler_response = requests.post(
+                        f"{API_BASE_URL}/profiler/spot-profiler",
+                        json={
+                            "device_id": device_id,
+                            "recorded_at": recorded_at
+                        },
+                        timeout=180
+                    )
+
+                    if profiler_response.status_code == 200:
+                        print(f"Profiler API successful")
+                        profiler_data = profiler_response.json()
+                        results['profiler'] = {
+                            'status_code': 200,
                             'success': True,
-                            'prompt_length': len(prompt)
+                            'vibe_score': profiler_data.get('vibe_score'),
+                            'summary': profiler_data.get('summary')
                         }
-                        
-                        # 5. Vibe Scorer (ChatGPT分析)
-                        print(f"Starting Vibe Scorer...")
-                        try:
-                            vibe_scorer_response = requests.post(
-                                f"{API_BASE_URL}/vibe-analysis/scorer/analyze-timeblock",
-                                json={
-                                    "prompt": prompt,
-                                    "device_id": device_id,
-                                    "date": date,
-                                    "time_block": time_slot
-                                },
-                                timeout=900
-                            )
-                            
-                            if vibe_scorer_response.status_code == 200:
-                                scorer_data = vibe_scorer_response.json()
-                                print(f"Vibe Scorer successful")
-                                results['vibe_scorer'] = {
-                                    'status_code': vibe_scorer_response.status_code,
-                                    'success': True,
-                                    'vibe_score': scorer_data.get('analysis_result', {}).get('vibe_score')
-                                }
-                            else:
-                                print(f"Vibe Scorer failed: {vibe_scorer_response.status_code}")
-                                results['vibe_scorer'] = {
-                                    'status_code': vibe_scorer_response.status_code,
-                                    'success': False
-                                }
-                                
-                        except Exception as e:
-                            print(f"Vibe Scorer error: {str(e)}")
-                            results['vibe_scorer'] = {'error': str(e), 'success': False}
+                        print(f"LLM Analysis complete. Vibe Score: {profiler_data.get('vibe_score')}")
+
                     else:
-                        print("Empty prompt from Vibe Aggregator")
-                        results['vibe_aggregator'] = {
-                            'status_code': vibe_aggregator_response.status_code,
-                            'success': False,
-                            'error': 'Empty prompt'
+                        print(f"Profiler API failed: {profiler_response.status_code}")
+                        results['profiler'] = {
+                            'status_code': profiler_response.status_code,
+                            'success': False
                         }
-                        
+
                 except Exception as e:
-                    print(f"Error parsing Vibe Aggregator response: {str(e)}")
-                    results['vibe_aggregator'] = {
-                        'status_code': vibe_aggregator_response.status_code,
-                        'success': False,
-                        'parse_error': str(e)
-                    }
-                
+                    print(f"Profiler API error: {str(e)}")
+                    results['profiler'] = {'error': str(e), 'success': False}
+
             else:
-                print(f"Vibe Aggregator failed: {vibe_aggregator_response.status_code}")
-                results['vibe_aggregator'] = {
-                    'status_code': vibe_aggregator_response.status_code,
+                print(f"Aggregator API failed: {aggregator_response.status_code}")
+                results['aggregator'] = {
+                    'status_code': aggregator_response.status_code,
                     'success': False
                 }
-                
+
         except Exception as e:
-            print(f"Vibe Aggregator error: {str(e)}")
-            results['vibe_aggregator'] = {'error': str(e), 'success': False}
+            print(f"Aggregator API error: {str(e)}")
+            results['aggregator'] = {'error': str(e), 'success': False}
     else:
-        print(f"Skipping Vibe Aggregator - Prerequisites not met")
-        results['vibe_aggregator'] = {
+        print(f"Skipping Aggregator/Profiler - Prerequisites not met")
+        results['aggregator'] = {
             'skipped': True,
-            'reason': f'Prerequisites not met: Azure={azure_success}, AST={ast_success}, SUPERB={superb_success}'
+            'reason': f'Prerequisites not met: ASR={asr_success}, SED={sed_success}, SER={ser_success}'
         }
-    
+        results['profiler'] = {
+            'skipped': True,
+            'reason': 'Aggregator was skipped'
+        }
+
     return results
 
 
-def trigger_dashboard_summary(device_id, date, time_slot):
+def trigger_dashboard_summary(device_id, recorded_at):
     """
-    累積分析処理をトリガーするためにSQSキューにメッセージを送信
+    Trigger cumulative analysis by sending message to SQS queue
     """
     try:
-        print(f"Triggering dashboard summary for {device_id}/{date}")
-        
-        # 累積分析用のメッセージを作成
+        print(f"Triggering dashboard summary for {device_id} at {recorded_at}")
+
+        # Create message for cumulative analysis
         message = {
             'device_id': device_id,
-            'date': date,
-            'time_slot': time_slot,
+            'recorded_at': recorded_at,
             'timestamp': datetime.utcnow().isoformat(),
             'source': 'watchme-audio-worker',
-            'trigger_reason': 'timeblock_completed'
+            'trigger_reason': 'spot_processing_completed'
         }
-        
-        # SQSにメッセージを送信
+
+        # Send message to SQS
         response = sqs.send_message(
             QueueUrl=DASHBOARD_SUMMARY_QUEUE_URL,
             MessageBody=json.dumps(message)
         )
-        
+
         print(f"Dashboard summary triggered successfully")
         print(f"SQS MessageId: {response['MessageId']}")
         print(f"Queue URL: {DASHBOARD_SUMMARY_QUEUE_URL}")
-        
+
         return True
-        
+
     except Exception as e:
         print(f"Error triggering dashboard summary: {str(e)}")
-        # エラーが発生してもメイン処理は継続
+        # Continue main processing even if error occurs
         return False
