@@ -1,5 +1,23 @@
 # WatchMe Server 変更履歴
 
+## 2025年11月15日
+
+### vibe-analysis-scorer 削除 - Profiler APIへ統合完了
+
+#### 削除概要
+- **削除サービス**: vibe-analysis-scorer (ポート8002)
+- **理由**: Profiler API (ポート8051) へ統合完了
+- **削除テーブル**: audio_aggregator, audio_features, audio_scorer
+
+#### 削除完了事項
+- EC2上のコンテナ停止・削除
+- systemdサービス削除
+- EC2上のディレクトリ削除 (`/home/ubuntu/vibe-analysis-scorer`)
+- GitHubリポジトリアーカイブ (`hey-watchme/api-vibe-analysis-scorer`)
+- Supabaseテーブル削除 (audio_aggregator, audio_features, audio_scorer)
+
+---
+
 ## 2025年9月19日
 
 ### API移行完了 - 音声処理API世代交代

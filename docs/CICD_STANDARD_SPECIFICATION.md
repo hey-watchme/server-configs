@@ -908,7 +908,6 @@ grep -h "ECR_REPOSITORY\|image:" *.yml *.sh .github/workflows/*.yml | grep -o "w
 | API名 | ディレクトリ | ポート | 外部URL | 現状 |
 |------|------------|--------|---------|------|
 | profiler-api | /home/ubuntu/profiler-api | 8051 | /profiler/ | ✅ 完全対応 (2025-11-13) |
-| vibe-analysis-scorer | /home/ubuntu/vibe-analysis-scorer | 8002 | /vibe-analysis/scorer/ | ✅ 完全対応 |
 | aggregator | /home/ubuntu/aggregator | 8050 | /aggregator/ | ✅ 完全対応 |
 | api-sed-aggregator | /home/ubuntu/api-sed-aggregator | 8010 | /behavior-aggregator/ | ✅ 完全対応 |
 | emotion-analysis-feature-extractor-v3 | /home/ubuntu/emotion-analysis-feature-extractor-v3 | 8018 | /emotion-analysis/feature-extractor/ | ✅ 正常 |
