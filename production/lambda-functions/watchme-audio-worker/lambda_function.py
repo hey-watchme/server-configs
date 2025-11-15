@@ -401,10 +401,47 @@ def trigger_dashboard_summary(device_id, recorded_at):
     try:
         print(f"Triggering dashboard summary for {device_id} at {recorded_at}")
 
+        # Fetch local_date from audio_files table
+        local_date = None
+        try:
+            response = requests.get(
+                f"{SUPABASE_URL}/rest/v1/audio_files",
+                params={
+                    "device_id": f"eq.{device_id}",
+                    "recorded_at": f"eq.{recorded_at}",
+                    "select": "local_date"
+                },
+                headers={
+                    "apikey": SUPABASE_KEY,
+                    "Authorization": f"Bearer {SUPABASE_KEY}"
+                },
+                timeout=10
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                if data and len(data) > 0:
+                    local_date = data[0].get('local_date')
+                    print(f"Fetched local_date from audio_files: {local_date}")
+
+        except Exception as e:
+            print(f"Warning: Could not fetch local_date from audio_files: {e}")
+
+        # Fallback: calculate from recorded_at (UTC) if fetch failed
+        if not local_date:
+            print(f"Warning: Using UTC date as fallback")
+            try:
+                dt = datetime.fromisoformat(recorded_at.replace('Z', '+00:00'))
+                local_date = dt.strftime('%Y-%m-%d')
+            except:
+                local_date = datetime.utcnow().strftime('%Y-%m-%d')
+            print(f"Fallback local_date: {local_date}")
+
         # Create message for cumulative analysis
         message = {
             'device_id': device_id,
             'recorded_at': recorded_at,
+            'local_date': local_date,
             'timestamp': datetime.utcnow().isoformat(),
             'source': 'watchme-audio-worker',
             'trigger_reason': 'spot_processing_completed'

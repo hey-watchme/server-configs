@@ -24,23 +24,34 @@ def lambda_handler(event, context):
         try:
             # メッセージ本文を解析
             message = json.loads(record['body'])
-            
+
             device_id = message['device_id']
-            date = message['date']
-            time_slot = message.get('time_slot', '')  # タイムブロック処理完了時のタイムスロット
-            
-            print(f"Processing dashboard summary for: {device_id}/{date}")
-            print(f"Triggered by timeblock: {time_slot}")
-            
-            # 1. Dashboard Summary APIを呼び出し（プロンプト生成）
-            summary_result = call_dashboard_summary_api(device_id, date)
+            recorded_at = message['recorded_at']
+
+            # Use local_date from message (provided by audio-worker)
+            local_date = message.get('local_date')
+
+            # Fallback: calculate from recorded_at if not provided (for backward compatibility)
+            if not local_date:
+                print(f"Warning: local_date not in message, calculating from recorded_at (UTC)")
+                try:
+                    dt = datetime.fromisoformat(recorded_at.replace('Z', '+00:00'))
+                    local_date = dt.strftime('%Y-%m-%d')
+                except:
+                    local_date = datetime.utcnow().strftime('%Y-%m-%d')
+
+            print(f"Processing dashboard summary for: {device_id}/{local_date}")
+            print(f"Triggered by recording: {recorded_at}")
+
+            # 1. Dashboard Summary API (Daily Aggregator)
+            summary_result = call_dashboard_summary_api(device_id, local_date)
             
             if summary_result['success']:
                 # 2. 成功したら次のキュー（Analysis Queue）にメッセージを送信
                 analysis_message = {
                     'device_id': device_id,
-                    'date': date,
-                    'time_slot': time_slot,
+                    'local_date': local_date,
+                    'recorded_at': recorded_at,
                     'prompt': summary_result['prompt'],
                     'timestamp': datetime.utcnow().isoformat(),
                     'source': 'dashboard-summary-worker'
@@ -71,21 +82,21 @@ def lambda_handler(event, context):
     }
 
 
-def call_dashboard_summary_api(device_id, date):
+def call_dashboard_summary_api(device_id, local_date):
     """
-    Dashboard Summary API（プロンプト生成）を呼び出し
+    Dashboard Summary API (Daily Aggregator) - Generate daily prompt
     """
     try:
-        print(f"Calling Dashboard Summary API...")
-        print(f"URL: {API_BASE_URL}/vibe-analysis/aggregator/generate-dashboard-summary")
-        print(f"Parameters: device_id={device_id}, date={date}")
+        print(f"Calling Daily Aggregator API...")
+        print(f"URL: {API_BASE_URL}/aggregator/daily")
+        print(f"Parameters: device_id={device_id}, local_date={local_date}")
 
-        # APIを呼び出し（GET with params)
-        response = requests.get(
-            f"{API_BASE_URL}/vibe-analysis/aggregator/generate-dashboard-summary",
-            params={
+        # Call new Daily Aggregator endpoint (POST with JSON body)
+        response = requests.post(
+            f"{API_BASE_URL}/aggregator/daily",
+            json={
                 "device_id": device_id,
-                "date": date
+                "local_date": local_date
             },
             timeout=180
         )
@@ -93,12 +104,13 @@ def call_dashboard_summary_api(device_id, date):
         if response.status_code == 200:
             try:
                 response_data = response.json()
-                prompt = response_data.get('prompt', '')
-                
+                # New API returns 'aggregated_prompt' instead of 'prompt'
+                prompt = response_data.get('aggregated_prompt', '')
+
                 if prompt:
-                    print(f"Dashboard Summary API successful")
+                    print(f"Daily Aggregator API successful")
                     print(f"Generated prompt length: {len(prompt)} characters")
-                    
+
                     return {
                         'success': True,
                         'prompt': prompt,
