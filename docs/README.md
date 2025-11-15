@@ -49,8 +49,18 @@ graph TB
         end
 
         subgraph Lambda["λ Lambda関数"]
-            L1["watchme-janitor-trigger"]
-            L2["demo-data-generator-trigger"]
+            L1["audio-processor<br/>(S3トリガー)"]
+            L2["audio-worker<br/>(SQS処理)"]
+            L3["dashboard-summary-worker<br/>(日次集計)"]
+            L4["dashboard-analysis-worker<br/>(LLM分析)"]
+            L5["janitor-trigger"]
+            L6["demo-generator-trigger"]
+        end
+
+        subgraph SQS["📨 SQS キュー"]
+            SQ1["audio-processing-queue"]
+            SQ2["dashboard-summary-queue"]
+            SQ3["dashboard-analysis-queue"]
         end
 
         S3["🗄️ S3<br/>音声ファイル保存"]
@@ -74,10 +84,8 @@ graph TB
             end
 
             subgraph Aggregation["📊 集計・分析層"]
-                VibeAgg["Vibe Aggregator<br/>:8009<br/>(プロンプト生成)"]
-                VibeScore["Vibe Scorer<br/>:8002<br/>(心理スコア)"]
-                BehaviorAgg["Behavior Aggregator<br/>:8010"]
-                EmotionAgg["Emotion Aggregator<br/>:8012"]
+                Aggregator["Aggregator API<br/>:8011<br/>(Spot/Daily集計)"]
+                Profiler["Profiler API<br/>:8051<br/>(LLM分析)"]
             end
 
             subgraph Management["⚙️ 管理・インフラ層"]
@@ -103,32 +111,57 @@ graph TB
     S3 -->|音声ファイル| Vault
     Supabase -.->|メタデータ| Vault
 
-    %% EventBridge → Lambda → EC2
-    EB1 -->|トリガー| L1
-    EB2 -->|トリガー| L2
-    L1 -->|HTTPS POST| NginxRouter
-    L2 -->|HTTPS POST| NginxRouter
+    %% S3 Upload → Lambda Pipeline
+    iOS -->|S3アップロード| S3
+    S3 -->|トリガー| L1
+    L1 -->|メッセージ送信| SQ1
+    SQ1 -->|処理| L2
+
+    %% audio-worker → Feature Extractors
+    L2 -->|並列実行| BehaviorFeatures
+    L2 -->|並列実行| EmotionFeatures
+    L2 -->|並列実行| VibeTranscriber
+
+    %% Feature Extractors → Aggregator
+    BehaviorFeatures -->|完了| Aggregator
+    EmotionFeatures -->|完了| Aggregator
+    VibeTranscriber -->|完了| Aggregator
+
+    %% Aggregator → Profiler (Spot)
+    Aggregator -->|Spot分析| Profiler
+    Profiler -.->|spot_results保存| Supabase
+
+    %% Spot完了 → Daily Pipeline
+    Profiler -->|完了通知| SQ2
+    SQ2 -->|処理| L3
+    L3 -->|Daily集計| Aggregator
+    Aggregator -.->|daily_aggregators保存| Supabase
+
+    %% Daily Aggregator → Daily Profiler
+    Aggregator -->|プロンプト生成| SQ3
+    SQ3 -->|処理| L4
+    L4 -->|LLM分析| Profiler
+    Profiler -.->|daily_results保存| Supabase
+
+    %% EventBridge → Scheduled Tasks
+    EB1 -->|トリガー| L5
+    EB2 -->|トリガー| L6
+    L5 -->|HTTPS POST| NginxRouter
+    L6 -->|HTTPS POST| NginxRouter
 
     %% Nginx → Docker Services
     NginxRouter -->|/vault/| Vault
     NginxRouter -->|/behavior-analysis/features/| BehaviorFeatures
     NginxRouter -->|/emotion-analysis/features/| EmotionFeatures
     NginxRouter -->|/vibe-analysis/transcription/| VibeTranscriber
+    NginxRouter -->|/aggregator/| Aggregator
+    NginxRouter -->|/profiler/| Profiler
     NginxRouter -->|/janitor/| Janitor
 
-    %% 音声処理フロー
+    %% Vault → Feature Extractors
     Vault -->|音声ファイル配信| BehaviorFeatures
     Vault -->|音声ファイル配信| EmotionFeatures
     Vault -->|音声ファイル配信| VibeTranscriber
-
-    BehaviorFeatures -->|特徴量| BehaviorAgg
-    EmotionFeatures -->|感情スコア| EmotionAgg
-    VibeTranscriber -->|テキスト| VibeAgg
-
-    VibeAgg -->|プロンプト| VibeScore
-    BehaviorAgg -.->|結果保存| Supabase
-    EmotionAgg -.->|結果保存| Supabase
-    VibeScore -.->|心理分析保存| Supabase
 
     %% Janitorの削除フロー
     Janitor -->|処理完了確認| Supabase
@@ -146,9 +179,9 @@ graph TB
     classDef infraStyle fill:#fff9c4,stroke:#f9a825,stroke-width:2px
 
     class iOS,Web,Observer,ProductSite clientStyle
-    class S3,Supabase,L1,L2,EB1,EB2 awsStyle
+    class S3,Supabase,L1,L2,L3,L4,L5,L6,EB1,EB2,SQ1,SQ2,SQ3 awsStyle
     class BehaviorFeatures,EmotionFeatures,VibeTranscriber,Vault processingStyle
-    class VibeAgg,VibeScore,BehaviorAgg,EmotionAgg aggregationStyle
+    class Aggregator,Profiler aggregationStyle
     class APIManager,Admin,Avatar,Janitor managementStyle
     class NginxRouter,SystemD,SD1 infraStyle
 ```
@@ -385,11 +418,76 @@ sudo systemctl reload nginx
 
 WatchMeプラットフォームでは以下のサービスが稼働しています：
 
-- **🎯 クライアント**: iOS App、Web Dashboard、Observer Device、製品サイト
-- **🎙️ 音声処理**: 文字起こし、感情認識、行動分析、特徴抽出（4 API）
-- **📊 集計・分析**: データ集計、スコアリング、プロンプト生成（4 API）
-- **⚙️ インフラ・管理**: Vault、API Manager、Admin、Avatar Uploader、Janitor（5 API）
-- **⏰ 自動実行**: Janitor（6時間ごと）、Demo Generator（30分ごと）（2 Lambda）
+### EC2 Docker コンテナ（15サービス）
+
+| カテゴリ | サービス名 | ポート | 役割 |
+|---------|----------|--------|------|
+| **🚪 ゲートウェイ** | Vault API | 8000 | S3音声ファイル配信、SKIP機能 |
+| **🎙️ 音声処理** | Behavior Features | 8017 | 527種類の音響イベント検出 |
+| | Emotion Features | 8018 | 8感情認識 |
+| | Vibe Transcriber | 8013 | Groq Whisper v3文字起こし |
+| **📊 集計・分析** | **Aggregator API** | **8011** | **Spot/Daily集計、プロンプト生成** |
+| | **Profiler API** | **8051** | **LLM分析（Spot/Daily）** |
+| **⚙️ 管理** | API Manager | 9001 | API管理UI |
+| | Admin | 9000 | 管理ツール |
+| | Avatar Uploader | 8014 | アバター画像管理 |
+| | Janitor | 8030 | 音声データ自動削除 |
+
+### AWS Lambda関数（6サービス）
+
+| 関数名 | トリガー | 役割 |
+|--------|---------|------|
+| **audio-processor** | S3 Upload | 録音ファイルをSQSに送信 |
+| **audio-worker** | SQS (audio-processing-queue) | Feature Extractors並列実行 |
+| **dashboard-summary-worker** | SQS (dashboard-summary-queue) | Daily Aggregator実行 |
+| **dashboard-analysis-worker** | SQS (dashboard-analysis-queue) | Daily Profiler実行 |
+| janitor-trigger | EventBridge (6時間ごと) | Janitor API実行 |
+| demo-generator-trigger | EventBridge (30分ごと) | デモデータ生成 |
+
+### 🔄 新しいデータフロー（2025-11-15更新）
+
+```
+S3 Upload
+  ↓
+Lambda: audio-processor → SQS
+  ↓
+Lambda: audio-worker
+  ↓ (並列実行)
+  ├─ Behavior Features (音響検出)
+  ├─ Emotion Features (感情認識)
+  └─ Vibe Transcriber (文字起こし)
+  ↓ 3つ完了後
+Aggregator API (/aggregator/spot)
+  → spot_aggregators テーブルに保存
+  ↓
+Profiler API (/profiler/spot-profiler)
+  → spot_results テーブルに保存
+  ↓
+SQS: dashboard-summary-queue
+  ↓
+Lambda: dashboard-summary-worker
+  ↓
+Aggregator API (/aggregator/daily)
+  → daily_aggregators テーブルに保存
+  ↓
+SQS: dashboard-analysis-queue
+  ↓
+Lambda: dashboard-analysis-worker
+  ↓
+Profiler API (/profiler/daily-profiler)
+  → daily_results テーブルに保存
+```
+
+### 🆕 local_date対応（2025-11-15）
+
+全テーブルに `local_date` カラムを追加し、デバイスのタイムゾーンに基づいたローカル日付を保存：
+
+- `audio_files` - Vault APIで計算・保存
+- `spot_features` - Feature Extractorsでコピー
+- `spot_aggregators` - Aggregator APIでコピー
+- `spot_results` - Profiler APIでコピー
+- `daily_aggregators` - local_dateでグルーピング
+- `daily_results` - 日次分析結果
 
 > **詳細情報**: 全サービスのエンドポイント、ポート番号、ECRリポジトリ、systemdサービス名などの技術仕様は [TECHNICAL_REFERENCE.md - サービス一覧](./TECHNICAL_REFERENCE.md#📡-サービス一覧) を参照
 
@@ -523,5 +621,20 @@ grep -E "proxy_pass|listen" /etc/nginx/sites-available/api.hey-watch.me
 
 ## 🚀 今後の予定
 
+- [x] **API階層化の完了**（2025-11-15）
+  - Aggregator API: Spot/Daily集計を統一
+  - Profiler API: LLM分析を統一
+  - local_date対応でタイムゾーン問題を解決
+- [x] **Lambda関数パイプラインの最新化**（2025-11-15）
+  - audio-worker: Feature Extractors並列実行
+  - dashboard-summary-worker: Daily Aggregator実行
+  - dashboard-analysis-worker: Daily Profiler実行
 - [ ] 既存サービスの統一ネットワーク移行完了
 - [ ] 監視ダッシュボードの構築
+- [ ] 東京リージョンへの移行（ap-southeast-2 → ap-northeast-1）
+
+## 📅 最終更新
+
+- **2025-11-15**: API階層化完了、local_date対応、Lambda関数最新化
+- **2025-10-26**: AWSリージョン構成統一（Sydney）
+- **2025-10-01**: Janitor API本番稼働開始
