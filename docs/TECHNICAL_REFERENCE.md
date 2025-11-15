@@ -1,276 +1,435 @@
 # WatchMe 技術仕様書
 
-最終更新: 2025年10月31日 16:30 JST
+最終更新: 2025-11-15
 
 ## 🏗️ システムアーキテクチャ
 
-### AWS EC2仕様 （更新: 2025-10-26）
-- **インスタンスタイプ**: t4g.large (一時的アップグレード、以前t4g.small)
-- **CPU**: 2 vCPU (AWS Graviton2)
-- **メモリ**: 8.0GB RAM (実使用: 7.8GB)
+### AWS EC2
+
+- **インスタンスタイプ**: t4g.large (AWS Graviton2, 2 vCPU, 8GB RAM)
 - **ストレージ**: 30GB gp3 SSD
 - **リージョン**: ap-southeast-2 (Sydney)
 - **IPアドレス**: 3.24.16.82
 
-### リソース状況 （2025-10-28 更新）
+### AWSリージョン構成
 
-#### メモリ使用状況
-- **総メモリ**: 7.6GB
-- **使用中**: 2.8GB (37%)
-- **利用可能**: 4.8GB (63%)
-- **Swap使用**: 1.0GB / 2.0GB (50%)
-- **バッファ/キャッシュ**: 4.8GB
+**全てのAWSリソースは `ap-southeast-2` (Sydney) に統一**
 
-#### ディスク使用状況
-- **総容量**: 29GB
-- **使用中**: 26GB (91%)
-- **空き容量**: 2.8GB (9%)
-- **⚠️ 警告**: ディスク使用率が高い（90%超）
-- **推奨**: ストレージ拡張を検討（30GB → 50GB、月額+$1.60）
+| サービス | リージョン | 備考 |
+|---------|-----------|------|
+| EC2 | ap-southeast-2 | サーバー本体 |
+| ECR | ap-southeast-2 | Dockerイメージレジストリ |
+| Lambda | ap-southeast-2 | 処理関数 |
+| S3 | ap-southeast-2 | 音声ファイル保管 |
+| EventBridge | ap-southeast-2 | スケジューラー |
+| SQS | ap-southeast-2 | メッセージキュー |
 
-#### リソース管理の考慮事項
-
-**Kushinada APIへの移行によるリソース影響 (2025-10-26):**
-
-| 項目 | v3 (SUPERB) | v2 (Kushinada) | 差分 |
-|------|-------------|----------------|------|
-| モデルサイズ | 約400MB | 約1.3GB | +900MB |
-| Dockerイメージ | 約3.4GB | 約4.5GB（予想） | +1.1GB |
-| 実行時メモリ | 1.5-2GB | 3-3.5GB | +1.5-2GB |
-| ピーク時メモリ | 約2.5GB | 約4GB | +1.5GB |
-
-**⚠️ 重要な注意点:**
-1. **メモリは現状余裕あり**: 利用可能メモリ5.2GBに対し、Kushinadaは3-3.5GB使用予定
-2. **ディスク容量に注意**: 空き6.6GBに対し、新イメージで約1.1GB増加
-3. **同時実行数の制限**: メモリ制約により、ワーカー数は1に制限推奨
-4. **将来の対策**:
-   - 不要なDockerイメージの定期削除（`docker system prune`）
-   - 古いログファイルのクリーンアップ
-   - 必要に応じてストレージ拡張（30GB → 50GB）を検討
-
-### AWSリージョン構成 （更新: 2025-10-26）
-
-**全てのAWSリソースは `ap-southeast-2` (Sydney) に統一されています。**
-
-| サービス | リージョン | リージョン名 | 備考 |
-|---------|-----------|------------|------|
-| **EC2** | `ap-southeast-2` | Sydney | サーバー本体 |
-| **ECR** | `ap-southeast-2` | Sydney | Dockerイメージレジストリ（13リポジトリ） |
-| **Lambda** | `ap-southeast-2` | Sydney | audio-worker, janitor-trigger等 |
-| **S3 (watchme-vault)** | `ap-southeast-2` | Sydney | 音声ファイル保管 |
-| **EventBridge** | `ap-southeast-2` | Sydney | スケジューラー |
-
-#### 重要な注意点
-
-1. **全リソースをap-southeast-2に統一**
-   - 全てのAWSサービスは同じリージョン内に配置されています
-   - リージョン間のデータ転送料金は発生しません
-   - 混乱を避けるため、全ての`.env`ファイルで`AWS_REGION=ap-southeast-2`を使用
-
-2. **設定の統一**
-   - EC2上で動作するAPIは `AWS_REGION=ap-southeast-2` を環境変数で設定
-   - Lambda関数も `region_name='ap-southeast-2'` を明示的に指定
-   - **重要**: 過去に`us-east-1`が使われていた記述は全て誤りです
-
-3. **リージョン移行計画**
-   - 将来的に東京リージョン (`ap-northeast-1`) への移行を検討中
-   - 詳細は [REGION_MIGRATION_GUIDE.md](./REGION_MIGRATION_GUIDE.md) を参照
+---
 
 ## 🌐 ネットワーク設計
 
 ### watchme-network
+
 - **サブネット**: 172.27.0.0/16
 - **ゲートウェイ**: 172.27.0.1
-- **管理者**: watchme-infrastructure service
+- **管理サービス**: watchme-infrastructure (systemd)
 - **設定ファイル**: docker-compose.infra.yml
 
-### 接続コンテナ（IP割り当て）
+### 接続コンテナ（稼働中のみ）
+
 ```
-172.27.0.4  : watchme-api-manager-prod
-172.27.0.5  : watchme-scheduler-prod
-172.27.0.6  : emotion-analysis-aggregator
 172.27.0.7  : watchme-vault-api
-172.27.0.8  : vibe-analysis-aggregator
-172.27.0.9  : vibe-analysis-scorer
-172.27.0.10 : watchme-web-prod
-172.27.0.11 : vibe-analysis-transcriber
-172.27.0.12 : behavior-analysis-sed-aggregator
+172.27.0.11 : vibe-transcriber
 172.27.0.14 : watchme-admin
 172.27.0.15 : watchme-avatar-uploader
-172.27.0.17 : behavior-analysis-feature-extractor  (v3 PaSST)
-172.27.0.18 : emotion-analysis-feature-extractor-v3
+172.27.0.17 : behavior-features
+172.27.0.18 : emotion-features
 172.27.0.30 : janitor-api
+172.27.X.X  : aggregator-api
+172.27.X.X  : profiler-api
 ```
+
+---
 
 ## 📡 サービス一覧
 
 ### クライアントアプリケーション
 
-| サービス | プラットフォーム | 用途 | 録音機能 | 技術スタック | 状態 |
-|---------|--------------|------|---------|------------|------|
-| **WatchMe App (iOS)** | iOS | ダッシュボード閲覧 + スポット録音分析 | ✅ 手動録音 | Swift | ✅ 本番稼働中 |
-| **Observer** | ウェアラブル/据え置き | 定期自動録音デバイス | ✅ 30分ごとに1分間自動録音 | ESP32 (M5 CORE2) / Arduino | 🧪 プロトタイプ運用中 |
-| **WatchMe Web** | Web | ダッシュボード閲覧専用 | ❌ なし | React + Vite | ✅ 本番稼働中 |
-| **製品サイト** | Web | マーケティング・製品紹介 | - | HTML/CSS/JS (Vercel) | ✅ 公開中 |
+| サービス | プラットフォーム | 用途 | 技術スタック |
+|---------|--------------|------|------------|
+| iOS App | iOS | 録音・ダッシュボード閲覧 | Swift |
+| Observer Device | ESP32/M5 Core2 | 30分ごと自動録音 | Arduino |
+| Web Dashboard | Web | ダッシュボード閲覧 | React + Vite |
 
-### サーバーサイドサービス
+### EC2 APIサービス
 
-| サービス | エンドポイント | ポート | EC2ディレクトリ | systemd | ECRリポジトリ/ローカル | デプロイ方式 | 備考 |
-|---------|--------------|--------|---------------|---------|------------------------|------------|------|
-| **Vault** | `https://api.hey-watch.me/` | 8000 | /home/ubuntu/watchme-vault-api | watchme-vault-api | watchme-api-vault | ECR + CI/CD | ✅ 2025-10-31 CI/CD導入完了 |
-| **Admin** | `https://admin.hey-watch.me/` | 9000 | /home/ubuntu/admin | watchme-admin | watchme-admin | ECR | ✅ 稼働中 |
-| **API Manager** | `https://api.hey-watch.me/manager/` | 9001 | /home/ubuntu/watchme-api-manager | watchme-api-manager | watchme-api-manager | ECR | ✅ 2025-09-04移行済み |
-| **Scheduler** | `https://api.hey-watch.me/scheduler/` | 8015 | /home/ubuntu/watchme-scheduler | watchme-api-manager | watchme-api-manager-scheduler | ECR | ⚠️ 停止中（Lambdaに移行済み） |
-| **Janitor** | `/janitor/` | 8030 | /home/ubuntu/janitor-api | janitor-api | watchme-api-janitor | ECR | ✅ EventBridge + Lambda (`watchme-janitor-trigger`) 6時間ごと |
-| **Demo Generator** | `/demo/` | 8020 | /home/ubuntu/demo-generator-api | demo-generator-api | watchme-api-demo-generator | ECR | ✅ EventBridge + Lambda (`demo-data-generator-trigger`) 30分ごと |
-| **Audio Enhancer** | (未公開) | 8016 | /home/ubuntu/audio-enhancer-api | audio-enhancer-api | watchme-api-audio-enhancer | ローカル | 🚧 現在未使用（音声品質向上） |
-| **Avatar Uploader** | (内部) | 8014 | /home/ubuntu/watchme-avatar-uploader | watchme-avatar-uploader | watchme-api-avatar-uploader | ECR | ✅ systemd経由 |
-| **Vibe Transcriber** | `/vibe-analysis/transcriber/` | 8013 | /home/ubuntu/vibe-analysis-transcriber | vibe-analysis-transcriber | watchme-vibe-analysis-transcriber | ECR | ✅ 2025-10-31 Groq Whisper v3移行 |
-| **Vibe Aggregator** | `/vibe-analysis/aggregator/` | 8009 | /home/ubuntu/vibe-analysis-aggregator | vibe-analysis-aggregator | watchme-vibe-analysis-aggregator | ECR + CI/CD | ✅ 2025-11-09完全統一 |
-| **Vibe Scorer** | `/vibe-analysis/scorer/` | 8002 | /home/ubuntu/vibe-analysis-scorer | vibe-analysis-scorer | watchme-vibe-analysis-scorer | ECR | ✅ 2025-10-30完全統一 |
-| **Behavior Features** | `/behavior-analysis/features/` | 8017 | /home/ubuntu/behavior-analysis-feature-extractor | behavior-analysis-feature-extractor | watchme-behavior-analysis-feature-extractor | ECR | ✅ 2025-10-28 v3 PaSST移行 |
-| **Behavior Aggregator** | `/behavior-aggregator/` | 8010 | /home/ubuntu/api-sed-aggregator | api-sed-aggregator | watchme-behavior-analysis-aggregator | ECR | ✅ 2025-11-10命名統一 |
-| **Emotion Features** | `/emotion-analysis/features/` | 8018 | /home/ubuntu/emotion-analysis-feature-extractor-v3 | emotion-analysis-feature-extractor-v3 | watchme-emotion-analysis-feature-extractor-v3 | ECR | ✅ 2025-10-26 Kushinada移行 |
-| **Emotion Aggregator** | `/emotion-analysis/aggregation/` | 8012 | /home/ubuntu/opensmile-aggregator | emotion-analysis-aggregator | watchme-emotion-analysis-aggregator | ECR | ✅ 2025-11-10命名統一 |
+| カテゴリ | サービス | ポート | エンドポイント | ECR | 役割 |
+|---------|---------|--------|--------------|-----|------|
+| **ゲートウェイ** | Vault API | 8000 | `/vault/` | watchme-api-vault | S3音声ファイル配信 |
+| **音声処理** | Behavior Features | 8017 | `/behavior-analysis/features/` | watchme-behavior-analysis-feature-extractor | 527種類の音響検出 |
+| | Emotion Features | 8018 | `/emotion-analysis/features/` | watchme-emotion-analysis-feature-extractor-v3 | 8感情認識 |
+| | Vibe Transcriber | 8013 | `/vibe-analysis/transcription/` | watchme-vibe-analysis-transcriber | Groq Whisper v3文字起こし |
+| **集計・分析** | **Aggregator API** | **8011** | **`/aggregator/`** | **watchme-aggregator** | **Spot/Daily集計** |
+| | **Profiler API** | **8051** | **`/profiler/`** | **watchme-profiler** | **Spot/Daily LLM分析** |
+| **管理** | Admin | 9000 | `/admin/` | watchme-admin | 管理UI |
+| | API Manager | 9001 | `/manager/` | watchme-api-manager | API管理UI |
+| | Avatar Uploader | 8014 | (内部) | watchme-api-avatar-uploader | アバター画像 |
+| | Janitor | 8030 | `/janitor/` | watchme-api-janitor | 音声データ削除 |
 
-## 🎙️ 音声処理API詳細
+### AWS Lambda関数
 
-### Emotion Features API（感情認識）
-
-**2025-10-26更新: SUPERB → Kushinada移行完了**
-
-| 項目 | v3 (SUPERB) | v2 (Kushinada - 現行) |
-|------|-------------|---------------------|
-| **モデル** | wav2vec2-base-superb-er | kushinada-hubert-large-jtes-er |
-| **開発元** | Meta AI / SUPERB | 産総研（AIST） |
-| **学習データ** | 英語音声（IEMOCAP等） | 日本語音声（JTES） |
-| **感情カテゴリ** | 8感情 | 4感情 |
-| **パラメータ数** | 95M | 316M |
-| **モデルサイズ** | 400MB | 1.3GB |
-| **実行時メモリ** | 1.5-2GB | 3-3.5GB |
-| **処理時間（60秒音声）** | 30-45秒 | 40-60秒 |
-| **anger検出精度** | 低い（誤認識多い） | **高い（84.77%）** |
-
-#### 感情カテゴリ詳細
-
-**Kushinada (v2) - 4感情:**
-- `neutral` - 中立
-- `joy` - 喜び
-- `anger` - 怒り（**高精度**）
-- `sadness` - 悲しみ
-
-**処理方式:**
-- 10秒セグメントで分析（時系列追跡）
-- 各セグメントの感情確率を返却
-- OpenSMILE互換データ構造
-
-#### リソース要件
-
-**メモリ:**
-- アイドル時: 約500MB
-- 推論時: 3-3.5GB（ピーク時）
-- 推奨: workers=1（メモリ制約）
-
-**ストレージ:**
-- Dockerイメージ: 約4.5GB
-- モデルキャッシュ: 約1.3GB
-- 合計: 約5.8GB
-
-#### 移行理由（2025-10-26）
-
-1. **日本語音声に特化**: JTESデータセットで学習
-2. **怒り検出の精度向上**: 84.77% vs SUPERBの誤認識問題
-3. **時系列分析**: 10秒セグメントで感情推移を追跡
-4. **実証済み**: ローカルテストで高精度を確認
-
-## 🚨 トラブルシューティング
-
-### APIエンドポイントの混同に注意
-
-WatchMeでは3種類のエンドポイントがあります：
-
-#### 1. 内部通信用（watchme-network内）
-- **形式**: `http://コンテナ名:ポート/endpoint`
-- **例**: `http://vibe-analysis-transcriber:8013/fetch-and-transcribe`
-- **用途**: watchme-network内でのコンテナ間通信
-- **使用者**: API Manager（スケジューラー）など
-
-#### 2. 外部公開用（Nginx経由）
-- **形式**: `https://api.hey-watch.me/[階層化パス]/`
-- **例**: `https://api.hey-watch.me/vibe-analysis/transcriber/`
-- **用途**: Lambda関数、外部からのアクセス
-- **特徴**: HTTPSで安全、Nginxでルーティング
-
-#### 3. 管理用UI
-- **形式**: `https://api.hey-watch.me/manager/`
-- **用途**: API Manager UI、Admin画面など
-- **ポート**: 9000番台
-
-**⚠️ 注意**: 旧エンドポイント（階層化前）は2025-10-23に削除済み
-
-> その他のトラブルシューティングは [OPERATIONS_GUIDE.md](./OPERATIONS_GUIDE.md#3-トラブルシューティング) を参照
-
-## 📊 監視・メンテナンス
-
-> **運用手順**: 日常監視コマンド、緊急時対応、全体再起動手順などの詳細は [OPERATIONS_GUIDE.md - 監視・メンテナンス](./OPERATIONS_GUIDE.md#5-監視メンテナンス) を参照
-
-## 🔧 設定変更
-
-> **運用手順**: systemd設定変更、Nginx設定変更、デプロイ手順などの詳細は [OPERATIONS_GUIDE.md - サーバー構成の変更手順](./OPERATIONS_GUIDE.md#2-サーバー構成の変更手順) を参照
-
-> **CI/CDプロセス**: GitHub ActionsによるCI/CDプロセスの詳細は [CI/CD標準仕様書](./CICD_STANDARD_SPECIFICATION.md) を参照
-
-### Nginxタイムアウト設定（技術仕様）
-
-#### 概要
-
-Nginxがリバースプロキシとして各APIにリクエストを転送する際の**待機時間の上限**を管理しています。
-この設定が適切でないと、処理は成功しているのに504エラーが返される問題が発生します。
-
-#### 現在の設定値
-
-| API | パス | タイムアウト | 平均処理時間 | 用途 |
-|-----|------|------------|-------------|------|
-| **Behavior Features** | /behavior-analysis/features/ | **180秒** | 60-90秒 | 音響イベント検出（大規模モデル） |
-| **Emotion Features** | /emotion-analysis/features/ | **180秒** | 30-60秒 | 感情認識処理 |
-| **Vibe Transcriber** | /vibe-analysis/transcriber/ | **180秒** | 15-30秒 | 音声文字起こし |
-| **Vibe Aggregator** | /vibe-analysis/aggregator/ | 60秒（デフォルト） | 5-10秒 | プロンプト生成 |
-| **Vibe Scorer** | /vibe-analysis/scorer/ | 60秒（デフォルト） | 10-15秒 | ChatGPT分析 |
-| **その他のAPI** | - | 60秒（デフォルト） | < 10秒 | 軽量処理 |
-
-#### タイムアウトの種類と役割
-
-```nginx
-location /behavior-analysis/features/ {
-    proxy_pass http://localhost:8017/;
-
-    # 3種類のタイムアウト設定
-    proxy_connect_timeout 180s;  # 接続確立までの待機時間
-    proxy_send_timeout 180s;     # リクエスト送信の待機時間
-    proxy_read_timeout 180s;     # レスポンス受信の待機時間（最も重要）
-}
-```
-
-#### なぜタイムアウト設定が必要か
-
-1. **リソース保護**: 無限待機によるNginxワーカープロセスの枯渇を防ぐ
-2. **障害検知**: バックエンドの異常を適切なタイミングで検出
-3. **一貫性の確保**: Lambda(180秒) → Nginx(180秒) → API の連鎖を保つ
-
-#### トラブルシューティング
-
-**504 Gateway Timeout エラーが発生する場合**:
-- 症状と解決方法は [OPERATIONS_GUIDE.md - Nginxタイムアウト設定の変更](./OPERATIONS_GUIDE.md#-nginxタイムアウト設定の変更) を参照
+| 関数名 | トリガー | タイムアウト | 役割 |
+|--------|---------|------------|------|
+| audio-processor | S3 Upload | 10秒 | SQS送信 |
+| audio-worker | SQS | 15分 | Feature Extractors並列実行 |
+| dashboard-summary-worker | SQS | 15分 | Daily Aggregator実行 |
+| dashboard-analysis-worker | SQS | 15分 | Daily Profiler実行 |
+| janitor-trigger | EventBridge (6時間ごと) | 15分 | Janitor API実行 |
+| demo-generator-trigger | EventBridge (30分ごと) | 15分 | デモデータ生成 |
 
 ---
 
-## 🎯 ベストプラクティス
+## 🎙️ 音声処理API
 
-運用上のベストプラクティスは [OPERATIONS_GUIDE.md - ベストプラクティス](./OPERATIONS_GUIDE.md#6-ベストプラクティス) を参照してください。
+### 1. Behavior Features API
 
-主な内容:
-- 本番用設定の徹底（docker-compose.prod.yml使用）
-- systemd管理の徹底（手動起動を避ける）
-- ネットワーク統一（watchme-network）
-- ヘルスチェック実装
-- 設定の一元管理（Git経由）
+**役割**: 527種類の音響イベント検出
+
+**技術スタック**:
+- モデル: PaSST (Patchout faSt Spectrogram Transformer)
+- 処理時間: 10-20秒（60秒音声）
+
+**検出イベント例**:
+- 会話、笑い、泣き声
+- 環境音（ドア、水、車）
+- 動物の鳴き声
+- 音楽、楽器
+
+**エンドポイント**:
+- `POST /behavior-analysis/features/fetch-and-process-paths`
+
+### 2. Emotion Features API
+
+**役割**: 8感情認識
+
+**技術スタック**:
+- モデル: Kushinada (HuBERT-large-JTES-ER)
+- 学習データ: 日本語音声（JTES）
+- 処理時間: 10-20秒（60秒音声）
+
+**検出感情**:
+- neutral（中立）
+- joy（喜び）
+- anger（怒り）
+- sadness（悲しみ）
+- その他4感情
+
+**エンドポイント**:
+- `POST /emotion-analysis/features/process/emotion-features`
+
+### 3. Vibe Transcriber API
+
+**役割**: 音声文字起こし
+
+**技術スタック**:
+- プロバイダー: Groq
+- モデル: Whisper v3
+- 処理時間: 26-28秒（60秒音声）
+
+**エンドポイント**:
+- `POST /vibe-analysis/transcription/fetch-and-transcribe`
+
+---
+
+## 📊 集計・分析API
+
+### 1. Aggregator API ✨
+
+**役割**: Spot/Daily集計・プロンプト生成
+
+**エンドポイント**:
+- `POST /aggregator/spot` - Spot集計（録音ごと）
+- `POST /aggregator/daily` - Daily集計（1日の累積）
+
+**処理内容**:
+- Feature Extractorsの結果を統合
+- LLM分析用プロンプト生成
+- データベース保存
+
+**保存先**:
+- `spot_aggregators` テーブル
+- `daily_aggregators` テーブル
+
+**処理時間**:
+- Spot: 5-10秒
+- Daily: 10-20秒
+
+### 2. Profiler API ✨
+
+**役割**: Spot/Daily LLM分析
+
+**エンドポイント**:
+- `POST /profiler/spot-profiler` - Spot分析（録音ごと）
+- `POST /profiler/daily-profiler` - Daily分析（1日の累積）
+
+**LLM設定**:
+- プロバイダー: Groq
+- モデル: openai/gpt-oss-120b (reasoning model)
+- Reasoning Effort: medium
+
+**処理内容**:
+- Aggregatorからプロンプト取得
+- LLM分析実行
+- 結果を日本語で生成
+- データベース保存
+
+**保存先**:
+- `spot_results` テーブル
+- `daily_results` テーブル
+
+**保存データ**:
+- `vibe_score`: 心理スコア (-100〜+100)
+- `summary`: サマリー（日本語）
+- `behavior`: 検出された行動（カンマ区切り）
+- `profile_result`: 完全な分析結果（JSONB）
+
+**処理時間**:
+- Spot: 10-15秒
+- Daily: 10-30秒
+
+---
+
+## 🗄️ データベーステーブル
+
+### Spot分析
+
+| テーブル | 役割 | Primary Key |
+|---------|------|------------|
+| `audio_files` | 録音メタデータ | (device_id, recorded_at) |
+| `spot_features` | 特徴量（音響・感情・文字起こし） | (device_id, recorded_at) |
+| `spot_aggregators` | Spot分析用プロンプト | (device_id, recorded_at) |
+| `spot_results` | Spot分析結果（LLM出力） | (device_id, recorded_at) |
+
+### Daily分析
+
+| テーブル | 役割 | Primary Key |
+|---------|------|------------|
+| `daily_aggregators` | Daily分析用プロンプト | (device_id, local_date) |
+| `daily_results` | Daily分析結果（LLM出力） | (device_id, local_date) |
+
+### 主要カラム
+
+**共通**:
+- `device_id`: デバイスID
+- `local_date`: ローカル日付
+- `created_at`, `updated_at`: タイムスタンプ
+
+**spot_results**:
+- `recorded_at`: 録音時刻（UTC）
+- `vibe_score`, `summary`, `behavior`, `profile_result`
+
+**daily_results**:
+- `vibe_score`: 1日の平均スコア
+- `summary`: 1日の総合サマリー
+- `behavior`: 主要な行動パターン
+- `profile_result`: 完全な分析結果（JSONB）
+- `vibe_scores`: 48個の30分ブロックスコア（JSONB配列）
+- `burst_events`: 感情変化イベント（JSONB配列）
+- `processed_count`: 処理済みspot数
+- `last_time_block`: 最終処理時刻
+
+---
+
+## 🌐 エンドポイント一覧
+
+### 外部公開（Nginx経由 - HTTPS）
+
+**ベースURL**: `https://api.hey-watch.me`
+
+| パス | サービス | 用途 |
+|------|---------|------|
+| `/vault/` | Vault API | S3音声ファイル配信 |
+| `/behavior-analysis/features/` | Behavior Features | 音響イベント検出 |
+| `/emotion-analysis/features/` | Emotion Features | 感情認識 |
+| `/vibe-analysis/transcription/` | Vibe Transcriber | 文字起こし |
+| `/aggregator/` | Aggregator API | Spot/Daily集計 |
+| `/profiler/` | Profiler API | Spot/Daily LLM分析 |
+| `/janitor/` | Janitor | 音声データ削除 |
+| `/admin/` | Admin | 管理UI |
+| `/manager/` | API Manager | API管理UI |
+
+### 内部通信（watchme-network内）
+
+**形式**: `http://コンテナ名:ポート/`
+
+例:
+- `http://behavior-features:8017/`
+- `http://emotion-features:8018/`
+- `http://vibe-transcriber:8013/`
+
+---
+
+## ⚙️ Nginx設定
+
+### タイムアウト設定
+
+| API | パス | タイムアウト | 理由 |
+|-----|------|------------|------|
+| Behavior Features | `/behavior-analysis/features/` | 180秒 | 大規模モデル処理 |
+| Emotion Features | `/emotion-analysis/features/` | 180秒 | 感情認識処理 |
+| Vibe Transcriber | `/vibe-analysis/transcription/` | 180秒 | Groq API処理 |
+| Aggregator | `/aggregator/` | 60秒 | 軽量集計 |
+| Profiler | `/profiler/` | 180秒 | LLM分析 |
+| その他 | - | 60秒 | デフォルト |
+
+### 設定例
+
+```nginx
+location /profiler/ {
+    proxy_pass http://localhost:8051/;
+    proxy_connect_timeout 180s;
+    proxy_send_timeout 180s;
+    proxy_read_timeout 180s;
+}
+```
+
+---
+
+## 🔧 systemd サービス
+
+全サービスは systemd で管理。
+
+**確認コマンド**:
+```bash
+sudo systemctl status <service-name>
+```
+
+**主要サービス**:
+- `watchme-vault-api.service`
+- `behavior-features.service`
+- `emotion-features.service`
+- `vibe-transcriber.service`
+- `aggregator-api.service`
+- `profiler-api.service`
+- `janitor-api.service`
+
+**起動・停止**:
+```bash
+sudo systemctl restart <service-name>
+sudo systemctl stop <service-name>
+sudo systemctl start <service-name>
+```
+
+---
+
+## 📈 パフォーマンス指標
+
+### 処理時間（60秒音声）
+
+| 処理 | 平均時間 |
+|------|---------|
+| S3イベント → SQS | 1-2秒 |
+| Behavior Features | 10-20秒 |
+| Emotion Features | 10-20秒 |
+| Vibe Transcriber | 26-28秒 |
+| Aggregator API (Spot) | 5-10秒 |
+| Profiler API (Spot) | 10-15秒 |
+| Aggregator API (Daily) | 10-20秒 |
+| Profiler API (Daily) | 10-30秒 |
+| **Spot分析合計** | **1-3分** |
+| **Daily分析合計** | **30-40秒** |
+
+### リソース使用量
+
+**メモリ**:
+- Behavior Features: 2-3GB
+- Emotion Features: 3-3.5GB
+- Vibe Transcriber: 1-2GB
+- Aggregator/Profiler: 500MB-1GB
+
+**ディスク**:
+- 総容量: 30GB
+- 使用中: 約26GB
+- 空き: 約4GB
+
+---
+
+## 🔐 環境変数
+
+### 必須環境変数
+
+**AWS設定**:
+```bash
+AWS_REGION=ap-southeast-2
+AWS_ACCESS_KEY_ID=xxx
+AWS_SECRET_ACCESS_KEY=xxx
+```
+
+**Supabase設定**:
+```bash
+SUPABASE_URL=https://qvtlwotzuzbavrzqhyvt.supabase.co
+SUPABASE_KEY=xxx
+```
+
+**LLM設定（Profiler API）**:
+```bash
+GROQ_API_KEY=gsk-xxx
+```
+
+**音声認識設定（Vibe Transcriber）**:
+```bash
+GROQ_API_KEY=gsk-xxx
+```
+
+---
+
+## 🚨 トラブルシューティング
+
+### エンドポイントの種類
+
+**1. 内部通信** (watchme-network内):
+- `http://コンテナ名:ポート/`
+- 例: `http://profiler-api:8051/`
+
+**2. 外部公開** (Nginx経由):
+- `https://api.hey-watch.me/パス/`
+- 例: `https://api.hey-watch.me/profiler/`
+
+**3. ローカルテスト** (EC2内):
+- `http://localhost:ポート/`
+- 例: `http://localhost:8051/`
+
+### よくあるエラー
+
+**504 Gateway Timeout**:
+- 原因: Nginxタイムアウト設定不足
+- 解決: タイムアウトを180秒に延長
+
+**Connection refused**:
+- 原因: コンテナが起動していない
+- 解決: `sudo systemctl restart <service-name>`
+
+**Out of Memory**:
+- 原因: 同時実行数が多すぎる
+- 解決: Lambda同時実行数を制限
+
+---
+
+## 📚 関連ドキュメント
+
+- **処理フロー**: [PROCESSING_ARCHITECTURE.md](./PROCESSING_ARCHITECTURE.md)
+- **運用手順**: [OPERATIONS_GUIDE.md](./OPERATIONS_GUIDE.md)
+- **CI/CD**: [CICD_STANDARD_SPECIFICATION.md](./CICD_STANDARD_SPECIFICATION.md)
+- **システム概要**: [README.md](./README.md)
+
+---
+
+## 🚀 完了機能 (2025-11-15)
+
+- ✅ Aggregator API統一（Spot/Daily）
+- ✅ Profiler API統一（Spot/Daily）
+- ✅ local_date対応
+- ✅ Groq Whisper v3移行
+- ✅ Kushinada感情認識
+- ✅ PaSST音響検出
+- ✅ Lambda自動処理パイプライン
