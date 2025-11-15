@@ -2,18 +2,23 @@
 
 ## 2025年11月15日
 
-### vibe-analysis-scorer 削除 - Profiler APIへ統合完了
+### 旧Vibe分析API削除 - Aggregator/Profiler APIへ統合完了
 
 #### 削除概要
-- **削除サービス**: vibe-analysis-scorer (ポート8002)
-- **理由**: Profiler API (ポート8051) へ統合完了
+- **削除サービス**:
+  - vibe-analysis-scorer (ポート8002) → Profiler API (8051) へ統合
+  - vibe-analysis-aggregator (ポート8009) → Aggregator API (8050) へ統合
 - **削除テーブル**: audio_aggregator, audio_features, audio_scorer
 
 #### 削除完了事項
-- EC2上のコンテナ停止・削除
-- systemdサービス削除
-- EC2上のディレクトリ削除 (`/home/ubuntu/vibe-analysis-scorer`)
-- GitHubリポジトリアーカイブ (`hey-watchme/api-vibe-analysis-scorer`)
+- EC2上のコンテナ停止・削除（scorer, aggregator）
+- systemdサービス削除（scorer, aggregator）
+- EC2上のディレクトリ削除
+  - `/home/ubuntu/vibe-analysis-scorer`
+  - `/home/ubuntu/vibe-analysis-aggregator`
+- GitHubリポジトリアーカイブ
+  - `hey-watchme/api-vibe-analysis-scorer`
+  - `hey-watchme/api-vibe-aggregator`
 - Supabaseテーブル削除 (audio_aggregator, audio_features, audio_scorer)
 
 ---

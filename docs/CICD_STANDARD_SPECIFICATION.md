@@ -911,6 +911,5 @@ grep -h "ECR_REPOSITORY\|image:" *.yml *.sh .github/workflows/*.yml | grep -o "w
 | aggregator | /home/ubuntu/aggregator | 8050 | /aggregator/ | ✅ 完全対応 |
 | api-sed-aggregator | /home/ubuntu/api-sed-aggregator | 8010 | /behavior-aggregator/ | ✅ 完全対応 |
 | emotion-analysis-feature-extractor-v3 | /home/ubuntu/emotion-analysis-feature-extractor-v3 | 8018 | /emotion-analysis/feature-extractor/ | ✅ 正常 |
-| api_gen_prompt_mood_chart | /home/ubuntu/watchme-api-vibe-aggregator | 8009 | /vibe-analysis/aggregator/ | ✅ 正常 |
 | api_ast | /home/ubuntu/api_ast | 8017 | /behavior-analysis/features/ | ⚠️ 要修正 |
 | opensmile-aggregator | /home/ubuntu/opensmile-aggregator | 8012 | /emotion-analysis/aggregator/ | ⚠️ 要確認 |
