@@ -1,6 +1,6 @@
 # WatchMe 処理アーキテクチャ
 
-最終更新: 2025-11-15
+最終更新: 2025-11-16
 
 ## 🎯 システム概要
 
@@ -224,9 +224,13 @@ graph TB
 ### 主要カラム
 
 **全テーブル共通**:
-- `device_id`: デバイスID
-- `local_date`: デバイスのタイムゾーンに基づいたローカル日付
+- `device_id`: デバイスID（**UUID型** - 2025-11-16変更）
+- `local_date`: デバイスのタイムゾーンに基づいたローカル日付（**NULL許容** - 一部レガシーデータ対応）
 - `created_at`, `updated_at`: タイムスタンプ
+
+**⚠️ データ型の重要な注意事項**:
+- `device_id`: PostgreSQLでは`uuid`型だが、API層では文字列として送受信可能（自動変換）
+- `local_date`, `recorded_at`: 一部古いデータで`NULL`が存在する可能性あり（iOSアプリ側でオプショナル処理必須）
 
 **spot_results**:
 - Primary Key: `(device_id, recorded_at)`
@@ -388,8 +392,16 @@ daily_results テーブル
 
 ---
 
-## 🚀 完了機能 (2025-11-15)
+## 🚀 完了機能
 
+### 2025-11-16
+- ✅ **device_id UUID型への統一** - 全テーブルでtext型からuuid型に変更
+- ✅ **iOSアプリのクラッシュ修正**:
+  - DashboardSummary: profile_result 2階層ネスト対応
+  - DashboardTimeBlock: date/recordedAt オプショナル化
+  - InteractiveTimelineView: 空配列での範囲エラー修正
+
+### 2025-11-15
 - ✅ Spot分析パイプライン
 - ✅ Daily分析パイプライン
 - ✅ local_date対応（タイムゾーン管理）
