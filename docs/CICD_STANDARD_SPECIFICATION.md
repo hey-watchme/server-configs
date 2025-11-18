@@ -508,6 +508,77 @@ docker-compose -f docker-compose.prod.yml down || true
 - ログ出力で進捗を明確化
 - エラー耐性（一部失敗しても継続）
 
+#### ⚠️ デプロイ失敗の典型的パターンと対策
+
+**問題1: `docker system prune -a -f` の誤用**
+
+❌ **絶対にやってはいけないこと:**
+```bash
+# GitHub Actionsワークフロー内で
+docker system prune -a -f  # すべてのイメージを削除
+docker-compose pull         # 直後にpull
+```
+
+**何が起こるか:**
+1. `prune -a -f` が全イメージ（ECRからpullした最新イメージも）を削除
+2. `docker-compose pull` がキャッシュを誤認識してスキップ
+3. **結果: 古いコンテナが稼働し続ける**
+
+✅ **正しい実装:**
+```bash
+# GitHub Actionsワークフロー内で
+docker-compose down || true  # コンテナのみ削除
+
+# ❌ docker system prune は使わない
+
+# run-prod.sh内で強制pull
+docker pull --platform linux/arm64 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/{repository}:latest
+```
+
+**問題2: `docker-compose pull` の不確実性**
+
+❌ **問題のある実装:**
+```bash
+docker-compose pull  # 既存イメージがあるとスキップする可能性
+```
+
+✅ **確実な実装:**
+```bash
+# 直接docker pullで強制的に最新を取得
+docker pull --platform linux/arm64 {ECR-URI}:latest
+
+# プルしたイメージの確認
+docker images | grep {repository-name} | head -1
+```
+
+**問題3: デプロイ検証の欠如**
+
+❌ **問題:**
+- デプロイ成功と報告されるが、実際には古いコードが稼働
+- 手動確認するまで気づかない
+
+✅ **解決策: デプロイ検証スクリプトの導入**
+```bash
+#!/bin/bash
+# verify-deployment.sh
+
+# Check 1: Container is running
+docker ps | grep -q {container-name} || exit 1
+
+# Check 2: Health endpoint
+curl -f http://localhost:{port}/health || exit 1
+
+# Check 3: Code verification (model name, key features)
+docker exec {container-name} cat main.py | grep -q '{expected-pattern}' || exit 1
+
+# Check 4: Verify ECR image
+EXPECTED_IMAGE="{ECR-URI}:latest"
+ACTUAL_IMAGE=$(docker inspect {container-name} --format='{{.Config.Image}}')
+[ "$ACTUAL_IMAGE" == "$EXPECTED_IMAGE" ] || exit 1
+
+echo "✅ Deployment verified successfully"
+```
+
 ### Dockerfile仕様
 
 #### ⚠️ 必須チェック：アプリケーションファイルのコピー漏れ防止
