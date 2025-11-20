@@ -28,6 +28,7 @@ WatchMeは音声録音から心理・感情分析までを自動実行するプ�
 - audio-worker: 音声分析の並列実行
 - dashboard-summary-worker: 日次集計実行
 - dashboard-analysis-worker: 日次LLM分析実行
+- weekly-profile-worker: 週次分析実行（毎日00:00）
 
 **EC2 API (Sydney - t4g.large):**
 - Vault API (ポート8000): S3音声ファイル配信
@@ -82,6 +83,23 @@ Profiler API (/profiler/daily-profiler)
   → daily_results テーブル (1日分のLLM分析結果)
 ```
 
+### Weekly分析（1週間の累積）✅ 本番稼働中
+
+```
+EventBridge (毎日00:00 UTC+9) → Lambda: weekly-profile-worker
+  ↓
+Aggregator API (/aggregator/weekly)
+  → weekly_aggregators テーブル (1週間分のプロンプト生成)
+  ↓
+Profiler API (/profiler/weekly-profiler)
+  → weekly_results テーブル (週次の印象的なイベント5件を抽出)
+```
+
+**処理タイミング:**
+- 毎日 00:00（デバイスのローカル時間）に実行
+- 前日を含む週（月曜〜日曜）のデータを処理
+- 週の途中でも毎日更新されるため、常に最新の週次データを閲覧可能
+
 ---
 
 ## 📊 主要サービス一覧
@@ -119,6 +137,7 @@ Profiler API (/profiler/daily-profiler)
 | audio-worker | SQS | Feature Extractors並列実行 |
 | dashboard-summary-worker | SQS | Daily Aggregator実行 |
 | dashboard-analysis-worker | SQS | Daily Profiler実行 |
+| weekly-profile-worker | EventBridge (毎日00:00 UTC+9) | Weekly Aggregator + Profiler実行 |
 | janitor-trigger | EventBridge (6時間ごと) | Janitor API実行 |
 | demo-generator-trigger | EventBridge (30分ごと) | デモデータ生成 |
 
@@ -138,6 +157,11 @@ Profiler API (/profiler/daily-profiler)
 - **daily_aggregators**: Daily分析用プロンプト（1日分のspot_resultsを集約）
 - **daily_results**: Daily分析結果（1日分のLLM出力）
 
+### Weekly分析（1週間の累積）✅
+
+- **weekly_aggregators**: Weekly分析用プロンプト（1週間分のspot_featuresを集約）
+- **weekly_results**: Weekly分析結果（印象的なイベント5件を抽出）
+
 ### カラム構成
 
 全テーブル共通:
@@ -150,10 +174,22 @@ daily_resultsの主要カラム:
 - `summary`: 1日の総合分析（日本語）
 - `behavior`: 主要な行動（カンマ区切り）
 - `profile_result`: 完全なLLM分析結果（JSONB）
-- `vibe_scores`: 48個の30分ブロックごとのスコア（JSONB配列）
+- `vibe_scores`: 録音時刻ベースのスコア配列（JSONB配列）
 - `burst_events`: 感情変化イベント（JSONB配列）
 - `processed_count`: 処理済みspot数
-- `last_time_block`: 最終処理時刻ブロック
+- `llm_model`: 使用したLLMモデル
+
+weekly_resultsの主要カラム:
+- `summary`: 週の総合サマリー（日本語、2-3文）
+- `memorable_events`: 印象的なイベント5件（JSONB配列）
+  - rank: 順位（1-5）
+  - date: 日付（YYYY-MM-DD）
+  - time: 時刻（HH:MM）
+  - day_of_week: 曜日（日本語）
+  - event_summary: イベント要約（日本語）
+  - transcription_snippet: 発話内容の抜粋
+- `profile_result`: 完全なLLM分析結果（JSONB）
+- `processed_count`: 処理済み録音数
 - `llm_model`: 使用したLLMモデル
 
 ---
@@ -171,9 +207,11 @@ daily_resultsの主要カラム:
 - `/aggregator/` → Aggregator API
   - `/aggregator/spot` - Spot集計
   - `/aggregator/daily` - Daily集計
+  - `/aggregator/weekly` - Weekly集計
 - `/profiler/` → Profiler API
   - `/profiler/spot-profiler` - Spot分析
   - `/profiler/daily-profiler` - Daily分析
+  - `/profiler/weekly-profiler` - Weekly分析
 - `/janitor/` → Janitor API
 
 ### ヘルスチェック
@@ -247,6 +285,12 @@ git pull origin main
 ---
 
 ## 📅 完了機能
+
+### ✅ 2025-11-20
+
+- **Weekly分析パイプライン**: 1週間分の累積分析（毎日00:00自動実行）
+- **EventBridge自動トリガー**: 毎日00:00にweekly-profile-worker実行
+- **週次印象的イベント抽出**: LLMによる1週間の重要なイベント5件を自動選出
 
 ### ✅ 2025-11-15
 
