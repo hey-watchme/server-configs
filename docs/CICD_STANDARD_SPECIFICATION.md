@@ -984,3 +984,269 @@ grep -h "ECR_REPOSITORY\|image:" *.yml *.sh .github/workflows/*.yml | grep -o "w
 | emotion-analysis-feature-extractor-v3 | /home/ubuntu/emotion-analysis-feature-extractor-v3 | 8018 | /emotion-analysis/feature-extractor/ | ✅ 正常 |
 | api_ast | /home/ubuntu/api_ast | 8017 | /behavior-analysis/features/ | ⚠️ 要修正 |
 | opensmile-aggregator | /home/ubuntu/opensmile-aggregator | 8012 | /emotion-analysis/aggregator/ | ⚠️ 要確認 |
+
+---
+
+## 📋 現在の起動方法・管理方法の全体像（2025-11-21更新）
+
+### 🎯 概要
+
+WatchMeプロジェクトでは、**2つの異なる起動方式**が混在しています。
+これは歴史的経緯によるもので、現在**統一化作業を進めています**。
+
+**2つの起動方式:**
+1. **GitHub Actions方式**（新標準） - 完全自動CI/CD
+2. **systemd + 集中管理方式**（移行期） - systemdサービスが集中管理ファイルを参照
+
+### 🔄 起動方式の詳細
+
+#### 方式1: GitHub Actions方式（新標準・推奨）✨
+
+**特徴:**
+- `git push` だけで自動デプロイ
+- 各APIリポジトリが独立して管理
+- EC2上のディレクトリに設定ファイルを自動配置
+
+**デプロイフロー:**
+```
+git push → GitHub Actions起動 → ECRにイメージpush →
+EC2にSSH → ディレクトリ内に.env/docker-compose.prod.yml配置 →
+既存コンテナ削除 → 新規コンテナ起動 → ヘルスチェック
+```
+
+**EC2上の配置:**
+```
+/home/ubuntu/{api-name}/
+├── .env                      # GitHub Actionsが作成
+├── docker-compose.prod.yml   # GitHub Actionsがコピー
+└── run-prod.sh               # GitHub Actionsがコピー
+```
+
+**管理方法:**
+- コンテナは `docker-compose.prod.yml` の `restart: always` で自動再起動
+- systemdサービスは**使用しない**
+
+**適用サービス（8個）:**
+
+| サービス | コンテナ名 | ポート | GitHubリポジトリ | ECRリポジトリ | 稼働状況 |
+|---------|-----------|--------|----------------|--------------|---------|
+| Behavior Features | behavior-analysis-feature-extractor | 8017 | api-behavior-analysis-feature-extractor-v3 | watchme-behavior-analysis-feature-extractor | ✅ 正常（v3 PaSST稼働中） |
+| Emotion Features | emotion-analysis-feature-extractor | 8018 | api-emotion-analysis-feature-extractor-v3 | watchme-emotion-analysis-feature-extractor | ✅ 正常 |
+| Vibe Transcriber | vibe-analysis-transcriber | 8013 | api-vibe-analysis-transcriber | watchme-vibe-analysis-transcriber | ✅ 正常 |
+| Vault API | watchme-vault-api | 8000 | api-vault | watchme-api-vault | ✅ 正常 |
+| Aggregator API | aggregator-api | 8011 | api-aggregator | watchme-aggregator | ✅ 正常 |
+| Admin | watchme-admin | 9000 | admin | watchme-admin | ✅ 正常 |
+| Janitor | janitor-api | 8030 | api-janitor | watchme-api-janitor | ✅ 正常 |
+| Avatar Uploader | watchme-avatar-uploader | 8014 | api-avatar-uploader | watchme-api-avatar-uploader | ✅ 正常 |
+
+**確認コマンド:**
+```bash
+# コンテナが稼働しているか確認
+ssh ubuntu@3.24.16.82
+docker ps | grep {container-name}
+
+# ログ確認
+docker logs {container-name} --tail 100
+
+# 再起動（GitHub Actions再実行、またはEC2上で手動）
+cd /home/ubuntu/{api-name}
+./run-prod.sh
+```
+
+#### 方式2: systemd + 集中管理方式（移行期）🔄
+
+**特徴:**
+- systemdサービスが `/home/ubuntu/watchme-server-configs/production/docker-compose-files/` 内のファイルを参照
+- サーバー再起動時に自動起動（systemdが管理）
+- GitHub Actionsも併用（ハイブリッド）
+
+**デプロイフロー:**
+```
+git push → GitHub Actions起動 → ECRにイメージpush →
+EC2にSSH → .envファイル作成 → systemdサービス再起動
+```
+
+**EC2上の配置:**
+```
+/home/ubuntu/{api-name}/
+├── .env                      # GitHub Actionsが作成
+
+/home/ubuntu/watchme-server-configs/production/
+├── docker-compose-files/
+│   └── {api-name}-docker-compose.prod.yml  # systemdが参照
+└── systemd/
+    └── {api-name}.service                   # systemdサービス定義
+```
+
+**systemdサービスの動作:**
+```bash
+# サービスは以下を実行
+docker-compose -f /home/ubuntu/watchme-server-configs/production/docker-compose-files/{api-name}-docker-compose.prod.yml up
+```
+
+**適用サービス（4個）:**
+
+| サービス | コンテナ名 | ポート | GitHubリポジトリ | ECRリポジトリ | systemdサービス名 | 稼働状況 |
+|---------|-----------|--------|----------------|--------------|-----------------|---------|
+| **Profiler API** | profiler-api | 8051 | api-profiler | watchme-profiler | profiler-api.service | ✅ 正常 |
+| API Manager | watchme-api-manager-prod | 9001 | api-manager | watchme-api-manager | watchme-api-manager.service | ✅ 正常 |
+| Web Dashboard | watchme-web-prod | 3000 | web | watchme-web | watchme-web-app.service | ✅ 正常 |
+| Infrastructure | - | - | - | - | watchme-infrastructure.service | ✅ 正常（Dockerネットワーク管理） |
+
+**確認コマンド:**
+```bash
+# systemdサービス状態確認
+ssh ubuntu@3.24.16.82
+sudo systemctl status profiler-api.service
+
+# サービス再起動
+sudo systemctl restart profiler-api.service
+
+# ログ確認（systemd経由）
+sudo journalctl -u profiler-api.service -n 50
+
+# ログ確認（Docker）
+docker logs profiler-api --tail 100
+```
+
+### ⚠️ 重要：不整合の修正について
+
+**現在の状況（2025-11-21時点）:**
+
+以下のsystemdサービスは**設定ファイルの不整合により失敗**していましたが、**2025-11-21に無効化しました**。
+これらのサービスは実際には **GitHub Actions方式で稼働中** のため、問題ありません。
+
+**無効化したsystemdサービス（8個）:**
+- `behavior-analysis-feature-extractor-v2.service` - docker-composeファイルが存在しない
+- `emotion-analysis-aggregator.service` - docker-composeファイルが存在しない
+- `emotion-analysis-feature-extractor-v3.service` - docker-composeファイルが存在しない
+- `vibe-analysis-transcriber-v2.service` - docker-composeファイルが存在しない
+- `vibe-analysis-transcriber.service` - コンテナ起動失敗
+- `watchme-admin.service` - コンテナ起動失敗
+- `watchme-avatar-uploader.service` - コンテナ起動失敗
+- `watchme-vault-api.service` - コンテナ起動失敗
+
+**無効化の経緯:**
+1. これらのサービスは古いsystemd設定（移行期の設定ミス）
+2. 実際のコンテナはGitHub Actionsで正常稼働中
+3. systemdサービスは `auto-restart` 状態で失敗を繰り返していた
+4. 実害はないが、`systemctl list-units` で混乱を招くため無効化
+
+**無効化コマンド（実施済み）:**
+```bash
+sudo systemctl stop behavior-analysis-feature-extractor-v2 emotion-analysis-aggregator \
+  emotion-analysis-feature-extractor-v3 vibe-analysis-transcriber-v2 vibe-analysis-transcriber \
+  watchme-admin watchme-avatar-uploader watchme-vault-api
+
+sudo systemctl disable behavior-analysis-feature-extractor-v2 emotion-analysis-aggregator \
+  emotion-analysis-feature-extractor-v3 vibe-analysis-transcriber-v2 vibe-analysis-transcriber \
+  watchme-admin watchme-avatar-uploader watchme-vault-api
+```
+
+**影響:**
+- ✅ コンテナの稼働には**影響なし**（`restart: always`で自動再起動）
+- ✅ EC2再起動時もコンテナは自動起動される
+- ✅ systemdの状態がクリーンになった
+
+**今後の予定:**
+- Profiler API、API Manager、Web Dashboardも**GitHub Actions方式に統一**予定
+- 完全移行後、systemdサービスは `watchme-infrastructure.service` のみとなる予定
+
+### 📊 起動方式の比較
+
+| 項目 | GitHub Actions方式 | systemd + 集中管理方式 |
+|------|-------------------|---------------------|
+| **デプロイ方法** | `git push` のみ | `git push` + `systemctl restart` |
+| **設定ファイル管理** | APIリポジトリ内 | server-configsリポジトリ |
+| **再起動管理** | `restart: always` | systemd |
+| **EC2再起動時** | Dockerが自動再起動 | systemdが自動起動 |
+| **メリット** | 完全自動化・リポジトリ独立 | サーバー全体の一元管理 |
+| **デメリット** | 各リポジトリに設定重複 | 設定変更時にserver-configs更新が必要 |
+| **推奨度** | ✅ 新標準（推奨） | ⚠️ 移行期（段階的廃止予定） |
+
+### 🔍 現在稼働中の全コンテナ一覧（2025-11-21確認済み）
+
+```bash
+# 確認コマンド
+ssh ubuntu@3.24.16.82
+docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+```
+
+| コンテナ名 | 稼働時間 | 起動方式 | 管理方法 |
+|-----------|---------|---------|---------|
+| aggregator-api | 41時間 | GitHub Actions | docker-compose |
+| profiler-api | 44時間 | GitHub Actions + systemd | systemd |
+| emotion-analysis-feature-extractor | 2日 | GitHub Actions | docker-compose |
+| behavior-analysis-feature-extractor | 3日 | GitHub Actions | docker-compose |
+| vibe-analysis-transcriber | 3日 | GitHub Actions | docker-compose |
+| watchme-vault-api | 5日 | GitHub Actions | docker-compose |
+| watchme-admin | 4週間 | GitHub Actions | docker-compose |
+| janitor-api | 4週間 | GitHub Actions | docker-compose |
+| demo-generator-api | 6週間 | GitHub Actions | docker-compose |
+| watchme-avatar-uploader | 6週間 | GitHub Actions | docker-compose |
+| watchme-api-manager-prod | 8週間 | systemd | systemd |
+| watchme-web-prod | 2ヶ月 | systemd | systemd |
+
+**合計:** 12コンテナ稼働中（全て正常）
+
+### 🛠️ 管理コマンド早見表
+
+#### 起動方式の確認
+```bash
+# コンテナがどのように起動されたか確認
+ssh ubuntu@3.24.16.82
+docker inspect {container-name} --format '{{.Config.Labels}}' | grep com.docker.compose.project.config_files
+```
+
+出力例:
+- `/home/ubuntu/{api-name}/docker-compose.prod.yml` → GitHub Actions方式
+- `/home/ubuntu/watchme-server-configs/production/docker-compose-files/xxx.yml` → systemd方式
+
+#### GitHub Actions方式のサービス
+```bash
+# コンテナ再起動
+cd /home/ubuntu/{api-name}
+./run-prod.sh
+
+# または直接docker-compose
+docker-compose -f docker-compose.prod.yml down
+docker-compose -f docker-compose.prod.yml up -d
+
+# ログ確認
+docker logs {container-name} --tail 100 -f
+```
+
+#### systemd方式のサービス
+```bash
+# サービス再起動
+sudo systemctl restart {service-name}
+
+# 状態確認
+sudo systemctl status {service-name}
+
+# ログ確認
+sudo journalctl -u {service-name} -n 100 -f
+```
+
+#### 全体確認
+```bash
+# 稼働中のコンテナ
+docker ps
+
+# systemdサービス（WatchMe関連のみ）
+systemctl list-units --type=service | grep watchme
+
+# 失敗しているsystemdサービス（現在は0件のはず）
+systemctl list-units --type=service --state=failed
+```
+
+### 📝 新規API追加時の推奨フロー
+
+新しいAPIを追加する場合は、**GitHub Actions方式（方式1）** を使用してください。
+
+1. このドキュメントの [実装ガイド（新規API向け）](#実装ガイド新規api向け) を参照
+2. systemdサービスは**作成不要**
+3. `docker-compose.prod.yml` に `restart: always` を必ず設定
+4. GitHub Actionsワークフローでヘルスチェックを実装
+
+---
