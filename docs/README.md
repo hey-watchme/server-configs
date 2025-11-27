@@ -82,6 +82,8 @@ Lambda: dashboard-analysis-worker
   ↓
 Profiler API (/profiler/daily-profiler)
   → daily_results テーブル (1日分のLLM分析結果)
+  ↓
+プッシュ通知送信 (AWS SNS → APNs → iOS)
 ```
 
 ### Weekly分析（1週間の累積）✅ 本番稼働中
@@ -137,7 +139,7 @@ Profiler API (/profiler/weekly-profiler)
 | audio-processor | S3 Upload | 録音ファイルをSQSに送信 |
 | audio-worker | SQS | Feature Extractors並列実行 |
 | dashboard-summary-worker | SQS | Daily Aggregator実行 |
-| dashboard-analysis-worker | SQS | Daily Profiler実行 |
+| dashboard-analysis-worker | SQS | Daily Profiler実行、プッシュ通知送信 |
 | weekly-profile-worker | EventBridge (毎日00:00 UTC+9) | Weekly Aggregator + Profiler実行 |
 | janitor-trigger | EventBridge (6時間ごと) | Janitor API実行 |
 | demo-generator-trigger | EventBridge (30分ごと) | デモデータ生成 |
