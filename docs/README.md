@@ -33,12 +33,15 @@ WatchMeは音声録音から心理・感情分析までを自動実行するプ�
 
 **EC2 API (Sydney - t4g.large):**
 - Vault API (ポート8000): S3音声ファイル配信
-- Behavior Features (ポート8017): 527種類の音響検出
-- Emotion Features (ポート8018): 8感情認識
+- Behavior Features (ポート8017): 527種類の音響検出（AST）
+- Emotion Features (ポート8018): 8感情認識（Kushinada）
 - Vibe Transcriber (ポート8013): Groq Whisper v3文字起こし
-- **Aggregator API (ポート8011)**: Spot/Daily集計・プロンプト生成
-- **Profiler API (ポート8051)**: LLM分析（Spot/Daily）
+- **Aggregator API (ポート8050)**: Spot/Daily/Weekly集計・プロンプト生成
+- **Profiler API (ポート8051)**: LLM分析（Spot/Daily/Weekly）
 - Janitor (ポート8030): 音声データ自動削除
+- Admin (ポート9000): 管理ツール
+- Avatar Uploader (ポート8014): アバター画像管理
+- Demo Generator (ポート8020): デモデータ生成
 
 **データベース:**
 - Supabase (PostgreSQL)
@@ -120,17 +123,18 @@ Profiler API (/profiler/weekly-profiler)
 
 | サービス | ポート | 役割 |
 |---------|--------|------|
-| **Aggregator API** | **8011** | **Spot/Daily集計、プロンプト生成** |
-| **Profiler API** | **8051** | **LLM分析（Spot/Daily）** |
+| **Aggregator API** | **8050** | **Spot/Daily/Weekly集計、プロンプト生成** |
+| **Profiler API** | **8051** | **LLM分析（Spot/Daily/Weekly）** |
 
 ### 管理層
 
 | サービス | ポート | 役割 |
 |---------|--------|------|
-| API Manager | 9001 | API管理UI |
+| API Manager | 9001 | API管理UI（systemd管理） |
 | Admin | 9000 | 管理ツール |
 | Avatar Uploader | 8014 | アバター画像管理 |
 | Janitor | 8030 | 音声データ自動削除（6時間ごと） |
+| Demo Generator | 8020 | デモデータ生成（30分ごと） |
 
 ### AWS Lambda
 
@@ -243,8 +247,9 @@ curl https://api.hey-watch.me/aggregator/health
 ### 管理ツール
 
 - **Nginx**: リバースプロキシ（HTTPS）
-- **systemd**: 15サービスの自動起動・監視
-- **GitHub Actions**: CI/CD自動デプロイ
+- **Docker**: 全APIコンテナ管理（`restart: always`で自動起動）
+- **systemd**: 3サービスのみ（Infrastructure、API Manager、Web Dashboard）
+- **GitHub Actions**: CI/CD自動デプロイ（10サービス）
 
 ---
 
