@@ -133,6 +133,7 @@ Profiler API (/profiler/weekly-profiler)
 | API Manager | 9001 | API管理UI（systemd管理） |
 | Admin | 9000 | 管理ツール |
 | Avatar Uploader | 8014 | アバター画像管理 |
+| **QR Code Generator** | **8021** | **デバイス共有用QRコード生成** |
 | Janitor | 8030 | 音声データ自動削除（6時間ごと） |
 | Demo Generator | 8020 | デモデータ生成（30分ごと） |
 
@@ -237,6 +238,31 @@ curl https://api.hey-watch.me/aggregator/health
 - **インスタンス**: t4g.large (AWS Graviton2, 2 vCPU, 8GB RAM)
 - **リージョン**: ap-southeast-2 (Sydney)
 - **IP**: 3.24.16.82
+
+### DNS / ドメイン管理
+
+- **ドメイン**: hey-watch.me
+- **ドメイン登録**: お名前.com（契約保持）
+- **DNS管理**: Cloudflare（完全移行済み）
+- **ネームサーバー**:
+  - `piers.ns.cloudflare.com`
+  - `tessa.ns.cloudflare.com`
+
+**運用方針**:
+- DNSレコードの追加・編集はすべてCloudflare Dashboardで実施
+- お名前.com側のDNS設定（dnsv.jp）は使用しない
+
+### メール管理（Cloudflare Email Routing）
+
+- **サポートメール**: support@hey-watch.me → matsumotokaya@gmail.com（転送）
+- **設定**: Cloudflare Email Routing機能を使用
+- **送信**: Gmail側で send-as 設定により support@hey-watch.me として返信可能
+- **MX/TXTレコード**: Cloudflare が自動管理
+
+**使用箇所**:
+- iOSアプリ（プライバシーポリシー、利用規約）
+- サービスサイト（問い合わせ先）
+- App Store Connect（サポートメールアドレス）
 
 ### Docker Network
 
