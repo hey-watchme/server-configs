@@ -8,7 +8,19 @@ from datetime import datetime
 API_BASE_URL = os.environ.get('API_BASE_URL', 'https://api.hey-watch.me')
 SUPABASE_URL = os.environ.get('SUPABASE_URL', 'https://qvtlwotzuzbavrzqhyvt.supabase.co')
 SUPABASE_KEY = os.environ.get('SUPABASE_KEY', '')
-SNS_PLATFORM_APP_ARN = 'arn:aws:sns:ap-southeast-2:754724220380:app/APNS_SANDBOX/watchme-ios-app-sandbox'
+
+# APNs environment configuration
+# APNS_ENVIRONMENT: 'production' for TestFlight/App Store, 'sandbox' for Xcode direct install
+APNS_ENVIRONMENT = os.environ.get('APNS_ENVIRONMENT', 'production')
+
+if APNS_ENVIRONMENT == 'sandbox':
+    SNS_PLATFORM_APP_ARN = 'arn:aws:sns:ap-southeast-2:754724220380:app/APNS_SANDBOX/watchme-ios-app-sandbox'
+    APNS_KEY = 'APNS_SANDBOX'
+    print(f"[APNS] Using SANDBOX environment for push notifications")
+else:
+    SNS_PLATFORM_APP_ARN = 'arn:aws:sns:ap-southeast-2:754724220380:app/APNS/watchme-ios-app'
+    APNS_KEY = 'APNS'
+    print(f"[APNS] Using PRODUCTION environment for push notifications")
 
 # SNSクライアント
 sns_client = boto3.client('sns', region_name='ap-southeast-2')
@@ -28,36 +40,29 @@ def lambda_handler(event, context):
             message = json.loads(record['body'])
             
             device_id = message['device_id']
-            date = message['date']
-            time_slot = message.get('time_slot', '')
-            prompt = message.get('prompt', '')
-            
-            if not prompt:
-                raise ValueError("No prompt provided in message")
-            
-            print(f"Processing dashboard analysis for: {device_id}/{date}")
-            print(f"Triggered by timeblock: {time_slot}")
-            print(f"Prompt length: {len(prompt)} characters")
-            
-            # Dashboard Analysis APIを呼び出し（ChatGPT分析）
-            analysis_result = call_dashboard_analysis_api(
-                device_id, date, prompt
-            )
+            local_date = message['local_date']
+            recorded_at = message.get('recorded_at', '')
+
+            print(f"Processing daily analysis for: {device_id}/{local_date}")
+            print(f"Triggered by recording: {recorded_at}")
+
+            # Daily Profiler API - LLM analysis
+            analysis_result = call_daily_profiler_api(device_id, local_date)
             
             if analysis_result['success']:
                 print(f"Dashboard analysis completed successfully")
                 print(f"Analysis result saved to database")
 
                 # 成功ログ
-                log_success_metrics(device_id, date, time_slot, analysis_result)
+                log_success_metrics(device_id, local_date, recorded_at, analysis_result)
 
             else:
-                print(f"Dashboard analysis API failed: {analysis_result.get('error', 'Unknown error')}")
+                print(f"Daily profiler API failed: {analysis_result.get('error', 'Unknown error')}")
 
             # API成功/失敗に関わらず、プッシュ通知を送信
             # （アプリ側でデータを再取得させる）
             try:
-                send_push_notification(device_id, date, time_slot)
+                send_push_notification(device_id, local_date, recorded_at)
             except Exception as push_error:
                 print(f"[PUSH] ⚠️ Push notification failed, but continuing: {str(push_error)}")
 
@@ -76,20 +81,20 @@ def lambda_handler(event, context):
     }
 
 
-def call_dashboard_analysis_api(device_id, date, prompt):
+def call_daily_profiler_api(device_id, local_date):
     """
-    Dashboard Analysis API（ChatGPT分析）を呼び出し
+    Daily Profiler API - Execute LLM analysis on daily aggregated data
     """
     try:
-        print(f"Calling Dashboard Analysis API...")
-        print(f"URL: {API_BASE_URL}/vibe-analysis/scorer/analyze-dashboard-summary")
+        print(f"Calling Daily Profiler API...")
+        print(f"URL: {API_BASE_URL}/profiler/daily-profiler")
 
-        # APIを呼び出し
+        # Call Daily Profiler endpoint
         response = requests.post(
-            f"{API_BASE_URL}/vibe-analysis/scorer/analyze-dashboard-summary",
+            f"{API_BASE_URL}/profiler/daily-profiler",
             json={
                 "device_id": device_id,
-                "date": date
+                "local_date": local_date
             },
             timeout=180
         )
@@ -173,16 +178,16 @@ def call_dashboard_analysis_api(device_id, date, prompt):
         }
 
 
-def log_success_metrics(device_id, date, time_slot, analysis_result):
+def log_success_metrics(device_id, local_date, recorded_at, analysis_result):
     """
     成功時のメトリクスをログ出力（CloudWatch監視用）
     """
     try:
         metrics = {
-            'event': 'dashboard_analysis_completed',
+            'event': 'daily_analysis_completed',
             'device_id': device_id,
-            'date': date,
-            'triggered_by_timeblock': time_slot,
+            'local_date': local_date,
+            'triggered_by_recording': recorded_at,
             'timestamp': datetime.utcnow().isoformat(),
             'status_code': analysis_result.get('status_code', 200)
         }
@@ -206,12 +211,12 @@ def log_success_metrics(device_id, date, time_slot, analysis_result):
         print(f"Error logging metrics: {str(e)}")
 
 
-def send_push_notification(device_id, date, time_slot):
+def send_push_notification(device_id, local_date, recorded_at):
     """
     iOSアプリにプッシュ通知を送信（観測対象名とタイムブロックを含む）
     """
     try:
-        print(f"[PUSH] Starting push notification for device: {device_id}, date: {date}, time_slot: {time_slot}")
+        print(f"[PUSH] Starting push notification for device: {device_id}, local_date: {local_date}, recorded_at: {recorded_at}")
 
         # 1. SupabaseからユーザーのAPNsトークンを取得
         apns_token = get_user_apns_token(device_id)
@@ -225,37 +230,14 @@ def send_push_notification(device_id, date, time_slot):
         # 2. 観測対象名（Subject名）を取得
         subject_name = get_subject_name_for_device(device_id)
 
-        # 3. タイムブロックをフォーマット（例：22-00 → 22:00-22:30）
-        if time_slot:
-            try:
-                # タイムブロック形式: "22-00" → "22:00-22:30"
-                hour = int(time_slot.split('-')[0])
-                start_time = f"{hour:02d}:00"
-                end_time = f"{hour:02d}:30"
-                time_range = f"{start_time}-{end_time}"
-            except:
-                # パースに失敗した場合はタイムブロックなしで表示
-                time_range = None
-                print(f"[PUSH] Warning: Failed to parse time_slot: {time_slot}")
-        else:
-            time_range = None
-
-        # 4. メッセージを動的に生成
+        # 3. メッセージを動的に生成（日次分析完了通知）
         if subject_name:
-            # 観測対象名がある場合
-            if time_range:
-                body_text = f"{subject_name}さんの{time_range}のデータが届きました✨"
-            else:
-                body_text = f"{subject_name}さんの最新データが届きました✨"
-            print(f"[PUSH] Message for subject: {subject_name}, time_range: {time_range}")
+            body_text = f"{subject_name}さんの{local_date}のデータ分析が完了しました✨"
+            print(f"[PUSH] Daily analysis notification for subject: {subject_name}, date: {local_date}")
         else:
-            # 観測対象名がない場合：デバイスIDの先頭8文字を使用
             device_id_short = device_id[:8]
-            if time_range:
-                body_text = f"デバイス {device_id_short} の{time_range}のデータが届きました✨"
-            else:
-                body_text = f"デバイス {device_id_short} の最新データが届きました✨"
-            print(f"[PUSH] Message for device ID (no subject): {device_id_short}, time_range: {time_range}")
+            body_text = f"デバイス {device_id_short} の{local_date}のデータ分析が完了しました✨"
+            print(f"[PUSH] Daily analysis notification for device: {device_id_short}, date: {local_date}")
 
         # 4. SNS Platform Endpointを作成または取得
         endpoint_arn = create_or_update_endpoint(device_id, apns_token)
@@ -267,8 +249,9 @@ def send_push_notification(device_id, date, time_slot):
         print(f"[PUSH] SNS Endpoint ARN: {endpoint_arn}")
 
         # 5. 通知ペイロードを作成（バナー表示）
+        # APNS_KEY is dynamically set based on APNS_ENVIRONMENT
         message = {
-            'APNS_SANDBOX': json.dumps({
+            APNS_KEY: json.dumps({
                 'aps': {
                     'alert': {
                         'body': body_text
@@ -277,7 +260,7 @@ def send_push_notification(device_id, date, time_slot):
                     'content-available': 1
                 },
                 'device_id': device_id,
-                'date': date,
+                'date': local_date,
                 'action': 'refresh_dashboard'
             })
         }
