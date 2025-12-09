@@ -9,18 +9,11 @@ API_BASE_URL = os.environ.get('API_BASE_URL', 'https://api.hey-watch.me')
 SUPABASE_URL = os.environ.get('SUPABASE_URL', 'https://qvtlwotzuzbavrzqhyvt.supabase.co')
 SUPABASE_KEY = os.environ.get('SUPABASE_KEY', '')
 
-# APNs environment configuration
-# APNS_ENVIRONMENT: 'production' for TestFlight/App Store, 'sandbox' for Xcode direct install
-APNS_ENVIRONMENT = os.environ.get('APNS_ENVIRONMENT', 'production')
+# APNs Token-based authentication (supports both Production & Sandbox automatically)
+SNS_PLATFORM_APP_ARN = 'arn:aws:sns:ap-southeast-2:754724220380:app/APNS/watchme-ios-app-token'
+APNS_KEY = 'APNS'
 
-if APNS_ENVIRONMENT == 'sandbox':
-    SNS_PLATFORM_APP_ARN = 'arn:aws:sns:ap-southeast-2:754724220380:app/APNS_SANDBOX/watchme-ios-app-sandbox'
-    APNS_KEY = 'APNS_SANDBOX'
-    print(f"[APNS] Using SANDBOX environment for push notifications")
-else:
-    SNS_PLATFORM_APP_ARN = 'arn:aws:sns:ap-southeast-2:754724220380:app/APNS/watchme-ios-app'
-    APNS_KEY = 'APNS'
-    print(f"[APNS] Using PRODUCTION environment for push notifications")
+print(f"[APNS] Using token-based authentication (Production & Sandbox auto-detection)")
 
 # SNSクライアント
 sns_client = boto3.client('sns', region_name='ap-southeast-2')
