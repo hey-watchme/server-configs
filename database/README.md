@@ -41,6 +41,9 @@ database/
 ### メタデータ
 - `devices`: デバイス情報（timezone含む）
 - `subjects`: 観測対象者情報（年齢・性別・メモ）
+- `users`: ユーザー情報（認証・プロファイル・APNsトークン）
+  - `auth_provider`: 認証プロバイダー（anonymous, email, google, apple, microsoft, etc.）
+  - `apns_token`: プッシュ通知用トークン
 
 ---
 

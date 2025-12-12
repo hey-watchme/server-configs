@@ -1,5 +1,5 @@
 -- WatchMe Database Schema (Current State)
--- Last Updated: 2025-11-13 (Evening)
+-- Last Updated: 2025-11-25
 --
 -- This file contains the current database schema for all main tables.
 -- Update this file whenever schema changes are made.
@@ -52,8 +52,13 @@ CREATE TABLE users (
   subscription_plan TEXT,
   avatar_url TEXT,
   apns_token TEXT,
-  PRIMARY KEY (user_id)
+  auth_provider TEXT NOT NULL DEFAULT 'email',  -- Authentication provider (anonymous, email, google, apple, microsoft, etc.)
+  PRIMARY KEY (user_id),
+  CONSTRAINT users_auth_provider_check CHECK (
+    auth_provider IN ('anonymous', 'email', 'google', 'apple', 'microsoft', 'github', 'facebook', 'twitter')
+  )
 );
+CREATE INDEX idx_users_auth_provider ON users(auth_provider);
 
 -- ============================================================================
 -- Feature Extraction Layer (Layer 1)
