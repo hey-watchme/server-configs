@@ -10,7 +10,136 @@
 
 ## 🚨 優先度：高
 
-### 1. SQSキュー詰まり問題（イベント駆動型アーキテクチャ）
+### 1. DLQ監視・アラート体制の不足
+
+**発見日**: 2025-12-13
+
+#### 問題の概要
+
+Dead Letter Queue（DLQ）にメッセージが大量に蓄積しても、アラートがなく気づけない問題が発生しました。
+
+#### 具体的な症状
+
+1. **Lambda関数のエラーが長期間放置**
+   - `watchme-dashboard-analysis-worker` Lambdaで`requests`モジュール不足
+   - インポートエラーで関数が起動できず、3日間気づかず
+   - DLQに991件のメッセージが蓄積（2025-12-10 ~ 2025-12-12）
+
+2. **監視体制の不足**
+   - DLQのメッセージ数を監視するアラートなし
+   - Lambda関数のエラー率を監視するアラートなし
+   - 手動で確認しない限り問題に気づけない
+
+3. **DLQ処理方法の不明確さ**
+   - DLQに溜まったメッセージを元のキューに戻す手順が不明確
+   - パージ（削除）以外の選択肢がない
+   - 大量メッセージの再処理方法が確立されていない
+
+#### 応急処置（2025-12-13実施）
+
+1. **Lambda関数の修正**
+   ```bash
+   cd /Users/kaya.matsumoto/projects/watchme/server-configs/production/lambda-functions/watchme-dashboard-analysis-worker
+   ./build.sh
+   aws lambda update-function-code --function-name watchme-dashboard-analysis-worker --zip-file fileb://function.zip --region ap-southeast-2
+   ```
+
+2. **DLQのパージ（記録を残して削除）**
+   ```bash
+   # DLQ_PURGE_LOG.mdに記録を残してから削除
+   aws sqs purge-queue --queue-url https://sqs.ap-southeast-2.amazonaws.com/754724220380/watchme-dashboard-analysis-dlq --region ap-southeast-2
+   ```
+
+3. **手動で最新データのDaily分析をトリガー**
+   ```bash
+   aws sqs send-message --queue-url https://sqs.ap-southeast-2.amazonaws.com/754724220380/watchme-dashboard-summary-queue \
+     --message-body '{"device_id":"...","local_date":"2025-12-13",...}' --region ap-southeast-2
+   ```
+
+**⚠️ 影響**: 過去のDaily分析（2025-12-10 ~ 2025-12-12）は実行されていない
+
+#### 恒久対策の提案
+
+**対策1: CloudWatch Alarmによる監視 ⭐ 最優先**
+
+以下のメトリクスを監視し、SNS通知を設定：
+
+1. **DLQメッセージ数監視**
+   - メトリクス: `ApproximateNumberOfMessagesVisible`
+   - 条件: > 10件
+   - アクション: SNS → メール/Slack通知
+
+2. **Lambda Error Rate監視**
+   - メトリクス: `Errors / Invocations * 100`
+   - 条件: > 10%（1時間で3データポイント）
+   - アクション: SNS → メール/Slack通知
+
+3. **Lambda Duration監視**
+   - メトリクス: `Duration`
+   - 条件: タイムアウト近く（例: > 800秒）
+   - アクション: SNS → メール/Slack通知
+
+**実装方法**（例: DLQ監視）:
+```bash
+aws cloudwatch put-metric-alarm \
+  --alarm-name watchme-dashboard-analysis-dlq-alarm \
+  --alarm-description "DLQに10件以上メッセージが溜まった" \
+  --metric-name ApproximateNumberOfMessagesVisible \
+  --namespace AWS/SQS \
+  --statistic Average \
+  --period 300 \
+  --evaluation-periods 1 \
+  --threshold 10 \
+  --comparison-operator GreaterThanThreshold \
+  --dimensions Name=QueueName,Value=watchme-dashboard-analysis-dlq \
+  --alarm-actions arn:aws:sns:ap-southeast-2:754724220380:watchme-alerts
+```
+
+**対策2: DLQ再処理スクリプトの作成**
+
+DLQからメッセージを元のキューに戻すスクリプトを用意：
+
+```bash
+#!/bin/bash
+# redrive-dlq.sh - DLQから元のキューへメッセージを移動
+
+SOURCE_QUEUE_URL="https://sqs.ap-southeast-2.amazonaws.com/754724220380/watchme-dashboard-analysis-dlq"
+TARGET_QUEUE_URL="https://sqs.ap-southeast-2.amazonaws.com/754724220380/watchme-dashboard-analysis-queue"
+
+while true; do
+  MESSAGE=$(aws sqs receive-message --queue-url $SOURCE_QUEUE_URL --max-number-of-messages 1 --region ap-southeast-2)
+
+  if [ -z "$MESSAGE" ]; then
+    echo "No more messages in DLQ"
+    break
+  fi
+
+  BODY=$(echo $MESSAGE | jq -r '.Messages[0].Body')
+  RECEIPT_HANDLE=$(echo $MESSAGE | jq -r '.Messages[0].ReceiptHandle')
+
+  # 元のキューに送信
+  aws sqs send-message --queue-url $TARGET_QUEUE_URL --message-body "$BODY" --region ap-southeast-2
+
+  # DLQから削除
+  aws sqs delete-message --queue-url $SOURCE_QUEUE_URL --receipt-handle "$RECEIPT_HANDLE" --region ap-southeast-2
+
+  echo "Moved 1 message"
+done
+```
+
+**対策3: Lambda関数のデプロイ検証**
+
+Lambda関数のデプロイ後、自動的に動作確認を行う：
+
+1. デプロイ後にテストメッセージを送信
+2. 正常に処理されることを確認
+3. エラーがあれば即座にロールバック
+
+**優先度**: ⭐⭐⭐⭐⭐（監視体制は即座に実装すべき）
+
+---
+
+### 2. SQSキュー詰まり問題（イベント駆動型アーキテクチャ）
 
 **発見日**: 2025-12-11
 
@@ -260,15 +389,27 @@ aws sqs set-queue-attributes \
 
 ### フェーズ2: 監視体制構築（1週間以内）
 
+- [ ] **DLQ監視（最優先）**
+  - [ ] watchme-dashboard-analysis-dlq: メッセージ数 > 10件
+  - [ ] watchme-dashboard-summary-dlq: メッセージ数 > 10件（存在する場合）
+  - [ ] その他すべてのDLQ
+- [ ] **Lambda Error Rate監視**
+  - [ ] watchme-dashboard-analysis-worker: エラー率 > 10%
+  - [ ] watchme-dashboard-summary-worker: エラー率 > 10%
+  - [ ] watchme-aggregator-checker: エラー率 > 10%
+  - [ ] watchme-audio-processor: エラー率 > 10%
+  - [ ] watchme-asr-worker: エラー率 > 10%
+  - [ ] watchme-sed-worker: エラー率 > 10%
+  - [ ] watchme-ser-worker: エラー率 > 10%
 - [ ] CloudWatch Synthetics Canaryでヘルスチェック監視
   - [ ] Behavior API
   - [ ] Emotion API
   - [ ] Vibe Transcriber API
 - [ ] CloudWatch Alarm設定
   - [ ] SQS Message Age > 10分
-  - [ ] Lambda Error Rate > 10%
   - [ ] API Unhealthy 3回連続
-- [ ] SNS通知先の設定
+- [ ] SNS通知先の設定（メール/Slack）
+- [ ] DLQ再処理スクリプトの作成
 
 ### フェーズ3: 長期改善（1ヶ月以内）
 
