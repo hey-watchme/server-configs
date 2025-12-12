@@ -1,6 +1,8 @@
 # WatchMe サーバー設定リポジトリ
 
-最終更新: 2025-11-15
+最終更新: 2025-12-10
+
+**⚠️ 重要: 2025-12-10にイベント駆動型アーキテクチャへ移行しました**
 
 ## 📚 ドキュメントガイド
 
@@ -11,6 +13,9 @@
 | **🔧 技術仕様** | [TECHNICAL_REFERENCE.md](./TECHNICAL_REFERENCE.md) | 全サービス一覧、エンドポイント |
 | **📝 作業手順** | [OPERATIONS_GUIDE.md](./OPERATIONS_GUIDE.md) | デプロイ・運用手順 |
 | **🚀 CI/CD詳細** | [CICD_STANDARD_SPECIFICATION.md](./CICD_STANDARD_SPECIFICATION.md) | CI/CD実装ガイド、**起動方式の全体像** |
+| **📈 スケーラビリティ** | [SCALABILITY_ROADMAP.md](./SCALABILITY_ROADMAP.md) | 1人→100人→1000人への改善計画 |
+| **⚠️ 既知の問題** | [KNOWN_ISSUES.md](./KNOWN_ISSUES.md) | 既知の問題と対応TODO |
+| **🎯 Phase 1実装** | [PHASE1_FIFO_QUEUE_IMPLEMENTATION.md](./PHASE1_FIFO_QUEUE_IMPLEMENTATION.md) | **FIFO Queue移行手順（コピペ可能）** |
 
 ---
 
@@ -25,8 +30,10 @@ WatchMeは音声録音から心理・感情分析までを自動実行するプ�
 - Web Dashboard (React)
 - Observer Device (M5 Core2)
 
-**AWS Lambda (自動処理):**
-- audio-worker: 音声分析の並列実行
+**AWS Lambda (自動処理 - イベント駆動型):**
+- audio-processor: 3つのSQSキューへ並列送信
+- asr-worker / sed-worker / ser-worker: 各Feature Extractor API呼び出し
+- aggregator-checker: 全特徴量完了後にAggregator/Profiler実行
 - dashboard-summary-worker: 日次集計実行
 - dashboard-analysis-worker: 日次LLM分析実行
 - weekly-profile-worker: 週次分析実行（毎日00:00）
@@ -50,17 +57,24 @@ WatchMeは音声録音から心理・感情分析までを自動実行するプ�
 
 ## 🔄 データフロー
 
-### Spot分析（録音ごと）
+### Spot分析（録音ごと）- イベント駆動型 ✅
 
 ```
 iOS録音 → S3アップロード
   ↓
-Lambda: audio-processor → SQS
+Lambda: audio-processor → 3つのSQSキューへ並列送信
+  ├─ SQS: asr-queue → Lambda: asr-worker
+  ├─ SQS: sed-queue → Lambda: sed-worker
+  └─ SQS: ser-queue → Lambda: ser-worker
   ↓
-Lambda: audio-worker (並列実行)
-  ├─ Behavior Features (音響検出)
-  ├─ Emotion Features (感情認識)
-  └─ Vibe Transcriber (文字起こし)
+各Lambda Worker → EC2 API (/async-process) 呼び出し（202 Accepted）
+  ├─ Vibe Transcriber v2 (バックグラウンド処理)
+  ├─ Behavior Features v2 (バックグラウンド処理)
+  └─ Emotion Features v2 (バックグラウンド処理)
+  ↓
+各API完了 → SQS: feature-completed-queue に完了通知
+  ↓
+Lambda: aggregator-checker（3つ全て completed か確認）
   ↓
 Aggregator API (/aggregator/spot)
   → spot_aggregators テーブル (プロンプト生成)
@@ -139,15 +153,18 @@ Profiler API (/profiler/weekly-profiler)
 
 ### AWS Lambda
 
-| 関数名 | トリガー | 役割 |
-|--------|---------|------|
-| audio-processor | S3 Upload | 録音ファイルをSQSに送信 |
-| audio-worker | SQS | Feature Extractors並列実行 |
-| dashboard-summary-worker | SQS | Daily Aggregator実行 |
-| dashboard-analysis-worker | SQS | Daily Profiler実行、プッシュ通知送信 |
-| weekly-profile-worker | EventBridge (毎日00:00 UTC+9) | Weekly Aggregator + Profiler実行 |
-| janitor-trigger | EventBridge (6時間ごと) | Janitor API実行 |
-| demo-generator-trigger | EventBridge (30分ごと) | デモデータ生成 |
+| 関数名 | トリガー | 役割 | 状態 |
+|--------|---------|------|------|
+| **audio-processor** | S3 Upload | 3つのSQSキューに並列送信 | ✅ 稼働中 |
+| **asr-worker** | SQS: asr-queue | Vibe Transcriber API呼び出し | ✅ 稼働中 |
+| **sed-worker** | SQS: sed-queue | Behavior Features API呼び出し | ✅ 稼働中 |
+| **ser-worker** | SQS: ser-queue | Emotion Features API呼び出し | ✅ 稼働中 |
+| **aggregator-checker** | SQS: feature-completed-queue | 全完了後にAggregator/Profiler実行 | ✅ 稼働中 |
+| dashboard-summary-worker | SQS: dashboard-summary-queue | Daily Aggregator実行 | ✅ 稼働中 |
+| dashboard-analysis-worker | SQS: dashboard-analysis-queue | Daily Profiler実行、プッシュ通知送信 | ✅ 稼働中 |
+| weekly-profile-worker | EventBridge (毎日00:00 UTC+9) | Weekly Aggregator + Profiler実行 | ✅ 稼働中 |
+| janitor-trigger | EventBridge (6時間ごと) | Janitor API実行 | ✅ 稼働中 |
+| demo-generator-trigger | EventBridge (30分ごと) | デモデータ生成 | ✅ 稼働中 |
 
 ---
 
@@ -319,6 +336,17 @@ git pull origin main
 ---
 
 ## 📅 完了機能
+
+### ✅ 2025-12-11 🎯 **イベント駆動型アーキテクチャへ移行完了**
+
+- **SQSキュー作成**: 4つの新規キュー（asr/sed/ser/feature-completed）
+- **Lambda関数作成**: 4つの新規Lambda（asr-worker/sed-worker/ser-worker/aggregator-checker）
+- **EC2 API非同期化**: 3つのAPIに `/async-process` エンドポイント追加
+- **DBステータス管理**: spot_featuresに3つのステータスカラム追加
+- **audio-processor修正**: 3つのSQSキューへ並列送信
+- **旧audio-worker削除**: 同期処理からイベント駆動型へ完全移行
+- **タイムアウト問題解決**: Cloudflare 100秒制限を完全回避
+- **動作確認完了**: 全APIが2秒以内で202 Acceptedを返却
 
 ### ✅ 2025-11-20
 
