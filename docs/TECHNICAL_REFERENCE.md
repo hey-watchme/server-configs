@@ -44,6 +44,7 @@
 172.27.0.15 : watchme-avatar-uploader
 172.27.0.17 : behavior-features
 172.27.0.18 : emotion-features
+172.27.0.20 : watchme-api-qr-code-generator
 172.27.0.30 : janitor-api
 172.27.X.X  : aggregator-api
 172.27.X.X  : profiler-api
@@ -73,7 +74,8 @@
 | | **Profiler API** | **8051** | **`/profiler/`** | **watchme-profiler** | **Spot/Daily LLM分析** |
 | **管理** | Admin | 9000 | `/admin/` | watchme-admin | 管理UI |
 | | API Manager | 9001 | `/manager/` | watchme-api-manager | API管理UI |
-| | Avatar Uploader | 8014 | (内部) | watchme-api-avatar-uploader | アバター画像 |
+| | Avatar Uploader | 8014 | `/avatar/` | watchme-api-avatar-uploader | アバター画像 |
+| | **QR Code Generator** | **8021** | **`/qrcode/`** | **watchme-api-qr-code-generator** | **デバイスQRコード生成** |
 | | Janitor | 8030 | `/janitor/` | watchme-api-janitor | 音声データ削除 |
 
 ### AWS Lambda関数
@@ -233,10 +235,9 @@
 - `summary`: 1日の総合サマリー
 - `behavior`: 主要な行動パターン
 - `profile_result`: 完全な分析結果（JSONB）
-- `vibe_scores`: 48個の30分ブロックスコア（JSONB配列）
+- `vibe_scores`: 録音時刻ベースのスコア配列（JSONB配列）
 - `burst_events`: 感情変化イベント（JSONB配列）
 - `processed_count`: 処理済みspot数
-- `last_time_block`: 最終処理時刻
 
 ---
 

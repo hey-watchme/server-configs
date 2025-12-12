@@ -1,8 +1,8 @@
 # WatchMe 処理アーキテクチャ
 
-最終更新: 2025-12-10
+最終更新: 2025-12-12
 
-**⚠️ 重要: 2025-12-10にイベント駆動型アーキテクチャへ移行しました**
+**⚠️ 重要: 2025-12-12にFIFO Queueへ移行しました（順序保証・重複排除）**
 
 ## 🎯 システム概要
 
@@ -57,10 +57,10 @@ graph TB
         D[Lambda: audio-processor<br/>3つのSQSキューに並列送信]
     end
 
-    subgraph Queue["📬 SQSキュー"]
-        E1[SQS: asr-queue]
-        E2[SQS: sed-queue]
-        E3[SQS: ser-queue]
+    subgraph Queue["📬 FIFO SQSキュー（順序保証）"]
+        E1[SQS: asr-queue-v2.fifo]
+        E2[SQS: sed-queue-v2.fifo]
+        E3[SQS: ser-queue-v2.fifo]
     end
 
     subgraph Worker["🔧 Lambda Worker (並列)"]
@@ -187,6 +187,7 @@ graph TB
 - 3つの特徴量を統合
 - LLM分析用プロンプト生成
 - `spot_aggregators` テーブルに保存
+- **ステータス管理**: `spot_aggregators.aggregator_status` を `completed` に更新
 
 #### 🤖 LLM分析フェーズ (10-15秒)
 
@@ -194,6 +195,7 @@ graph TB
 - プロンプトを取得
 - LLM分析実行（Groq openai/gpt-oss-120b）
 - `spot_results` テーブルに保存
+- **ステータス管理**: `spot_results.profiler_status` を `completed` に更新
 
 **保存データ**:
 - `vibe_score`: 心理スコア (-100〜+100)
@@ -459,12 +461,12 @@ ORDER BY recorded_at ASC
 
 ### Spot分析
 
-| テーブル | 内容 | 更新頻度 |
-|---------|------|---------|
-| `audio_files` | 録音メタデータ | 録音ごと |
-| `spot_features` | 音響・感情・文字起こし特徴量 | 録音ごと |
-| `spot_aggregators` | Spot分析用プロンプト | 録音ごと |
-| `spot_results` | Spot分析結果（LLM出力） | 録音ごと |
+| テーブル | 内容 | 更新頻度 | ステータス管理 |
+|---------|------|---------|--------------|
+| `audio_files` | 録音メタデータ | 録音ごと | なし |
+| `spot_features` | 音響・感情・文字起こし特徴量 | 録音ごと | `vibe_status`<br>`behavior_status`<br>`emotion_status` |
+| `spot_aggregators` | Spot分析用プロンプト | 録音ごと | `aggregator_status` |
+| `spot_results` | Spot分析結果（LLM出力） | 録音ごと | `profiler_status` |
 
 ### Daily分析
 
@@ -540,21 +542,28 @@ ORDER BY recorded_at ASC
 
 ### SQSキュー一覧
 
-| キュー名 | 用途 | トリガー元 | 処理先 |
-|---------|------|----------|--------|
-| **watchme-asr-queue** | ASR処理キュー | audio-processor | asr-worker |
-| **watchme-sed-queue** | SED処理キュー | audio-processor | sed-worker |
-| **watchme-ser-queue** | SER処理キュー | audio-processor | ser-worker |
-| **watchme-feature-completed-queue** | 完了通知キュー | 各EC2 API | aggregator-checker |
-| watchme-dashboard-summary-queue | Daily集計キュー | aggregator-checker | dashboard-summary-worker |
-| watchme-dashboard-analysis-queue | Daily分析キュー | dashboard-summary-worker | dashboard-analysis-worker |
+| キュー名 | タイプ | 用途 | トリガー元 | 処理先 |
+|---------|--------|------|----------|--------|
+| **watchme-asr-queue-v2.fifo** | **FIFO** | ASR処理キュー（順序保証） | audio-processor | asr-worker |
+| **watchme-sed-queue-v2.fifo** | **FIFO** | SED処理キュー（順序保証） | audio-processor | sed-worker |
+| **watchme-ser-queue-v2.fifo** | **FIFO** | SER処理キュー（順序保証） | audio-processor | ser-worker |
+| **watchme-feature-completed-queue** | Standard | 完了通知キュー | 各EC2 API | aggregator-checker |
+| watchme-dashboard-summary-queue | Standard | Daily集計キュー | aggregator-checker | dashboard-summary-worker |
+| watchme-dashboard-analysis-queue | Standard | Daily分析キュー | dashboard-summary-worker | dashboard-analysis-worker |
+
+**FIFO Queue設定:**
+- **順序保証**: デバイス単位で録音の時系列順を保証
+- **重複排除**: 同じ録音を5分以内に2回処理しない
+- **Message Group ID**: `{device_id}-{api_type}` 形式（例: `abc123-sed`）
+- **Deduplication ID**: `SHA256({device_id}-{recorded_at}-{api_type})` の先頭80文字
+- **Dead Letter Queue**: 3回リトライ後にDLQへ移動
 
 ### API呼び出しチェーン（イベント駆動型）
 
 **audio-processor**:
-- `watchme-asr-queue` にメッセージ送信
-- `watchme-sed-queue` にメッセージ送信
-- `watchme-ser-queue` にメッセージ送信
+- `watchme-asr-queue-v2.fifo` にメッセージ送信（FIFO）
+- `watchme-sed-queue-v2.fifo` にメッセージ送信（FIFO）
+- `watchme-ser-queue-v2.fifo` にメッセージ送信（FIFO）
 
 **asr-worker / sed-worker / ser-worker**:
 - `https://api.hey-watch.me/vibe-analysis/transcriber/async-process` (202 Accepted)
@@ -632,11 +641,131 @@ ORDER BY recorded_at ASC
 
 ---
 
+## 🎯 FIFO Queueの仕組み（2025-12-12移行）
+
+### 概要
+
+FIFO Queue（First-In-First-Out Queue）は、**順序保証**と**重複排除**を提供するSQSキューです。
+Standard Queueと異なり、同じMessage Group内のメッセージは順番通りに処理されます。
+
+### 主要機能
+
+#### 1. **順序保証（Ordering）**
+
+**Message Group ID** により、同じグループ内のメッセージは送信順に処理されます。
+
+```
+デバイスAの録音:
+  録音1 (09:00) → 録音2 (09:30) → 録音3 (10:00)
+  ↓
+Message Group ID: "deviceA-sed"
+  ↓
+Lambda Workerは必ず 09:00 → 09:30 → 10:00 の順で処理
+```
+
+**WatchMeでの実装:**
+- Message Group ID: `{device_id}-{api_type}`
+- 例: `9f7d6e27-98c3-4c19-bdfb-f7fda58b9a93-sed`
+
+**利点:**
+- デバイスAの録音を処理中でも、デバイスBの録音は並列処理可能
+- 同一デバイスの録音は時系列順を保証
+
+#### 2. **重複排除（Deduplication）**
+
+**Deduplication ID** により、5分以内の重複送信を自動的に排除します。
+
+```
+同じ録音を誤って2回送信:
+  送信1 (12:00:00) → MessageId: abc123
+  送信2 (12:00:05) → 同じDeduplication ID → 排除される
+```
+
+**WatchMeでの実装:**
+- Deduplication ID: `SHA256({device_id}-{recorded_at}-{api_type})` の先頭80文字
+- 例: `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855...` (80文字)
+
+**利点:**
+- S3イベントの重複トリガーでも安全
+- 手動再実行時の誤った重複処理を防止
+
+#### 3. **並列処理の制御**
+
+FIFO Queueでは、**Message Group単位**で並列処理が制御されます。
+
+**Standard Queue（旧）:**
+```
+Lambda並列数: 2 (SED/SER)
+  ↓
+デバイスAとデバイスBの録音が混在
+  ↓
+順序保証なし、処理順がランダム
+```
+
+**FIFO Queue（新）:**
+```
+Lambda並列数: 2 (SED/SER)
+  ↓
+Message Group毎に1つずつ処理
+  - Group "deviceA-sed": 録音1処理中
+  - Group "deviceB-sed": 録音1処理中（並列OK）
+  ↓
+デバイスAの録音2は、録音1完了後に処理開始
+```
+
+**スケーラビリティ:**
+- デバイス数が増えれば、自動的に並列度が向上
+- 1デバイス: 最大3並列（ASR/SED/SER）
+- 10デバイス: 最大30並列（各デバイス × 3API）
+
+### Dead Letter Queue（DLQ）
+
+FIFO Queueでも、Standard Queueと同様にDLQを設定できます。
+
+**設定:**
+- 最大リトライ回数: 3回
+- DLQ: `watchme-{api_type}-dlq-v2.fifo`
+- メッセージ保持期間: 14日
+
+**動作:**
+```
+処理失敗（1回目） → 5分後リトライ
+処理失敗（2回目） → 5分後リトライ
+処理失敗（3回目） → DLQへ移動
+```
+
+### FIFO Queue vs Standard Queue
+
+| 項目 | Standard Queue（旧） | FIFO Queue（新） |
+|------|---------------------|-----------------|
+| **順序保証** | なし | Message Group単位であり |
+| **重複排除** | なし | 5分以内の重複を自動排除 |
+| **スループット** | 無制限 | 300メッセージ/秒（Message Group単位） |
+| **並列制御** | Lambda並列数のみ | Message Group単位 |
+| **スケーラビリティ** | 低（並列数固定） | 高（デバイス数に応じて） |
+| **料金** | 安い | 若干高い |
+
+### WatchMeでの移行理由
+
+**問題（Standard Queue時代）:**
+1. 同一デバイスの録音が順不同で処理される可能性
+2. S3イベント重複時に同じ録音を2回処理するリスク
+3. スケーラビリティの限界（Lambda並列数で制約）
+
+**解決（FIFO Queue移行後）:**
+1. ✅ デバイス単位で時系列順を保証
+2. ✅ 重複処理を自動排除
+3. ✅ デバイス数に応じて自動的に並列度向上
+
+---
+
 ## 🔄 SQSリトライメカニズム
 
 ### 仕組み概要
 
 SQS（Simple Queue Service）は、メッセージ処理の信頼性を保証するため、**可視性タイムアウト**と**自動リトライ**機能を提供します。
+
+**FIFO QueueでもStandard Queueと同じリトライメカニズムが適用されます。**
 
 ### 処理フロー
 
@@ -839,6 +968,20 @@ weekly_results テーブル (UPSERT)
 ---
 
 ## 🚀 完了機能
+
+### 2025-12-12 🎯 **ステータス管理の最適化 + FIFO Queue移行完了**
+- ✅ **ステータスカラム再設計** - 責任分離の原則に基づく整理
+  - `audio_files`: ステータスカラム削除（不要なレガシーカラム）
+  - `spot_features`: 特徴量抽出API（Vibe/Behavior/Emotion）のステータス管理
+  - `spot_aggregators`: Aggregator処理のステータス管理（`aggregator_status`追加）
+  - `spot_results`: Profiler処理のステータス管理（`profiler_status`追加）
+- ✅ **aggregator-checker修正** - 正しいテーブルへのステータス更新
+- ✅ **FIFO Queue作成** - 3つのFIFOキュー（asr-v2/sed-v2/ser-v2）+ DLQ
+- ✅ **順序保証** - デバイス単位で録音の時系列順を保証（Message Group ID）
+- ✅ **重複排除** - 5分以内の重複送信を自動排除（Deduplication ID）
+- ✅ **audio-processor修正** - FIFO Queue対応（MessageGroupId/DeduplicationId追加）
+- ✅ **Lambda Worker接続更新** - Standard Queue無効化、FIFO Queue有効化
+- ✅ **スケーラビリティ向上** - デバイス数に応じて自動的に並列度向上
 
 ### 2025-12-11 🎯 **イベント駆動型アーキテクチャへ移行完了**
 - ✅ **SQSキュー作成** - 4つの新規キュー（asr/sed/ser/feature-completed）
