@@ -1,6 +1,8 @@
 # WatchMe 処理アーキテクチャ
 
-最終更新: 2025-11-16
+最終更新: 2025-12-10
+
+**⚠️ 重要: 2025-12-10にイベント駆動型アーキテクチャへ移行しました**
 
 ## 🎯 システム概要
 
@@ -33,7 +35,13 @@ WatchMeは音声録音から心理・感情分析を自動実行するプラッ�
 
 ---
 
-## 1️⃣ Spot分析（録音ごと）
+## 1️⃣ Spot分析（録音ごと）- イベント駆動型アーキテクチャ
+
+**🎯 設計方針:**
+- 非同期・イベント駆動
+- DBステータス管理（pending → processing → completed）
+- SQS完了通知による連携
+- タイムアウト問題の完全解決
 
 ### 処理フロー
 
@@ -46,51 +54,85 @@ graph TB
 
     subgraph Trigger["⚡ トリガー (1-2秒)"]
         C[S3 Event]
-        D[Lambda: audio-processor]
-        E[SQS: audio-processing-queue]
+        D[Lambda: audio-processor<br/>3つのSQSキューに並列送信]
     end
 
-    subgraph Worker["🔧 並列処理 (1-3分)"]
-        F[Lambda: audio-worker]
-        G1[Behavior Features<br/>527種類の音響検出]
-        G2[Emotion Features<br/>8感情認識]
-        G3[Vibe Transcriber<br/>Groq Whisper v3]
+    subgraph Queue["📬 SQSキュー"]
+        E1[SQS: asr-queue]
+        E2[SQS: sed-queue]
+        E3[SQS: ser-queue]
+    end
+
+    subgraph Worker["🔧 Lambda Worker (並列)"]
+        F1[Lambda: asr-worker]
+        F2[Lambda: sed-worker]
+        F3[Lambda: ser-worker]
+    end
+
+    subgraph API["🎙️ EC2 API (非同期処理)"]
+        G1[Vibe Transcriber v2<br/>/async-process<br/>202 Accepted]
+        G2[Behavior Features v2<br/>/async-process<br/>202 Accepted]
+        G3[Emotion Features v2<br/>/async-process<br/>202 Accepted]
+    end
+
+    subgraph Background["🔄 バックグラウンド処理"]
+        H1[Vibe処理<br/>DB: vibe_status<br/>pending→processing→completed]
+        H2[Behavior処理<br/>DB: behavior_status<br/>pending→processing→completed]
+        H3[Emotion処理<br/>DB: emotion_status<br/>pending→processing→completed]
+    end
+
+    subgraph Completion["✅ 完了通知"]
+        I[SQS: feature-completed-queue<br/>各APIから完了通知]
+    end
+
+    subgraph Checker["🔍 完了チェック"]
+        J[Lambda: aggregator-checker<br/>3つ全て completed?]
     end
 
     subgraph Aggregation["📊 集計 (5-10秒)"]
-        H[Aggregator API<br/>/aggregator/spot]
-        I[spot_aggregators テーブル<br/>プロンプト生成]
+        K[Aggregator API<br/>/aggregator/spot]
+        L[spot_aggregators テーブル]
     end
 
     subgraph Analysis["🤖 LLM分析 (10-15秒)"]
-        J[Profiler API<br/>/profiler/spot-profiler]
-        K[spot_results テーブル<br/>分析結果保存]
+        M[Profiler API<br/>/profiler/spot-profiler]
+        N[spot_results テーブル]
     end
 
     subgraph NextStep["🔄 次の処理へ"]
-        L[SQS: dashboard-summary-queue<br/>Daily分析トリガー]
+        O[SQS: dashboard-summary-queue]
     end
 
-    A --> B --> C --> D --> E --> F
-    F -->|並列実行| G1
-    F -->|並列実行| G2
-    F -->|並列実行| G3
-    G1 --> H
-    G2 --> H
-    G3 --> H
-    H --> I --> J --> K --> L
+    A --> B --> C --> D
+    D -->|並列送信| E1
+    D -->|並列送信| E2
+    D -->|並列送信| E3
+
+    E1 --> F1 --> G1 --> H1
+    E2 --> F2 --> G2 --> H2
+    E3 --> F3 --> G3 --> H3
+
+    H1 -->|完了通知| I
+    H2 -->|完了通知| I
+    H3 -->|完了通知| I
+
+    I --> J
+    J -->|全て完了| K --> L --> M --> N --> O
 
     classDef uploadStyle fill:#e3f2fd,stroke:#1976d2
     classDef triggerStyle fill:#f3e5f5,stroke:#7b1fa2
+    classDef queueStyle fill:#fff3e0,stroke:#f57c00
     classDef workerStyle fill:#e8f5e9,stroke:#388e3c
+    classDef apiStyle fill:#fce4ec,stroke:#c2185b
     classDef aggStyle fill:#fff9c4,stroke:#f9a825
-    classDef analysisStyle fill:#fce4ec,stroke:#c2185b
 
     class A,B uploadStyle
-    class C,D,E triggerStyle
-    class F,G1,G2,G3 workerStyle
-    class H,I aggStyle
-    class J,K analysisStyle
+    class C,D triggerStyle
+    class E1,E2,E3 queueStyle
+    class F1,F2,F3 workerStyle
+    class G1,G2,G3,H1,H2,H3 apiStyle
+    class I,J queueStyle
+    class K,L,M,N aggStyle
 ```
 
 ### 処理詳細
@@ -99,17 +141,45 @@ graph TB
 
 1. S3に音声ファイルアップロード
 2. S3イベント → Lambda: audio-processor
-3. SQSキューにメッセージ送信
+3. **3つのSQSキューに並列送信**:
+   - `watchme-asr-queue` (ASR用)
+   - `watchme-sed-queue` (SED用)
+   - `watchme-ser-queue` (SER用)
 
-#### 🔧 並列処理フェーズ (1-3分)
+#### 🔧 Lambda Worker フェーズ (即座に完了)
 
-Lambda: audio-worker が以下を並列実行:
+各Lambda Worker が対応するEC2 APIを呼び出し（**202 Acceptedで即座に返る**）:
 
-| API | 処理時間 | 役割 |
-|-----|---------|------|
-| Behavior Features | 10-20秒 | 527種類の音響イベント検出 |
-| Emotion Features | 10-20秒 | 8感情認識 |
-| Vibe Transcriber | 26-28秒 | Groq Whisper v3文字起こし |
+| Lambda Worker | 呼び出し先API | エンドポイント | タイムアウト |
+|--------------|-------------|--------------|------------|
+| **asr-worker** | Vibe Transcriber v2 | `/async-process` | 30秒 |
+| **sed-worker** | Behavior Features v2 | `/async-process` | 30秒 |
+| **ser-worker** | Emotion Features v2 | `/async-process` | 30秒 |
+
+#### 🎙️ EC2 API バックグラウンド処理 (1-3分)
+
+各APIが202 Acceptedを返した後、バックグラウンドで処理:
+
+| API | バージョン | 処理時間 | 役割 | ステータス管理 |
+|-----|---------|---------|------|--------------|
+| Vibe Transcriber | **v2** | 26-28秒 | Groq Whisper v3文字起こし | `vibe_status` |
+| Behavior Features | **v2** | 10-20秒 | 527種類の音響検出 | `behavior_status` |
+| Emotion Features | **v2** | 10-20秒 | 4感情認識 | `emotion_status` |
+
+**処理の流れ:**
+1. DBステータスを `processing` に更新
+2. 実際の処理を実行（5分でも10分でもOK）
+3. DBに結果を保存 + ステータスを `completed` に更新
+4. SQS `feature-completed-queue` に完了通知を送信
+
+#### 🔍 完了チェックフェーズ
+
+**Lambda: aggregator-checker** がトリガーされる:
+- トリガー: SQS `feature-completed-queue`
+- 処理内容:
+  1. `spot_features` テーブルから3つのステータスを確認
+  2. 全て `completed` なら → Aggregator/Profiler実行
+  3. まだ完了していないものがあれば → 何もせず終了（次の完了通知で再チェック）
 
 #### 📊 集計フェーズ (5-10秒)
 
@@ -417,6 +487,11 @@ ORDER BY recorded_at ASC
 - `local_date`: デバイスのタイムゾーンに基づいたローカル日付（**NULL許容** - 一部レガシーデータ対応）
 - `created_at`, `updated_at`: タイムスタンプ
 
+**spot_featuresの追加カラム（2025-12-10 イベント駆動型対応）**:
+- `vibe_status`: Vibe処理ステータス（`pending` / `processing` / `completed` / `failed`）
+- `behavior_status`: Behavior処理ステータス（`pending` / `processing` / `completed` / `failed`）
+- `emotion_status`: Emotion処理ステータス（`pending` / `processing` / `completed` / `failed`）
+
 **⚠️ データ型の重要な注意事項**:
 - `device_id`: PostgreSQLでは`uuid`型だが、API層では文字列として送受信可能（自動変換）
 - `local_date`, `recorded_at`: 一部古いデータで`NULL`が存在する可能性あり（iOSアプリ側でオプショナル処理必須）
@@ -445,31 +520,58 @@ ORDER BY recorded_at ASC
 
 ## 🔧 Lambda関数
 
+### Spot分析用（イベント駆動型）
+
+| 関数名 | トリガー | 役割 | タイムアウト | 状態 |
+|--------|---------|------|------------|------|
+| **audio-processor** | S3イベント | 3つのSQSキューに並列送信 | 10秒 | ✅ 稼働中 |
+| **asr-worker** | SQS: asr-queue | Vibe Transcriber API呼び出し | 30秒 | ✅ 稼働中 |
+| **sed-worker** | SQS: sed-queue | Behavior Features API呼び出し | 30秒 | ✅ 稼働中 |
+| **ser-worker** | SQS: ser-queue | Emotion Features API呼び出し | 30秒 | ✅ 稼働中 |
+| **aggregator-checker** | SQS: feature-completed-queue | 3つ完了後にAggregator/Profiler実行 | 5分 | ✅ 稼働中 |
+
+### Daily/Weekly分析用
+
 | 関数名 | トリガー | 役割 | タイムアウト |
 |--------|---------|------|------------|
-| audio-processor | S3イベント | SQS送信 | 10秒 |
-| audio-worker | SQS | Feature Extractors並列実行 | 15分 |
-| dashboard-summary-worker | SQS | Daily集計実行 | 15分 |
-| dashboard-analysis-worker | SQS | Daily LLM分析実行 | 15分 |
+| dashboard-summary-worker | SQS: dashboard-summary-queue | Daily集計実行 | 15分 |
+| dashboard-analysis-worker | SQS: dashboard-analysis-queue | Daily LLM分析実行 | 15分 |
 | weekly-profile-worker | EventBridge (毎日00:00) | Weekly集計・分析実行 | 15分 |
 
-### API呼び出しチェーン
+### SQSキュー一覧
 
-**audio-worker** → 以下を並列実行:
-- `https://api.hey-watch.me/behavior-analysis/features/fetch-and-process-paths`
-- `https://api.hey-watch.me/emotion-analysis/features/process/emotion-features`
-- `https://api.hey-watch.me/vibe-analysis/transcription/fetch-and-transcribe`
+| キュー名 | 用途 | トリガー元 | 処理先 |
+|---------|------|----------|--------|
+| **watchme-asr-queue** | ASR処理キュー | audio-processor | asr-worker |
+| **watchme-sed-queue** | SED処理キュー | audio-processor | sed-worker |
+| **watchme-ser-queue** | SER処理キュー | audio-processor | ser-worker |
+| **watchme-feature-completed-queue** | 完了通知キュー | 各EC2 API | aggregator-checker |
+| watchme-dashboard-summary-queue | Daily集計キュー | aggregator-checker | dashboard-summary-worker |
+| watchme-dashboard-analysis-queue | Daily分析キュー | dashboard-summary-worker | dashboard-analysis-worker |
 
-↓ 完了後
+### API呼び出しチェーン（イベント駆動型）
 
+**audio-processor**:
+- `watchme-asr-queue` にメッセージ送信
+- `watchme-sed-queue` にメッセージ送信
+- `watchme-ser-queue` にメッセージ送信
+
+**asr-worker / sed-worker / ser-worker**:
+- `https://api.hey-watch.me/vibe-analysis/transcriber/async-process` (202 Accepted)
+- `https://api.hey-watch.me/behavior-analysis/features/async-process` (202 Accepted)
+- `https://api.hey-watch.me/emotion-analysis/feature-extractor/async-process` (202 Accepted)
+
+**EC2 API (バックグラウンド処理完了後)**:
+- `watchme-feature-completed-queue` に完了通知送信
+
+**aggregator-checker** (3つ全て completed の場合):
 - `https://api.hey-watch.me/aggregator/spot`
-
-↓ 完了後
-
 - `https://api.hey-watch.me/profiler/spot-profiler`
+- `watchme-dashboard-summary-queue` にメッセージ送信
 
 **dashboard-summary-worker**:
 - `https://api.hey-watch.me/aggregator/daily`
+- `watchme-dashboard-analysis-queue` にメッセージ送信
 
 **dashboard-analysis-worker**:
 - `https://api.hey-watch.me/profiler/daily-profiler`
@@ -484,15 +586,20 @@ ORDER BY recorded_at ASC
 
 全サービスはEC2上のDockerコンテナとして稼働。
 
-| カテゴリ | サービス | ポート | 役割 |
-|---------|---------|--------|------|
-| **ゲートウェイ** | Vault API | 8000 | S3音声ファイル配信 |
-| **音声処理** | Behavior Features | 8017 | 527種類の音響検出 |
-| | Emotion Features | 8018 | 8感情認識 |
-| | Vibe Transcriber | 8013 | Groq Whisper v3文字起こし |
-| **集計・分析** | Aggregator API | 8011 | Spot/Daily集計 |
-| | Profiler API | 8051 | Spot/Daily LLM分析 |
-| **管理** | Janitor | 8030 | 音声データ自動削除 |
+| カテゴリ | サービス | バージョン | ポート | 役割 |
+|---------|---------|-----------|--------|------|
+| **ゲートウェイ** | Vault API | - | 8000 | S3音声ファイル配信 |
+| **音声処理** | Behavior Features | **v2** | 8017 | 527種類の音響検出 |
+| | Emotion Features | **v2** | 8018 | 8感情認識 |
+| | Vibe Transcriber | **v2** | 8013 | Groq Whisper v3文字起こし |
+| **集計・分析** | Aggregator API | - | 8011 | Spot/Daily集計 |
+| | Profiler API | - | 8051 | Spot/Daily LLM分析 |
+| **管理** | Janitor | - | 8030 | 音声データ自動削除 |
+
+**⚠️ 重要: 本番稼働中のAPIバージョン**
+- **Vibe Transcriber**: `/api/vibe-analysis/transcriber-v2`
+- **Behavior Features**: `/api/behavior-analysis/feature-extractor-v2`
+- **Emotion Features**: `/api/emotion-analysis/feature-extractor-v2`
 
 ---
 
@@ -527,25 +634,139 @@ ORDER BY recorded_at ASC
 
 ## 🔄 SQSリトライメカニズム
 
+### 仕組み概要
+
+SQS（Simple Queue Service）は、メッセージ処理の信頼性を保証するため、**可視性タイムアウト**と**自動リトライ**機能を提供します。
+
+### 処理フロー
+
 ```
-メッセージ受信
+1. Lambda Workerがキューからメッセージを受信
   ↓
-処理実行
+2. メッセージが「InFlight」状態になる（他のWorkerから見えなくなる）
   ↓
-成功? → メッセージ削除 → 完了
-  ↓ 失敗
-可視性タイムアウト（15分）
+3. Lambda WorkerがEC2 APIを呼び出し
   ↓
-リトライ回数 < 3回? → 再度キューに戻る
-  ↓ 3回失敗
-デッドレターキュー（DLQ）へ移動
+  ┌─────────────────────────────────────┐
+  │ 【成功パターン】                     │
+  │ EC2 APIが202 Acceptedを返す         │
+  │   ↓                                 │
+  │ Lambda Workerがメッセージを削除      │
+  │   ↓                                 │
+  │ 完了（キューから消える）             │
+  └─────────────────────────────────────┘
+
+  ┌─────────────────────────────────────┐
+  │ 【失敗パターン】                     │
+  │ EC2 APIがタイムアウト/エラー         │
+  │   ↓                                 │
+  │ Lambda Workerがメッセージを削除しない│
+  │   ↓                                 │
+  │ 可視性タイムアウト（15分）経過       │
+  │   ↓                                 │
+  │ メッセージが再び「Available」に戻る  │
+  │   ↓                                 │
+  │ 別のLambda Workerが再度受信          │
+  │   ↓                                 │
+  │ リトライ回数 < 3回?                 │
+  │   ├─ YES → 再処理                   │
+  │   └─ NO  → DLQ（デッドレターキュー）│
+  └─────────────────────────────────────┘
 ```
 
-**設定値**:
-- 可視性タイムアウト: 15分
-- 最大リトライ回数: 3回
-- メッセージ保持期間: 14日
-- DLQ保持期間: 14日
+### 重要な仕組み
+
+#### 1. **可視性タイムアウト（Visibility Timeout）**
+
+- **設定値**: 15分
+- **意味**: メッセージを受信したLambda Workerが処理を完了するまでの猶予時間
+- **動作**:
+  - メッセージ受信後、15分間は他のWorkerから見えなくなる
+  - 15分以内に削除されなければ、自動的にキューに戻る
+  - **EC2 API停止時**: タイムアウトで処理失敗 → 15分後に自動的にキューに戻る → EC2復旧後に自動的に再処理される
+
+#### 2. **InFlight状態**
+
+- **意味**: 現在処理中のメッセージ数
+- **確認方法**: `ApproximateNumberOfMessagesNotVisible`
+- **例**: `"InFlight: 24"` = 24件のメッセージが現在Lambda Workerで処理中
+
+#### 3. **自動リトライ**
+
+- **最大リトライ回数**: 3回
+- **動作**:
+  - 1回目失敗 → 15分後に2回目
+  - 2回目失敗 → 15分後に3回目
+  - 3回目失敗 → DLQ（デッドレターキュー）に移動
+- **メリット**: EC2の一時的な障害（コンテナunhealthy、再起動など）でも自動復旧
+
+#### 4. **デッドレターキュー（DLQ）**
+
+- **用途**: 3回リトライしても処理できなかったメッセージを保存
+- **保持期間**: 14日
+- **確認方法**: AWS SQSコンソールでDLQのメッセージ数を確認
+- **対処**: 手動で原因調査、必要に応じて再処理
+
+### 実際の動作例（2025-12-12の障害時）
+
+```
+09:30 - EC2 Emotion APIがunhealthyに
+  ↓
+09:30-11:45 - 録音が続き、SQSにメッセージが溜まる
+  ↓
+  Lambda Worker → EC2 API呼び出し → タイムアウト（30秒）
+  ↓
+  メッセージ削除されず → 15分後に自動的にキューに戻る
+  ↓
+  再度Lambda Worker起動 → 再びタイムアウト → またキューに戻る
+  ↓
+03:00 - EC2コンテナ再起動（healthy復旧）
+  ↓
+  キューに戻っていたメッセージを自動的に再処理開始
+  ↓
+  Lambda Worker → EC2 API → 202 Accepted → メッセージ削除
+  ↓
+  24件のメッセージを順次処理（約10-30分で完了）
+```
+
+### 設定値
+
+| 項目 | 設定値 | 説明 |
+|------|--------|------|
+| **可視性タイムアウト** | 15分 | メッセージ受信後、削除されなければキューに戻る時間 |
+| **最大リトライ回数** | 3回 | 自動リトライの上限 |
+| **メッセージ保持期間** | 14日 | キュー内のメッセージが保持される期間 |
+| **DLQ保持期間** | 14日 | デッドレターキュー内のメッセージが保持される期間 |
+| **Lambda Workerタイムアウト** | 30秒 | Lambda関数の実行制限時間 |
+
+### 監視コマンド
+
+```bash
+# SQSキューの状態確認
+aws sqs get-queue-attributes \
+  --queue-url https://sqs.ap-southeast-2.amazonaws.com/754724220380/watchme-sed-queue \
+  --attribute-names All \
+  --region ap-southeast-2 \
+  | jq -r '.Attributes | "Available: \(.ApproximateNumberOfMessages), InFlight: \(.ApproximateNumberOfMessagesNotVisible)"'
+
+# Lambda Workerのログ確認
+aws logs tail /aws/lambda/watchme-sed-worker --since 10m --format short
+
+# DLQの確認
+aws sqs get-queue-attributes \
+  --queue-url https://sqs.ap-southeast-2.amazonaws.com/754724220380/watchme-sed-dlq \
+  --attribute-names ApproximateNumberOfMessages \
+  --region ap-southeast-2
+```
+
+### トラブルシューティング
+
+| 症状 | 原因 | 対処 |
+|------|------|------|
+| InFlightが増え続ける | EC2 APIがタイムアウト | EC2のコンテナ状態確認、再起動 |
+| DLQにメッセージが溜まる | 3回リトライしても失敗 | DLQのメッセージを確認、根本原因修正後に手動再処理 |
+| Availableが増え続ける | Lambda Workerが起動していない | Lambda関数のトリガー設定確認 |
+| 処理が遅い | 可視性タイムアウトが長すぎる | 設定値を短縮（ただし処理時間より長く設定する必要あり） |
 
 ---
 
@@ -619,6 +840,16 @@ weekly_results テーブル (UPSERT)
 
 ## 🚀 完了機能
 
+### 2025-12-11 🎯 **イベント駆動型アーキテクチャへ移行完了**
+- ✅ **SQSキュー作成** - 4つの新規キュー（asr/sed/ser/feature-completed）
+- ✅ **Lambda関数作成** - 4つの新規Lambda（asr-worker/sed-worker/ser-worker/aggregator-checker）
+- ✅ **EC2 API非同期化** - 3つのAPIに `/async-process` エンドポイント追加
+- ✅ **DBステータス管理** - spot_featuresに3つのステータスカラム追加
+- ✅ **audio-processor修正** - 3つのSQSキューへ並列送信
+- ✅ **旧audio-worker削除** - 同期処理からイベント駆動型へ完全移行
+- ✅ **タイムアウト問題解決** - Cloudflare 100秒制限を完全回避
+- ✅ **動作確認完了** - 全APIが2秒以内で202 Acceptedを返却
+
 ### 2025-11-20
 - ✅ **Weekly分析パイプライン** - 1週間分の累積分析（毎日00:00自動実行）
 - ✅ **EventBridge自動トリガー** - 毎日00:00にweekly-profile-worker実行
@@ -647,3 +878,4 @@ weekly_results テーブル (UPSERT)
 - Monthly分析パイプライン
 - CloudWatch監視ダッシュボード
 - Step Functions導入（ワークフロー可視化）
+- 旧audio-worker Lambda関数の完全削除
