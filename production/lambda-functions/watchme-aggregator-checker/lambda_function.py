@@ -67,6 +67,9 @@ def lambda_handler(event, context):
                     if agg_response.status_code == 200:
                         print(f"Aggregator completed successfully")
 
+                        # ✅ UPDATE spot_aggregators.aggregator_status to 'completed'
+                        update_aggregator_status(device_id, recorded_at, "completed")
+
                         # Call Profiler API
                         try:
                             prof_response = requests.post(
@@ -83,21 +86,21 @@ def lambda_handler(event, context):
                                 prof_data = prof_response.json()
                                 print(f"Vibe Score: {prof_data.get('vibe_score')}")
 
-                                # ✅ UPDATE aggregator_status to 'completed'
-                                update_aggregator_status(device_id, recorded_at, "completed")
+                                # ✅ UPDATE spot_results.profiler_status to 'completed'
+                                update_profiler_status(device_id, recorded_at, "completed")
 
                                 # Trigger dashboard summary
                                 trigger_dashboard_summary(device_id, recorded_at)
 
                             else:
                                 print(f"Profiler failed: {prof_response.status_code}")
-                                # ❌ UPDATE aggregator_status to 'failed'
-                                update_aggregator_status(device_id, recorded_at, "failed")
+                                # ❌ UPDATE spot_results.profiler_status to 'failed'
+                                update_profiler_status(device_id, recorded_at, "failed")
 
                         except Exception as e:
                             print(f"Profiler API error: {str(e)}")
-                            # ❌ UPDATE aggregator_status to 'failed'
-                            update_aggregator_status(device_id, recorded_at, "failed")
+                            # ❌ UPDATE spot_results.profiler_status to 'failed'
+                            update_profiler_status(device_id, recorded_at, "failed")
 
                     else:
                         print(f"Aggregator failed: {agg_response.status_code}")
@@ -159,11 +162,11 @@ def get_feature_statuses(device_id: str, recorded_at: str) -> dict:
 
 def update_aggregator_status(device_id: str, recorded_at: str, status: str):
     """
-    Update aggregator_status in spot_features table
+    Update aggregator_status in spot_aggregators table
     """
     try:
         response = requests.patch(
-            f"{SUPABASE_URL}/rest/v1/spot_features",
+            f"{SUPABASE_URL}/rest/v1/spot_aggregators",
             params={
                 "device_id": f"eq.{device_id}",
                 "recorded_at": f"eq.{recorded_at}"
@@ -181,12 +184,44 @@ def update_aggregator_status(device_id: str, recorded_at: str, status: str):
         )
 
         if response.status_code in [200, 204]:
-            print(f"✅ aggregator_status updated to '{status}' for {device_id}/{recorded_at}")
+            print(f"✅ spot_aggregators.aggregator_status updated to '{status}' for {device_id}/{recorded_at}")
         else:
-            print(f"❌ Failed to update aggregator_status: {response.status_code}")
+            print(f"❌ Failed to update spot_aggregators.aggregator_status: {response.status_code}")
 
     except Exception as e:
-        print(f"Error updating aggregator_status: {str(e)}")
+        print(f"Error updating spot_aggregators.aggregator_status: {str(e)}")
+
+
+def update_profiler_status(device_id: str, recorded_at: str, status: str):
+    """
+    Update profiler_status in spot_results table
+    """
+    try:
+        response = requests.patch(
+            f"{SUPABASE_URL}/rest/v1/spot_results",
+            params={
+                "device_id": f"eq.{device_id}",
+                "recorded_at": f"eq.{recorded_at}"
+            },
+            json={
+                "profiler_status": status
+            },
+            headers={
+                "apikey": SUPABASE_KEY,
+                "Authorization": f"Bearer {SUPABASE_KEY}",
+                "Content-Type": "application/json",
+                "Prefer": "return=minimal"
+            },
+            timeout=10
+        )
+
+        if response.status_code in [200, 204]:
+            print(f"✅ spot_results.profiler_status updated to '{status}' for {device_id}/{recorded_at}")
+        else:
+            print(f"❌ Failed to update spot_results.profiler_status: {response.status_code}")
+
+    except Exception as e:
+        print(f"Error updating spot_results.profiler_status: {str(e)}")
 
 
 def trigger_dashboard_summary(device_id: str, recorded_at: str):
