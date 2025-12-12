@@ -9,11 +9,14 @@ API_BASE_URL = os.environ.get('API_BASE_URL', 'https://api.hey-watch.me')
 SUPABASE_URL = os.environ.get('SUPABASE_URL', 'https://qvtlwotzuzbavrzqhyvt.supabase.co')
 SUPABASE_KEY = os.environ.get('SUPABASE_KEY', '')
 
-# APNs Token-based authentication (supports both Production & Sandbox automatically)
-SNS_PLATFORM_APP_ARN = 'arn:aws:sns:ap-southeast-2:754724220380:app/APNS/watchme-ios-app-token'
+# APNs Platform Applications (Production & Sandbox)
+SNS_PLATFORM_APP_ARN_PRODUCTION = 'arn:aws:sns:ap-southeast-2:754724220380:app/APNS/watchme-ios-app-token'
+SNS_PLATFORM_APP_ARN_SANDBOX = 'arn:aws:sns:ap-southeast-2:754724220380:app/APNS_SANDBOX/watchme-ios-app-token-sandbox'
 APNS_KEY = 'APNS'
 
-print(f"[APNS] Using token-based authentication (Production & Sandbox auto-detection)")
+print(f"[APNS] Using token-based authentication with environment detection")
+print(f"[APNS] Production ARN: {SNS_PLATFORM_APP_ARN_PRODUCTION}")
+print(f"[APNS] Sandbox ARN: {SNS_PLATFORM_APP_ARN_SANDBOX}")
 
 # SNSクライアント
 sns_client = boto3.client('sns', region_name='ap-southeast-2')
@@ -211,14 +214,14 @@ def send_push_notification(device_id, local_date, recorded_at):
     try:
         print(f"[PUSH] Starting push notification for device: {device_id}, local_date: {local_date}, recorded_at: {recorded_at}")
 
-        # 1. SupabaseからユーザーのAPNsトークンを取得
-        apns_token = get_user_apns_token(device_id)
+        # 1. SupabaseからユーザーのAPNsトークンと環境を取得
+        apns_token, apns_environment = get_user_apns_token(device_id)
 
         if not apns_token:
             print(f"[PUSH] No APNs token found for device: {device_id}")
             return False
 
-        print(f"[PUSH] APNs token found: {apns_token[:20]}...")
+        print(f"[PUSH] APNs token found: {apns_token[:20]}..., environment: {apns_environment}")
 
         # 2. 観測対象名（Subject名）を取得
         subject_name = get_subject_name_for_device(device_id)
@@ -232,8 +235,8 @@ def send_push_notification(device_id, local_date, recorded_at):
             body_text = f"デバイス {device_id_short} の{local_date}のデータ分析が完了しました✨"
             print(f"[PUSH] Daily analysis notification for device: {device_id_short}, date: {local_date}")
 
-        # 4. SNS Platform Endpointを作成または取得
-        endpoint_arn = create_or_update_endpoint(device_id, apns_token)
+        # 4. SNS Platform Endpointを作成または取得（環境に応じたPlatform Applicationを使用）
+        endpoint_arn = create_or_update_endpoint(device_id, apns_token, apns_environment)
 
         if not endpoint_arn:
             print(f"[PUSH] Failed to create/update SNS endpoint")
@@ -301,8 +304,9 @@ def send_push_notification(device_id, local_date, recorded_at):
 
 def get_user_apns_token(device_id):
     """
-    device_idからユーザーIDを取得し、そのユーザーのAPNsトークンを取得
+    device_idからユーザーIDを取得し、そのユーザーのAPNsトークンと環境を取得
     2段階クエリで確実に取得
+    Returns: (apns_token, apns_environment) or (None, None)
     """
     try:
         headers = {
@@ -339,14 +343,14 @@ def get_user_apns_token(device_id):
 
         print(f"[PUSH] Found {len(user_ids)} user(s) for device: {user_ids}")
 
-        # Step 2: 各ユーザーのAPNsトークンを取得（最初に見つかったものを返す）
+        # Step 2: 各ユーザーのAPNsトークンと環境を取得（最初に見つかったものを返す）
         for user_id in user_ids:
             print(f"[PUSH] Step 2: Getting APNs token for user: {user_id}")
             response = requests.get(
                 f"{SUPABASE_URL}/rest/v1/users",
                 params={
                     'user_id': f'eq.{user_id}',
-                    'select': 'apns_token'
+                    'select': 'apns_token,apns_environment'
                 },
                 headers=headers,
                 timeout=10
@@ -362,14 +366,16 @@ def get_user_apns_token(device_id):
                 continue
 
             apns_token = user_data[0].get('apns_token')
+            apns_environment = user_data[0].get('apns_environment', 'production')  # Default to production
+
             if apns_token:
-                print(f"[PUSH] ✅ APNs token found for user: {user_id}, token: {apns_token[:20]}...")
-                return apns_token
+                print(f"[PUSH] ✅ APNs token found for user: {user_id}, token: {apns_token[:20]}..., environment: {apns_environment}")
+                return (apns_token, apns_environment)
             else:
                 print(f"[PUSH] No APNs token for user: {user_id}, checking next user...")
 
         print(f"[PUSH] No APNs token found for any user of device: {device_id}")
-        return None
+        return (None, None)
 
     except Exception as e:
         print(f"[PUSH] Error fetching APNs token: {str(e)}")
@@ -457,21 +463,30 @@ def get_subject_name_for_device(device_id):
         return None
 
 
-def create_or_update_endpoint(device_id, apns_token):
+def create_or_update_endpoint(device_id, apns_token, apns_environment='production'):
     """
     SNS Platform Endpointを作成または更新
     既存Endpointとの属性不一致がある場合は削除してから再作成
 
     注意：device_idは観測対象デバイス（音声録音機器）のIDであり、
     iPhoneのデバイスIDではない。CustomUserDataには使用しない。
+
+    Args:
+        device_id: 観測対象デバイスID
+        apns_token: APNsトークン
+        apns_environment: 'production' or 'sandbox'
     """
     try:
+        # 環境に応じたPlatform Application ARNを選択
+        platform_arn = SNS_PLATFORM_APP_ARN_SANDBOX if apns_environment == 'sandbox' else SNS_PLATFORM_APP_ARN_PRODUCTION
+        print(f"[PUSH] Using Platform Application: {platform_arn} (environment: {apns_environment})")
+
         # CustomUserDataは使用しない（観測対象デバイスが複数あるため、
         # device_idごとに異なる値を設定すると属性エラーが発生する）
 
         # Endpointを作成
         response = sns_client.create_platform_endpoint(
-            PlatformApplicationArn=SNS_PLATFORM_APP_ARN,
+            PlatformApplicationArn=platform_arn,
             Token=apns_token
         )
 
@@ -501,7 +516,7 @@ def create_or_update_endpoint(device_id, apns_token):
 
                         # 新しいEndpointを作成（CustomUserDataなし）
                         response = sns_client.create_platform_endpoint(
-                            PlatformApplicationArn=SNS_PLATFORM_APP_ARN,
+                            PlatformApplicationArn=platform_arn,
                             Token=apns_token
                         )
 
