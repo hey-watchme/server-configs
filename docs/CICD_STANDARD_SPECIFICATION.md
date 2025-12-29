@@ -253,6 +253,13 @@ curl http://localhost:{port}/health
 
 ### Dockerイメージビルド
 
+**🚨 必須設定項目チェックリスト:**
+
+- [ ] `--platform linux/arm64` を指定（EC2はGraviton2/ARM64）
+- [ ] `--no-cache` を指定（キャッシュ問題を防ぐ）
+- [ ] フロントエンドの場合: `ENV NODE_ENV=production` をDockerfileに追加
+- [ ] 既存のコンテナとイメージを完全削除してから起動
+
 ```yaml
 - name: Delete old images from ECR (optional but recommended)
   run: |
@@ -267,7 +274,7 @@ curl http://localhost:{port}/health
     IMAGE_TAG: ${{ github.sha }}
   run: |
     docker buildx build \
-      --platform linux/arm64 \
+      --platform linux/arm64 \  # ★必須：EC2はARM64
       --no-cache \              # ★必須：キャッシュを無効化
       --push \
       -f Dockerfile \
@@ -275,6 +282,19 @@ curl http://localhost:{port}/health
       -t $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:latest \
       .
 ```
+
+**フロントエンド（React/Vue/Vite等）の追加要件:**
+
+```dockerfile
+# Dockerfile内で必ず設定
+ENV NODE_ENV=production  # ★必須：本番ビルドを有効化
+RUN npm run build
+```
+
+**理由:**
+- `NODE_ENV=production` がないと、`vite.config.js` の `base` 設定が正しく適用されない
+- キャッシュを使うと、古いビルド成果物が残る
+- ARM64を指定しないと、AMD64イメージがビルドされEC2で動作しない
 
 ### 環境変数の確認
 
@@ -284,23 +304,50 @@ grep -r "os.getenv\|os.environ" main.py app.py
 
 **重要**: GitHub Secretsはコンテナに自動的に渡されない。.envファイルに明示的に書き込む必要がある
 
-### デプロイスクリプト（run-prod.sh）
+### デプロイスクリプト（GitHub Actions内で実行）
+
+**🚨 必須：完全削除＋再作成方式**
 
 ```bash
-# 1. ECRから強制pull
+# 1. 既存のコンテナを停止・削除（新旧両方）
+docker stop {new-container-name} || true
+docker rm {new-container-name} || true
+docker stop {old-container-name} || true  # 旧コンテナ名がある場合
+docker rm {old-container-name} || true
+
+# 2. 古いイメージも削除（キャッシュ問題を防ぐ）
+docker rmi {ECR-URI}:latest || true
+
+# 3. ECRから最新イメージをプル
 docker pull --platform linux/arm64 {ECR-URI}:latest
 
-# 2. 既存コンテナ削除
-docker-compose -f docker-compose.prod.yml down || true
+# 4. Docker networkが存在しない場合は作成
+docker network create watchme-network 2>/dev/null || true
 
-# 3. 新規起動
-docker-compose -f docker-compose.prod.yml up -d
+# 5. 新しいコンテナを起動
+docker run -d \
+  --name {container-name} \
+  --network watchme-network \
+  -p {port}:{port} \
+  --restart unless-stopped \
+  {ECR-URI}:latest
 
-# 4. ヘルスチェック
-curl -f http://localhost:{port}/health
+# 6. ヘルスチェック（最大60秒間リトライ）
+sleep 5
+for i in {1..12}; do
+  if docker ps | grep {container-name}; then
+    echo "✅ Container started successfully"
+    break
+  fi
+  echo "Waiting for container... ($i/12)"
+  sleep 5
+done
 ```
 
-**注意**: `docker system prune -a -f` は使用禁止（全イメージを削除してしまう）
+**注意事項:**
+- ❌ `docker system prune -a -f` は使用禁止（全イメージを削除してしまう）
+- ✅ 必ず `docker rmi` で特定のイメージのみ削除
+- ✅ 旧コンテナ名がある場合は、両方削除する
 
 ### Dockerfile
 
@@ -429,13 +476,15 @@ done
 
 ## トラブルシューティング
 
-| 症状 | 対処法 |
-|-----|-------|
-| デプロイ成功するが動作しない | ECRリポジトリ名を全ファイルで統一 |
-| 環境変数が読まれない | .envファイルに `echo "VAR=${VAR}"` で書き込み |
-| 古いコードが動いている | Dockerビルドに `--no-cache` 追加 |
-| コンテナ名が競合 | `docker rm -f {name}` で削除 |
-| コンテナ起動直後にクラッシュ | `docker logs {name}` で環境変数不足を確認 |
+| 症状 | 原因 | 対処法 |
+|-----|------|-------|
+| **デプロイ成功するが古いコードが動く** | ❌ `--no-cache` 未設定 | Dockerビルドに `--no-cache` 追加 |
+| **フロントエンドが真っ白** | ❌ `NODE_ENV=production` 未設定 | Dockerfileに `ENV NODE_ENV=production` 追加 |
+| **コンテナが起動しない（ARM64エラー）** | ❌ `--platform linux/arm64` 未設定 | ビルドに `--platform linux/arm64` 追加 |
+| **古いイメージが残る** | ❌ イメージ削除なし | デプロイ前に `docker rmi {URI}:latest` 実行 |
+| **環境変数が読まれない** | .envファイル未作成 | .envファイルに `echo "VAR=${VAR}"` で書き込み |
+| **コンテナ名が競合** | 旧コンテナ削除忘れ | `docker stop/rm` で新旧両方削除 |
+| **ECRリポジトリ名が違う** | 設定ファイル間で不一致 | 全ファイルでECRリポジトリ名を統一 |
 
 ### 環境変数不足エラー
 
