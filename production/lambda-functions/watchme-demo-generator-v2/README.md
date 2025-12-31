@@ -1,13 +1,13 @@
 # watchme-demo-generator-v2
 
-デモアカウント用のSpotデータ生成Lambda関数（V2 - シンプル版）
+デモアカウント用のSpot & Daily分析データ生成Lambda関数（V2.1）
 
 ## 概要
 
-- **目的**: デモアカウントのリアルなSpotデータを1時間ごとに生成
+- **目的**: デモアカウントのリアルなSpot & Dailyデータを1時間ごとに生成
 - **データ形式**: Profiler APIの出力フォーマットに準拠
-- **実行頻度**: 1時間ごと（EventBridge Scheduler）
-- **対象テーブル**: `spot_results`
+- **実行頻度**: 1時間ごとに自動実行（EventBridge Scheduler）
+- **対象テーブル**: `spot_results`, `daily_results`
 
 ## アーキテクチャ
 
@@ -15,8 +15,9 @@
 EventBridge Scheduler (1時間ごと)
     ↓
 Lambda: watchme-demo-generator-v2
-    ↓ (HTTP POST)
-Supabase: spot_results テーブル
+    ↓ (HTTP POST - UPSERT)
+Supabase: spot_results テーブル（新規レコード）
+Supabase: daily_results テーブル（累積更新）
 ```
 
 ## 生成データ
@@ -34,6 +35,9 @@ Supabase: spot_results テーブル
 
 ### データ形式（Profiler API準拠）
 
+#### Spot分析（spot_results）
+毎時1レコードを新規作成
+
 ```json
 {
   "device_id": "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
@@ -44,12 +48,32 @@ Supabase: spot_results テーブル
   "emotion": "集中, 喜び",
   "local_date": "2025-12-31",
   "local_time": "2025-12-31T10:00:00+09:00",
-  "profile_result": {
-    "vibe_score": 40,
-    "summary": "午前の活動。お絵かきと工作に夢中になっている。",
-    "behavior": "お絵かき, 工作",
-    "emotion": "集中, 喜び"
-  },
+  "profile_result": {...},
+  "llm_model": "demo-generator-v2"
+}
+```
+
+#### Daily分析（daily_results）
+同一日付のレコードを1時間ごとに上書き（UPSERT）
+
+```json
+{
+  "device_id": "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
+  "local_date": "2025-12-31",
+  "vibe_score": 26.5,
+  "summary": "午後17時。マインクラフトで大きなお城を建築中...",
+  "vibe_scores": [
+    {"time": "2025-12-31T00:00", "score": -5},
+    {"time": "2025-12-31T01:00", "score": -3},
+    ...
+    {"time": "2025-12-31T17:00", "score": 69}
+  ],
+  "burst_events": [
+    {"time": "07:00", "event": "元気に目が覚めて、1日が始まった", "score_change": 20},
+    {"time": "08:00", "event": "パンケーキを食べて嬉しそう", "score_change": 15},
+    ...
+  ],
+  "processed_count": 18,
   "llm_model": "demo-generator-v2"
 }
 ```
@@ -161,16 +185,24 @@ aws lambda get-function-configuration \
 - EventBridge Schedulerが有効か確認
 - Lambda実行権限が付与されているか確認
 
-## 拡張予定
+## 実装済み機能
 
-### Phase 2（今後）
+- ✅ Spot分析データの24時間パターン生成
+- ✅ Daily分析データの累積生成（UPSERT）
+- ✅ burst_eventsの時刻ごと累積
+- ✅ vibe_scoresの時系列配列（ISO 8601形式）
+- ✅ Supabase UPSERT対応（`Prefer: resolution=merge-duplicates`）
+
+## 今後の拡張予定
+
+### Phase 3（今後）
 - [ ] 複数パターン（5種類）に拡張
 - [ ] 曜日考慮（平日/週末）
 - [ ] ランダム性の向上
 
-### Phase 3（将来）
+### Phase 4（将来）
 - [ ] 複数ペルソナ対応
-- [ ] Daily分析データの生成
+- [ ] Weekly分析データの生成
 - [ ] 季節変動の実装
 
 ## 関連ドキュメント
@@ -181,7 +213,13 @@ aws lambda get-function-configuration \
 
 ## 更新履歴
 
-- **2025-12-31**: 初回リリース（V2）
+- **2025-12-31 (V2.1)**: Daily分析対応
+  - Daily分析データの生成機能を追加
+  - burst_eventsのフィールド名修正（`vibe_change` → `score_change`）
+  - vibe_scoresの時刻フォーマット修正（ISO 8601形式）
+  - Supabase UPSERT対応（`resolution=merge-duplicates`）
+
+- **2025-12-31 (V2.0)**: 初回リリース
   - Spot分析専用に簡素化
   - requestsのみで実装（Supabase SDK不使用）
   - 24時間パターンのリアルなデータ作成
