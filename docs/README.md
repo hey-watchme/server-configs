@@ -149,7 +149,7 @@ Profiler API (/profiler/weekly-profiler)
 | Avatar Uploader | 8014 | アバター画像管理 |
 | **QR Code Generator** | **8021** | **デバイス共有用QRコード生成** |
 | Janitor | 8030 | 音声データ自動削除（6時間ごと） |
-| Demo Generator | 8020 | デモデータ生成（30分ごと） |
+| ~~Demo Generator~~ | ~~8020~~ | ~~デモデータ生成（30分ごと）~~ ⚠️ 廃止予定 |
 
 ### AWS Lambda
 
@@ -164,7 +164,18 @@ Profiler API (/profiler/weekly-profiler)
 | dashboard-analysis-worker | SQS: dashboard-analysis-queue | Daily Profiler実行、プッシュ通知送信 | ✅ 稼働中 |
 | weekly-profile-worker | EventBridge (毎日00:00 UTC+9) | Weekly Aggregator + Profiler実行 | ✅ 稼働中 |
 | janitor-trigger | EventBridge (6時間ごと) | Janitor API実行 | ✅ 稼働中 |
-| demo-generator-trigger | EventBridge (30分ごと) | デモデータ生成 | ✅ 稼働中 |
+| ~~demo-generator-trigger~~ | ~~EventBridge (30分ごと)~~ | ~~デモデータ生成~~ | ⚠️ 廃止済み（V2に移行） |
+| **demo-generator-v2** | **EventBridge Scheduler (1時間ごと)** | **デモアカウントSpotデータ生成** | 🚀 **稼働準備中** |
+
+---
+
+## 📱 デモアカウント
+
+**Device ID**: `a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d`（5歳男児・幼稚園年長）
+
+- Lambda関数（demo-generator-v2）が1時間ごとにSpotデータを自動生成
+- 新規ユーザーに自動的に追加され、アプリ機能を即座に体験可能
+- 詳細: [`lambda-functions/watchme-demo-generator-v2/README.md`](../production/lambda-functions/watchme-demo-generator-v2/README.md)
 
 ---
 
@@ -268,6 +279,30 @@ curl https://api.hey-watch.me/aggregator/health
 **運用方針**:
 - DNSレコードの追加・編集はすべてCloudflare Dashboardで実施
 - お名前.com側のDNS設定（dnsv.jp）は使用しない
+
+**⚠️ 重要: Cloudflare Proxy設定（2025-12-29追記）**
+
+Cloudflareは**DNS管理とメール転送のみ**に使用し、**プロキシ機能は使用しない**こと。
+
+**DNSレコード設定:**
+- `api.hey-watch.me`: **DNS only（⚪グレー雲）** ← 必須
+- `admin.hey-watch.me`: Proxied（🟠オレンジ雲）でも可
+- `dashboard.hey-watch.me`: Proxied（🟠オレンジ雲）でも可
+
+**理由:**
+- Cloudflare Proxyを有効にすると、Lambda Worker → API のレスポンスが51秒かかり、30秒でタイムアウトする
+- DNS Onlyに変更することで、2.3秒に短縮（**22倍高速化**）
+- 2025-12-29に発覚・修正済み（DLQに1,350件蓄積していた問題を解決）
+
+**確認方法:**
+```bash
+# 正しい設定（EC2のIPが返る）
+host api.hey-watch.me 8.8.8.8
+# → api.hey-watch.me has address 3.24.16.82
+
+# 誤った設定（CloudflareのIPが返る）
+# → api.hey-watch.me has address 104.21.9.46  ← これが出たら修正必要
+```
 
 ### メール管理（Cloudflare Email Routing）
 
