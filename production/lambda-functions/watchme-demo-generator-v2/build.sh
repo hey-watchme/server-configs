@@ -20,6 +20,11 @@ pip3 install -r requirements.txt -t "${BUILD_DIR}/" --no-cache-dir
 echo "Copying Lambda function code..."
 cp lambda_function.py "${BUILD_DIR}/"
 
+# Copy data directory with proper structure
+echo "Copying data directory..."
+mkdir -p "${BUILD_DIR}/data"
+cp -r data/child_5yo_active "${BUILD_DIR}/data/"
+
 # Create ZIP file
 echo "Creating deployment package..."
 cd "${BUILD_DIR}"

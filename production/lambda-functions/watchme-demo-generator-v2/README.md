@@ -1,11 +1,12 @@
 # watchme-demo-generator-v2
 
-デモアカウント用のSpot & Daily分析データ生成Lambda関数（V2.1）
+デモアカウント用のSpot & Daily分析データ生成Lambda関数（V2.2）
 
 ## 概要
 
 - **目的**: デモアカウントのリアルなSpot & Dailyデータを1時間ごとに生成
 - **データ形式**: Profiler APIの出力フォーマットに準拠
+- **データ管理**: JSON外部ファイル化（コード変更不要でパターン編集可能）
 - **実行頻度**: 1時間ごとに自動実行（EventBridge Scheduler）
 - **対象テーブル**: `spot_results`, `daily_results`
 
@@ -82,13 +83,58 @@ Supabase: daily_results テーブル（累積更新）
 
 ```
 watchme-demo-generator-v2/
-├── lambda_function.py    # メインのLambda関数
-├── requirements.txt      # 依存関係（requests==2.31.0のみ）
-├── build.sh             # ビルドスクリプト
-├── function.zip         # デプロイパッケージ
-├── build/               # ビルド時の一時ファイル
-└── README.md            # このファイル
+├── lambda_function.py           # メインのLambda関数
+├── requirements.txt             # 依存関係（requests==2.31.0のみ）
+├── build.sh                     # ビルドスクリプト
+├── function.zip                 # デプロイパッケージ
+├── build/                       # ビルド時の一時ファイル
+├── data/                        # データパターン（JSON）
+│   └── child_5yo_active/        # 5歳男児（活発型）のパターン
+│       ├── spot_patterns.json   # Spot分析24時間パターン
+│       └── daily_patterns.json  # Daily分析24時間パターン
+└── README.md                    # このファイル
 ```
+
+## データ構造（JSON）
+
+### データディレクトリ構成
+
+各サブジェクト（ペルソナ）ごとにディレクトリを作成：
+
+```
+data/
+├── child_5yo_active/     # 現在実装済み
+│   ├── spot_patterns.json
+│   └── daily_patterns.json
+├── child_7yo_calm/       # 将来追加予定
+└── teen_13yo_creative/   # 将来追加予定
+```
+
+### JSONファイル形式
+
+**spot_patterns.json**
+```json
+{
+  "subject_id": "child_5yo_active",
+  "device_id": "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
+  "description": "5歳男児（幼稚園年長、活発型）",
+  "weekly_data": {
+    "monday": [
+      {"hour": 0, "vibe_score": 0, "summary": "...", "behavior": "...", "emotion": "..."},
+      ...24時間分
+    ],
+    "tuesday": [...],  // 将来実装
+    ...
+    "sunday": [...]    // 将来実装
+  }
+}
+```
+
+### 現在の仕様（重要）
+
+⚠️ **曜日判定は未実装** - 現在は全ての曜日で`monday`パターンを使用
+- 火曜日〜日曜日のパターンデータは未作成
+- 曜日判定ロジックはTODOコメントあり（lambda_function.py 65行目）
 
 ## ビルド・デプロイ
 
@@ -185,6 +231,27 @@ aws lambda get-function-configuration \
 - EventBridge Schedulerが有効か確認
 - Lambda実行権限が付与されているか確認
 
+## データパターンの編集方法
+
+### JSONファイルを直接編集
+
+1. データファイルを編集
+   ```bash
+   # 例：Spotパターンの10時のデータを変更
+   vim data/child_5yo_active/spot_patterns.json
+   ```
+
+2. 再ビルド・デプロイ
+   ```bash
+   ./build.sh
+   aws lambda update-function-code \
+     --function-name watchme-demo-generator-v2 \
+     --zip-file fileb://function.zip \
+     --region ap-southeast-2
+   ```
+
+3. コード変更は不要！JSONファイルのみ編集すればOK
+
 ## 実装済み機能
 
 - ✅ Spot分析データの24時間パターン生成
@@ -192,16 +259,17 @@ aws lambda get-function-configuration \
 - ✅ burst_eventsの時刻ごと累積
 - ✅ vibe_scoresの時系列配列（ISO 8601形式）
 - ✅ Supabase UPSERT対応（`Prefer: resolution=merge-duplicates`）
+- ✅ **JSON外部ファイル化** - コード変更不要でパターン編集可能
 
 ## 今後の拡張予定
 
-### Phase 3（今後）
-- [ ] 複数パターン（5種類）に拡張
-- [ ] 曜日考慮（平日/週末）
+### Phase 3（次のステップ）
+- [ ] 曜日判定ロジックの実装
+- [ ] 火曜日〜日曜日のパターンデータ作成
 - [ ] ランダム性の向上
 
 ### Phase 4（将来）
-- [ ] 複数ペルソナ対応
+- [ ] 複数ペルソナ対応（7歳児、13歳など）
 - [ ] Weekly分析データの生成
 - [ ] 季節変動の実装
 
@@ -212,6 +280,12 @@ aws lambda get-function-configuration \
 - [旧システム削除手順](../../api/demo-generator/README.md#-旧システムv1の削除手順)
 
 ## 更新履歴
+
+- **2025-12-31 (V2.2)**: JSON外部ファイル化
+  - データパターンをJSONファイルに外部化
+  - コード変更不要でパターン編集が可能に
+  - サブジェクトごとのディレクトリ構造を導入
+  - 曜日別パターンの基盤構築（現在はmondayのみ使用）
 
 - **2025-12-31 (V2.1)**: Daily分析対応
   - Daily分析データの生成機能を追加

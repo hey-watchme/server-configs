@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Demo Data Generator V2 - Spot Analysis Only
-Generates realistic demo data for spot_results table (hourly)
-Version: 2.0.0
+Demo Data Generator V2 - Spot & Daily Analysis
+Generates realistic demo data for spot_results and daily_results tables (hourly)
+Version: 2.2.0 - JSON-based data patterns
 """
 
 import os
@@ -16,6 +16,11 @@ import requests
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
+# Path to data files (Lambda compatible)
+# In Lambda, __file__ is /var/task/lambda_function.py
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(SCRIPT_DIR, "data", "child_5yo_active")
+
 # Device configuration for demo account
 DEMO_DEVICE_ID = "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d"  # 5-year-old child
 
@@ -26,16 +31,44 @@ def get_jst_now():
     return datetime.now(jst)
 
 
+def load_pattern_data(pattern_type: str) -> Dict:
+    """
+    Load pattern data from JSON file
+
+    Args:
+        pattern_type: "spot" or "daily"
+
+    Returns:
+        Dict containing pattern data
+    """
+    filename = f"{pattern_type}_patterns.json"
+    filepath = os.path.join(DATA_DIR, filename)
+
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Pattern file not found: {filepath}")
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON in {filepath}: {e}")
+
+
 def get_child_5yo_spot_pattern() -> List[Dict]:
     """
-    24-hour spot analysis pattern for 5-year-old child (hourly data points)
-    Returns 24 data points matching Profiler API output format
+    Load 24-hour spot analysis pattern from JSON file
 
-    Format matches spot_results table:
-    - vibe_score: int (-100 to 100)
-    - summary: str (Japanese description)
-    - behavior: str (comma-separated behaviors)
-    - emotion: str (comma-separated emotions)
+    Returns:
+        List of 24 hourly data points for Monday (default)
+    """
+    data = load_pattern_data("spot")
+    # For now, always use Monday pattern
+    # TODO: Implement day-of-week logic
+    return data["weekly_data"]["monday"]
+
+
+def get_child_5yo_spot_pattern_legacy() -> List[Dict]:
+    """
+    Legacy hardcoded pattern (kept for reference, not used)
     """
     pattern = [
         # 00:00 - Midnight
@@ -258,6 +291,294 @@ def get_child_5yo_spot_pattern() -> List[Dict]:
     return pattern
 
 
+def get_child_5yo_daily_pattern() -> List[Dict]:
+    """
+    Load 24-hour daily analysis pattern from JSON file
+
+    Returns:
+        List of 24 hourly cumulative data points for Monday (default)
+    """
+    data = load_pattern_data("daily")
+    # For now, always use Monday pattern
+    # TODO: Implement day-of-week logic
+    return data["weekly_data"]["monday"]
+
+
+def get_child_5yo_daily_pattern_legacy() -> List[Dict]:
+    """
+    Legacy hardcoded pattern (kept for reference, not used)
+    """
+    pattern = [
+        # 00:00 - Midnight
+        {
+            "hour": 0,
+            "summary": "深夜0時。ぐっすりと眠っている様子。",
+            "burst_events": []
+        },
+
+        # 01:00
+        {
+            "hour": 1,
+            "summary": "深夜1時。深い睡眠中。",
+            "burst_events": []
+        },
+
+        # 02:00
+        {
+            "hour": 2,
+            "summary": "深夜2時。睡眠継続中。",
+            "burst_events": []
+        },
+
+        # 03:00
+        {
+            "hour": 3,
+            "summary": "深夜3時。最も深い睡眠の時間帯。",
+            "burst_events": []
+        },
+
+        # 04:00
+        {
+            "hour": 4,
+            "summary": "早朝4時。浅い眠りへ移行し始めている。",
+            "burst_events": []
+        },
+
+        # 05:00
+        {
+            "hour": 5,
+            "summary": "早朝5時。体が目覚めの準備を始めている。",
+            "burst_events": []
+        },
+
+        # 06:00
+        {
+            "hour": 6,
+            "summary": "朝6時。目覚める時間が近づいている。",
+            "burst_events": []
+        },
+
+        # 07:00 - Morning routine starts
+        {
+            "hour": 7,
+            "summary": "朝7時に起床。元気に1日がスタート。",
+            "burst_events": [
+                {"time": "07:00", "event": "元気に目が覚めて、1日が始まった", "score_change": 20}
+            ]
+        },
+
+        # 08:00 - Breakfast
+        {
+            "hour": 8,
+            "summary": "朝8時。朝食を家族と一緒に楽しんでいる。起床後から良い気分が続いている。",
+            "burst_events": [
+                {"time": "07:00", "event": "元気に目が覚めて、1日が始まった", "score_change": 20},
+                {"time": "08:00", "event": "パンケーキを食べて嬉しそう", "score_change": 15}
+            ]
+        },
+
+        # 09:00 - Kindergarten arrival
+        {
+            "hour": 9,
+            "summary": "朝9時。幼稚園に到着し、友達と遊び始めた。朝から良好な気分が続いている。",
+            "burst_events": [
+                {"time": "07:00", "event": "起床", "score_change": 20},
+                {"time": "08:00", "event": "朝食", "score_change": 15},
+                {"time": "09:00", "event": "登園", "score_change": 10}
+            ]
+        },
+
+        # 10:00 - Morning activities
+        {
+            "hour": 10,
+            "summary": "午前10時。お絵かきと工作に集中している。幼稚園での活動を楽しんでいる様子。",
+            "burst_events": [
+                {"time": "07:00", "event": "起床", "score_change": 20},
+                {"time": "08:00", "event": "朝食", "score_change": 15},
+                {"time": "09:00", "event": "登園", "score_change": 10}
+            ]
+        },
+
+        # 11:00 - Outdoor play
+        {
+            "hour": 11,
+            "summary": "午前11時。園庭で元気に遊んでいる。午前中は活発に活動している。",
+            "burst_events": [
+                {"time": "07:00", "event": "起床", "score_change": 20},
+                {"time": "08:00", "event": "朝食", "score_change": 15},
+                {"time": "09:00", "event": "登園", "score_change": 10},
+                {"time": "11:00", "event": "外遊び", "score_change": 15}
+            ]
+        },
+
+        # 12:00 - Lunch time
+        {
+            "hour": 12,
+            "summary": "昼12時。給食のカレーライスを完食。午前中は活発に活動し、昼食も楽しんでいる。",
+            "burst_events": [
+                {"time": "07:00", "event": "起床", "score_change": 20},
+                {"time": "08:00", "event": "朝食", "score_change": 15},
+                {"time": "09:00", "event": "登園", "score_change": 10},
+                {"time": "11:00", "event": "外遊び", "score_change": 15},
+                {"time": "12:00", "event": "給食", "score_change": 5}
+            ]
+        },
+
+        # 13:00 - After lunch rest
+        {
+            "hour": 13,
+            "summary": "昼13時。お昼休みで絵本を読んでもらっている。午前の活発な活動から少し落ち着いた様子。",
+            "burst_events": [
+                {"time": "07:00", "event": "起床", "score_change": 20},
+                {"time": "08:00", "event": "朝食", "score_change": 15},
+                {"time": "09:00", "event": "登園", "score_change": 10},
+                {"time": "11:00", "event": "外遊び", "score_change": 15},
+                {"time": "12:00", "event": "給食", "score_change": 5}
+            ]
+        },
+
+        # 14:00 - Afternoon activities
+        {
+            "hour": 14,
+            "summary": "午後14時。音楽に合わせて歌ったり踊ったりしている。午後の活動も楽しんでいる。",
+            "burst_events": [
+                {"time": "07:00", "event": "起床", "score_change": 20},
+                {"time": "08:00", "event": "朝食", "score_change": 15},
+                {"time": "09:00", "event": "登園", "score_change": 10},
+                {"time": "11:00", "event": "外遊び", "score_change": 15},
+                {"time": "12:00", "event": "給食", "score_change": 5}
+            ]
+        },
+
+        # 15:00 - Going home
+        {
+            "hour": 15,
+            "summary": "午後15時。降園時間。お迎えに来た家族に今日の出来事を報告している。幼稚園での1日を楽しく過ごした様子。",
+            "burst_events": [
+                {"time": "07:00", "event": "起床", "score_change": 20},
+                {"time": "08:00", "event": "朝食", "score_change": 15},
+                {"time": "09:00", "event": "登園", "score_change": 10},
+                {"time": "11:00", "event": "外遊び", "score_change": 15},
+                {"time": "12:00", "event": "給食", "score_change": 5}
+            ]
+        },
+
+        # 16:00 - Snack and gaming peak
+        {
+            "hour": 16,
+            "summary": "午後16時。帰宅後のおやつを食べ、マインクラフトで遊び始めた。1日で最も楽しい時間帯に入った。",
+            "burst_events": [
+                {"time": "07:00", "event": "起床", "score_change": 20},
+                {"time": "08:00", "event": "朝食", "score_change": 15},
+                {"time": "09:00", "event": "登園", "score_change": 10},
+                {"time": "11:00", "event": "外遊び", "score_change": 15},
+                {"time": "12:00", "event": "給食", "score_change": 5},
+                {"time": "16:00", "event": "ゲーム開始", "score_change": 25}
+            ]
+        },
+
+        # 17:00 - Gaming time (peak)
+        {
+            "hour": 17,
+            "summary": "午後17時。マインクラフトで大きなお城を建築中。1日で最も高いテンションを記録。幼稚園から帰宅後、ゲームに夢中になっている。",
+            "burst_events": [
+                {"time": "07:00", "event": "起床", "score_change": 20},
+                {"time": "08:00", "event": "朝食", "score_change": 15},
+                {"time": "09:00", "event": "登園", "score_change": 10},
+                {"time": "11:00", "event": "外遊び", "score_change": 15},
+                {"time": "12:00", "event": "給食", "score_change": 5},
+                {"time": "16:00", "event": "ゲーム開始", "score_change": 25}
+            ]
+        },
+
+        # 18:00 - Evening routine
+        {
+            "hour": 18,
+            "summary": "夕方18時。夕食の準備を手伝っている。ゲームタイムが終わり、家族時間へシフト。1日を通して良好な気分が維持されている。",
+            "burst_events": [
+                {"time": "07:00", "event": "起床", "score_change": 20},
+                {"time": "08:00", "event": "朝食", "score_change": 15},
+                {"time": "09:00", "event": "登園", "score_change": 10},
+                {"time": "11:00", "event": "外遊び", "score_change": 15},
+                {"time": "12:00", "event": "給食", "score_change": 5},
+                {"time": "16:00", "event": "ゲーム開始", "score_change": 25}
+            ]
+        },
+
+        # 19:00 - Dinner
+        {
+            "hour": 19,
+            "summary": "夜19時。家族で夕食。今日1日の出来事を報告している。朝の起床から夕食まで、充実した1日を過ごしている。",
+            "burst_events": [
+                {"time": "07:00", "event": "起床", "score_change": 20},
+                {"time": "08:00", "event": "朝食", "score_change": 15},
+                {"time": "09:00", "event": "登園", "score_change": 10},
+                {"time": "11:00", "event": "外遊び", "score_change": 15},
+                {"time": "12:00", "event": "給食", "score_change": 5},
+                {"time": "16:00", "event": "ゲーム開始", "score_change": 25}
+            ]
+        },
+
+        # 20:00 - Bath time
+        {
+            "hour": 20,
+            "summary": "夜20時。お風呂の時間。お風呂のおもちゃで遊びながら入浴している。1日の疲れを癒している様子。",
+            "burst_events": [
+                {"time": "07:00", "event": "起床", "score_change": 20},
+                {"time": "08:00", "event": "朝食", "score_change": 15},
+                {"time": "09:00", "event": "登園", "score_change": 10},
+                {"time": "11:00", "event": "外遊び", "score_change": 15},
+                {"time": "12:00", "event": "給食", "score_change": 5},
+                {"time": "16:00", "event": "ゲーム開始", "score_change": 25}
+            ]
+        },
+
+        # 21:00 - Bedtime routine
+        {
+            "hour": 21,
+            "summary": "夜21時。就寝準備。パジャマに着替えて寝る前の絵本タイム。1日の活動を終え、就寝へ向かっている。",
+            "burst_events": [
+                {"time": "07:00", "event": "起床", "score_change": 20},
+                {"time": "08:00", "event": "朝食", "score_change": 15},
+                {"time": "09:00", "event": "登園", "score_change": 10},
+                {"time": "11:00", "event": "外遊び", "score_change": 15},
+                {"time": "12:00", "event": "給食", "score_change": 5},
+                {"time": "16:00", "event": "ゲーム開始", "score_change": 25}
+            ]
+        },
+
+        # 22:00 - Sleep
+        {
+            "hour": 22,
+            "summary": "夜22時。就寝。絵本を読んでもらった後、すぐに眠りについた。朝7時の起床から幼稚園での活動、夕方のゲームタイム、家族との時間まで、充実した1日を過ごした。",
+            "burst_events": [
+                {"time": "07:00", "event": "起床", "score_change": 20},
+                {"time": "08:00", "event": "朝食", "score_change": 15},
+                {"time": "09:00", "event": "登園", "score_change": 10},
+                {"time": "11:00", "event": "外遊び", "score_change": 15},
+                {"time": "12:00", "event": "給食", "score_change": 5},
+                {"time": "16:00", "event": "ゲーム開始", "score_change": 25}
+            ]
+        },
+
+        # 23:00
+        {
+            "hour": 23,
+            "summary": "夜23時。ぐっすりと眠っている。穏やかな寝息。朝7時の起床から夜22時の就寝まで、幼稚園での活動やゲーム、家族との時間を楽しんだ充実した1日だった。",
+            "burst_events": [
+                {"time": "07:00", "event": "起床", "score_change": 20},
+                {"time": "08:00", "event": "朝食", "score_change": 15},
+                {"time": "09:00", "event": "登園", "score_change": 10},
+                {"time": "11:00", "event": "外遊び", "score_change": 15},
+                {"time": "12:00", "event": "給食", "score_change": 5},
+                {"time": "16:00", "event": "ゲーム開始", "score_change": 25}
+            ]
+        }
+    ]
+
+    return pattern
+
+
 def generate_spot_record(device_id: str, date: str, hour: int, pattern_data: Dict) -> Dict:
     """
     Generate a single spot_results record
@@ -315,10 +636,63 @@ def generate_spot_record(device_id: str, date: str, hour: int, pattern_data: Dic
     }
 
 
+def generate_daily_record(device_id: str, date: str, current_hour: int, spot_pattern: List[Dict], daily_pattern: List[Dict]) -> Dict:
+    """
+    Generate a single daily_results record (cumulative up to current hour)
+
+    Format matches daily_results table:
+    - device_id
+    - local_date
+    - vibe_score (average of all spots up to current hour)
+    - summary (cumulative daily summary)
+    - burst_events (JSONB array)
+    - vibe_scores (JSONB array of {time, score})
+    - processed_count (number of recordings up to current hour)
+    - llm_model
+    """
+
+    # Get daily pattern data for current hour
+    daily_data = daily_pattern[current_hour]
+
+    # Generate vibe_scores array from hour 0 to current_hour
+    vibe_scores_array = []
+    vibe_score_values = []
+
+    for h in range(current_hour + 1):  # 0 to current_hour inclusive
+        spot_data = spot_pattern[h]
+
+        # Add randomness to vibe_score (±5)
+        vibe_score = spot_data["vibe_score"] + random.randint(-5, 5)
+        vibe_score = max(-100, min(100, vibe_score))
+
+        # Create timestamp in ISO 8601 format (YYYY-MM-DDTHH:MM)
+        time_str = f"{date}T{h:02d}:00"
+
+        vibe_scores_array.append({
+            "time": time_str,
+            "score": vibe_score
+        })
+        vibe_score_values.append(vibe_score)
+
+    # Calculate average vibe_score
+    avg_vibe = sum(vibe_score_values) / len(vibe_score_values) if vibe_score_values else 0
+
+    return {
+        "device_id": device_id,
+        "local_date": date,
+        "vibe_score": avg_vibe,
+        "summary": daily_data["summary"],
+        "burst_events": daily_data["burst_events"],
+        "vibe_scores": vibe_scores_array,
+        "processed_count": len(vibe_scores_array),
+        "llm_model": "demo-generator-v2"
+    }
+
+
 def lambda_handler(event, context):
     """
     Main Lambda handler function
-    Generates and saves spot analysis data for current hour
+    Generates and saves spot & daily analysis data for current hour
     """
 
     # Check environment variables
@@ -336,8 +710,9 @@ def lambda_handler(event, context):
         current_date = str(now.date())
         current_hour = now.hour
 
-        # Get the 24-hour pattern
+        # Get the 24-hour patterns
         spot_pattern = get_child_5yo_spot_pattern()
+        daily_pattern = get_child_5yo_daily_pattern()
 
         # Find current hour's data
         current_hour_data = spot_pattern[current_hour]
@@ -350,25 +725,52 @@ def lambda_handler(event, context):
             current_hour_data
         )
 
-        # Save to Supabase using REST API
-        print(f"💾 Saving spot data for {current_date} {current_hour:02d}:00...")
+        # Generate daily record (cumulative up to current hour)
+        daily_record = generate_daily_record(
+            DEMO_DEVICE_ID,
+            current_date,
+            current_hour,
+            spot_pattern,
+            daily_pattern
+        )
+
+        # Prepare headers for Supabase REST API (UPSERT mode)
         headers = {
             "apikey": SUPABASE_KEY,
             "Authorization": f"Bearer {SUPABASE_KEY}",
             "Content-Type": "application/json",
-            "Prefer": "return=minimal"
+            "Prefer": "resolution=merge-duplicates"
         }
 
-        response = requests.post(
+        # Save spot data to spot_results table (UPSERT)
+        print(f"💾 Saving spot data for {current_date} {current_hour:02d}:00...")
+        spot_response = requests.post(
             f"{SUPABASE_URL}/rest/v1/spot_results",
             headers=headers,
             json=spot_record
         )
 
-        if response.status_code in [200, 201]:
+        if spot_response.status_code in [200, 201]:
             print(f"✅ Successfully saved to spot_results table")
+            spot_save_success = True
         else:
-            print(f"⚠️ Warning: Supabase returned {response.status_code}: {response.text}")
+            print(f"⚠️ Warning: spot_results save failed ({spot_response.status_code}): {spot_response.text}")
+            spot_save_success = False
+
+        # Save daily data to daily_results table (UPSERT)
+        print(f"💾 Saving daily data for {current_date} (hour {current_hour:02d})...")
+        daily_response = requests.post(
+            f"{SUPABASE_URL}/rest/v1/daily_results",
+            headers=headers,
+            json=daily_record
+        )
+
+        if daily_response.status_code in [200, 201]:
+            print(f"✅ Successfully saved to daily_results table")
+            daily_save_success = True
+        else:
+            print(f"⚠️ Warning: daily_results save failed ({daily_response.status_code}): {daily_response.text}")
+            daily_save_success = False
 
         return {
             'statusCode': 200,
@@ -378,11 +780,20 @@ def lambda_handler(event, context):
                 'device_id': DEMO_DEVICE_ID,
                 'current_hour': current_hour,
                 'date': current_date,
-                'vibe_score': spot_record["vibe_score"],
-                'summary': spot_record["summary"],
-                'behavior': spot_record["behavior"],
-                'emotion': spot_record["emotion"],
-                'message': f'Successfully generated spot data for {current_date} {current_hour:02d}:00'
+                'spot_data': {
+                    'vibe_score': spot_record["vibe_score"],
+                    'summary': spot_record["summary"],
+                    'behavior': spot_record["behavior"],
+                    'emotion': spot_record["emotion"],
+                    'saved': spot_save_success
+                },
+                'daily_data': {
+                    'vibe_score': daily_record["vibe_score"],
+                    'summary': daily_record["summary"],
+                    'processed_count': daily_record["processed_count"],
+                    'saved': daily_save_success
+                },
+                'message': f'Successfully generated spot & daily data for {current_date} {current_hour:02d}:00'
             }, ensure_ascii=False)
         }
 
