@@ -23,7 +23,7 @@ cp lambda_function.py "${BUILD_DIR}/"
 # Copy data directory with proper structure
 echo "Copying data directory..."
 mkdir -p "${BUILD_DIR}/data"
-cp -r data/child_5yo_active "${BUILD_DIR}/data/"
+cp -r data/a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d "${BUILD_DIR}/data/"
 
 # Create ZIP file
 echo "Creating deployment package..."

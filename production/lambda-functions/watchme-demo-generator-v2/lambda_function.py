@@ -16,13 +16,13 @@ import requests
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
+# Device configuration for demo account
+DEMO_DEVICE_ID = "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d"  # 5-year-old child
+
 # Path to data files (Lambda compatible)
 # In Lambda, __file__ is /var/task/lambda_function.py
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(SCRIPT_DIR, "data", "child_5yo_active")
-
-# Device configuration for demo account
-DEMO_DEVICE_ID = "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d"  # 5-year-old child
+DATA_DIR = os.path.join(SCRIPT_DIR, "data", DEMO_DEVICE_ID)
 
 
 def get_jst_now():
