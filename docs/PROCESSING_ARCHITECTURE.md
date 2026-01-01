@@ -896,6 +896,21 @@ aws sqs get-queue-attributes \
 | DLQにメッセージが溜まる | 3回リトライしても失敗 | DLQのメッセージを確認、根本原因修正後に手動再処理 |
 | Availableが増え続ける | Lambda Workerが起動していない | Lambda関数のトリガー設定確認 |
 | 処理が遅い | 可視性タイムアウトが長すぎる | 設定値を短縮（ただし処理時間より長く設定する必要あり） |
+| **Lambda Workerが30秒でタイムアウト** | **Cloudflare Proxyが有効** | **`api.hey-watch.me` をDNS Onlyに変更（⚪グレー雲）** |
+
+**⚠️ Cloudflare Proxy問題（2025-12-29修正済み）:**
+
+Cloudflareで新規Aレコードを追加すると、デフォルトで「Proxied（🟠オレンジ雲）」が有効になります。
+これにより、Lambda Worker → API のレスポンスが51秒かかり、30秒でタイムアウトしてDLQに蓄積します。
+
+**必ず `api.hey-watch.me` を「DNS only（⚪グレー雲）」に設定してください。**
+
+確認コマンド:
+```bash
+host api.hey-watch.me 8.8.8.8
+# 正しい: api.hey-watch.me has address 3.24.16.82
+# 誤り: api.hey-watch.me has address 104.21.9.46 (Cloudflare IP)
+```
 
 ---
 
@@ -968,6 +983,20 @@ weekly_results テーブル (UPSERT)
 ---
 
 ## 🚀 完了機能
+
+### 2025-12-29 🎯 **Cloudflare Proxy問題の修正 + Lambda Worker直接接続**
+- ✅ **根本原因特定** - Cloudflareがデフォルトで「Proxied」を有効化していた
+- ✅ **DLQパージ** - SED/SER合計1,350件の失敗メッセージを削除
+- ✅ **Cloudflare DNS修正** - `api.hey-watch.me` をDNS Only（⚪グレー雲）に変更
+- ✅ **Lambda Worker環境変数更新** - `API_BASE_URL=http://3.24.16.82` に変更（バックアップ対策）
+- ✅ **パフォーマンス改善** - API応答時間を51秒→2.3秒に短縮（**22倍高速化**）
+- ✅ **Daily分析不安定問題の完全解決** - SQSタイムアウトが原因だったため、修正後は時間帯に関係なく常に動作
+
+**問題の経緯:**
+- Cloudflare Proxyが有効だと、Lambda Worker → API のレスポンスが51秒かかっていた
+- Lambda Workerの30秒タイムアウトで処理失敗 → 3回リトライ → DLQに蓄積
+- 定期的にDLQをパージしても、根本原因が未解決だったため再発していた
+- 2025-12-29に発覚・修正完了
 
 ### 2025-12-12 🎯 **ステータス管理の最適化 + FIFO Queue移行完了**
 - ✅ **ステータスカラム再設計** - 責任分離の原則に基づく整理
