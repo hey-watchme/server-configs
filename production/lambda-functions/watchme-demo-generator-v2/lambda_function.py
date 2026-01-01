@@ -590,6 +590,7 @@ def generate_spot_record(device_id: str, date: str, hour: int, pattern_data: Dic
     - summary (Japanese)
     - behavior (comma-separated)
     - emotion (comma-separated)
+    - rating (0-5, importance rating)
     - local_date
     - local_time (JST ISO8601)
     - profile_result (JSONB - full analysis)
@@ -619,7 +620,8 @@ def generate_spot_record(device_id: str, date: str, hour: int, pattern_data: Dic
         "vibe_score": vibe_score,
         "summary": pattern_data["summary"],
         "behavior": pattern_data["behavior"],
-        "emotion": pattern_data["emotion"]
+        "emotion": pattern_data["emotion"],
+        "rating": pattern_data.get("rating", 0)  # Default to 0 if not present
     }
 
     return {
@@ -629,6 +631,7 @@ def generate_spot_record(device_id: str, date: str, hour: int, pattern_data: Dic
         "summary": pattern_data["summary"],
         "behavior": pattern_data["behavior"],
         "emotion": pattern_data["emotion"],
+        "rating": pattern_data.get("rating", 0),  # Default to 0 if not present
         "local_date": date,
         "local_time": recorded_at_jst.isoformat(),
         "profile_result": profile_result,
