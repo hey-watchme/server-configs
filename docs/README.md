@@ -40,11 +40,11 @@ WatchMeは音声録音から心理・感情分析までを自動実行するプ�
 
 **EC2 API (Sydney - t4g.large):**
 - Vault API (ポート8000): S3音声ファイル配信
-- Behavior Features (ポート8017): 527種類の音響検出（AST）
-- Emotion Features (ポート8018): 8感情認識（Kushinada）
-- Vibe Transcriber (ポート8013): Groq Whisper v3文字起こし
+- Behavior Features (ポート8017): 527種類の音響検出（**PaSST**）
+- Emotion Features (ポート8018): 8感情認識（**Kushinada**）
+- Vibe Transcriber (ポート8013): **Deepgram Nova-2** 文字起こし
 - **Aggregator API (ポート8050)**: Spot/Daily/Weekly集計・プロンプト生成
-- **Profiler API (ポート8051)**: LLM分析（Spot/Daily/Weekly）
+- **Profiler API (ポート8051)**: LLM分析（**OpenAI GPT-5 Nano**）
 - Janitor (ポート8030): 音声データ自動削除
 - Admin (ポート9000): 管理ツール
 - Avatar Uploader (ポート8014): アバター画像管理
@@ -126,30 +126,30 @@ Profiler API (/profiler/weekly-profiler)
 
 ### 音声処理層
 
-| サービス | ポート | 役割 |
-|---------|--------|------|
-| Vault API | 8000 | S3音声ファイル配信、SKIP機能 |
-| Behavior Features | 8017 | 527種類の音響イベント検出 |
-| Emotion Features | 8018 | 8感情認識 |
-| Vibe Transcriber | 8013 | Groq Whisper v3文字起こし |
+| サービス | ポート | 役割 | 使用モデル/API | メモリ |
+|---------|--------|------|--------------|--------|
+| Vault API | 8000 | S3音声ファイル配信、SKIP機能 | - | 306 MB |
+| **Behavior Features** | 8017 | 527種類の音響イベント検出（SED） | **PaSST** (Patchout faSt Spectrogram Transformer) | 600 MB |
+| **Emotion Features** | 8018 | 8感情認識（SER） | **Kushinada** (HuBERT-large-JTES-ER) | 959 MB |
+| **Vibe Transcriber** | 8013 | 音声文字起こし（ASR/STT） | **Deepgram Nova-2** | 84 MB |
 
 ### 集計・分析層
 
-| サービス | ポート | 役割 |
-|---------|--------|------|
-| **Aggregator API** | **8050** | **Spot/Daily/Weekly集計、プロンプト生成** |
-| **Profiler API** | **8051** | **LLM分析（Spot/Daily/Weekly）** |
+| サービス | ポート | 役割 | 使用モデル/API | メモリ |
+|---------|--------|------|--------------|--------|
+| **Aggregator API** | **8050** | **Spot/Daily/Weekly集計、プロンプト生成** | - | 55 MB |
+| **Profiler API** | **8051** | **LLM分析（Spot/Daily/Weekly）** | **OpenAI GPT-5 Nano** | 160 MB |
 
 ### 管理層
 
 | サービス | ポート | 役割 |
 |---------|--------|------|
-| API Manager | 9001 | API管理UI（systemd管理） |
+| API Manager | 9001 | API管理 |
 | Admin | 9000 | 管理ツール |
 | Avatar Uploader | 8014 | アバター画像管理 |
-| **QR Code Generator** | **8021** | **デバイス共有用QRコード生成** |
+| QR Code Generator | 8021 | デバイス共有用QRコード生成 |
 | Janitor | 8030 | 音声データ自動削除（6時間ごと） |
-| ~~Demo Generator~~ | ~~8020~~ | ~~デモデータ生成（30分ごと）~~ ⚠️ 廃止予定 |
+| Demo Generator | 8020 | デモデータ生成 |
 
 ### AWS Lambda
 
@@ -362,9 +362,13 @@ git pull origin main
 
 ### Profiler API
 
-- **プロバイダー**: Groq
-- **モデル**: openai/gpt-oss-120b (reasoning model)
-- **Reasoning Effort**: medium
+- **プロバイダー**: OpenAI
+- **モデル**: GPT-5 Nano
+- **使用開始**: 2025年12月
+- **月額コスト**: $9.31（2025-12月実績、18.98M tokens）
+
+**過去の構成**:
+- ~~Groq API (openai/gpt-oss-120b)~~ ← 廃止済み
 
 プロバイダー切り替えは `/projects/watchme/api/profiler/llm_providers.py` で設定。
 
