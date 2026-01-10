@@ -506,329 +506,55 @@ grep -r "os.getenv\|os.environ" *.py
 
 ### Pythonパッケージ依存関係の解決
 
-**症状**: ECRへのDockerイメージpush時に `ERROR: ResolutionImpossible` が発生
+**症状**: `ERROR: ResolutionImpossible` が発生
 
-**よくある原因**:
-1. パッケージ間のバージョン競合
-2. 存在しないバージョンの指定
-3. 依存パッケージの最小バージョン要求
+**確認すべき点**:
+1. PyPIに指定したバージョンが存在するか（例: `supabase==2.12.2` は存在しない。2.12.0までしかない）
+2. エラーログの依存関係ツリーを読む（`realtime 2.27.1 depends on pydantic>=2.11.7`）
+3. 連鎖的に関連パッケージも更新する（supabase → pydantic → fastapi/uvicorn）
+4. 最新の安定版を使う（古いバージョンは互換性問題が多い）
 
-**解決手順**:
-
-#### 1. エラーログから競合を特定
-
-```bash
-gh run view {run-id} --repo {org}/{repo} --log-failed | grep -i "error"
-```
-
-**エラー例**:
-```
-ERROR: Cannot install supabase because these package versions have conflicting dependencies.
-  realtime 2.27.1 depends on pydantic>=2.11.7
-  The user requested pydantic==2.6.3
-```
-
-#### 2. 依存関係ツリーを確認
-
-**方法A: pipのエラーメッセージを確認**
-
-エラーメッセージに表示される依存関係を読む：
-```
-The conflict is caused by:
-    The user requested pydantic==2.6.3
-    realtime 2.27.1 depends on pydantic<3.0.0 and >=2.11.7
-```
-
-**方法B: PyPIで直接確認**
-
-1. https://pypi.org/ で問題のパッケージを検索
-2. バージョン一覧から利用可能なバージョンを確認
-3. 各バージョンの依存関係を確認
-
-#### 3. バージョンの調整
-
-**戦略1: メインパッケージを固定、依存パッケージを調整**
-
-```python
-# ❌ 古いバージョン（競合する）
-supabase==2.3.4  # httpx<0.26 を要求
-httpx==0.27.0    # 競合
-
-# ✅ 新しいバージョン（互換性あり）
-supabase==2.27.1  # httpx>=0.27 に対応
-httpx==0.27.2
-```
-
-**戦略2: 連鎖的に更新**
-
-```python
-# supabase 2.27.1 の依存パッケージ realtime が pydantic>=2.11.7 を要求
-# → pydantic を 2.11.7 に更新
-# → pydantic 2.11.7 に対応した fastapi/uvicorn も更新
-
-fastapi==0.115.0    # pydantic 2.11.7 対応
-uvicorn==0.32.1
-pydantic==2.11.7
-supabase==2.27.1
-httpx==0.27.2
-```
-
-#### 4. ローカルで検証
-
-```bash
-# 仮想環境で依存関係をテスト
-cd /path/to/backend
-python3 -m venv test_env
-source test_env/bin/activate
-pip install -r requirements.txt
-
-# エラーがなければOK
-# エラーが出たら requirements.txt を再調整
-```
-
-#### 5. 実際の例（Business API - 2026-01-10）
-
-**問題の経緯**:
-1. `supabase==2.3.4` + `httpx==0.27.0` → バージョン競合
-2. `httpx==0.25.2` に変更 → `supabase==2.3.4` が `TypeError: Client.__init__() got an unexpected keyword argument 'proxy'` を発生
-3. `supabase==2.12.2` に変更 → PyPIに存在しない（2.12.0までしかない）
-4. `supabase==2.27.1` に変更 → `pydantic>=2.11.7` を要求
-5. 最終的な解決:
-
-```python
-# requirements.txt (最終版)
-fastapi==0.115.0
-uvicorn==0.32.1
-python-multipart==0.0.9
-pydantic==2.11.7
-python-dotenv==1.0.1
-aiofiles==23.2.1
-boto3==1.34.34
-supabase==2.27.1
-httpx==0.27.2
-openpyxl==3.1.2
-groq==0.4.2
-openai==1.14.0
-```
-
-**教訓**:
-- ✅ 最新の安定版を使用する（古いバージョンは互換性問題が多い）
-- ✅ PyPIで実際に存在するバージョンを確認する
-- ✅ エラーメッセージの依存関係ツリーを読み解く
-- ✅ 連鎖的に関連パッケージも更新する
+**実例**: Business API (2026-01-10)
+- `supabase==2.3.4` + `httpx==0.27.0` → 競合
+- `httpx==0.25.2` → `TypeError: proxy`
+- `supabase==2.12.2` → PyPIに存在しない
+- `supabase==2.27.1` → `pydantic>=2.11.7` 要求 → fastapi/uvicorn も更新
 
 ---
 
 ### 初回デプロイの事前準備（必須）
 
-**重要**: GitHub Actionsのワークフローだけでは初回デプロイは完了しません。**必ず以下の手動セットアップが必要です**。
-
-#### なぜ初回デプロイは失敗するのか？
-
-GitHub Actionsのワークフローは以下を想定しています：
-- EC2上にアプリケーションディレクトリが存在する
-- Dockerネットワーク `watchme-network` が存在する
-- ECRリポジトリが存在する
-
-しかし、**初回は何も存在しない**ため、ワークフローが失敗します。
-
-#### 必須の事前準備（初回のみ）
-
-**ステップ1: ECRリポジトリの作成**
+**重要**: GitHub Actionsだけでは初回デプロイは完了しない。以下を事前に実行：
 
 ```bash
-aws ecr create-repository \
-  --repository-name watchme-{api-name} \
-  --region ap-southeast-2 \
-  --image-scanning-configuration scanOnPush=true
-```
+# 1. ECRリポジトリ作成
+aws ecr create-repository --repository-name watchme-{api-name} --region ap-southeast-2
 
-**ステップ2: EC2上のディレクトリとネットワークの作成**
-
-```bash
-ssh -i ~/watchme-key.pem ubuntu@{EC2_HOST}
-
-# アプリケーションディレクトリ作成
+# 2. EC2セットアップ
+ssh ubuntu@{EC2_HOST}
 mkdir -p /home/ubuntu/{api-directory-name}
-
-# Dockerネットワーク作成（既に存在する場合はスキップ）
 docker network create watchme-network 2>/dev/null || true
-
-# 確認
-ls -la /home/ubuntu/{api-directory-name}
-docker network ls | grep watchme-network
-
-exit
 ```
-
-**ステップ3: GitHub Actionsを実行**
-
-```bash
-# ローカルからプッシュ（自動的にワークフローが起動）
-git push origin main
-
-# または手動実行
-gh workflow run "Deploy to Amazon ECR and EC2" --repo {org}/{repo}
-```
-
-#### 実際の例（Business API - 2026-01-10）
-
-```bash
-# ステップ1: ECRリポジトリ作成（ローカル）
-aws ecr create-repository \
-  --repository-name watchme-business \
-  --region ap-southeast-2 \
-  --image-scanning-configuration scanOnPush=true
-
-# ステップ2: EC2セットアップ
-ssh -i ~/watchme-key.pem ubuntu@3.24.16.82 << 'ENDSSH'
-  mkdir -p /home/ubuntu/watchme-business-api
-  docker network create watchme-network 2>/dev/null || true
-  echo "✅ Setup complete"
-ENDSSH
-
-# ステップ3: デプロイ実行
-gh workflow run "Deploy to Amazon ECR and EC2" --repo hey-watchme/business
-
-# 進行状況確認
-gh run watch
-```
-
-**チェックリスト**:
-- [ ] ECRリポジトリが作成されている
-- [ ] EC2上にアプリケーションディレクトリが作成されている
-- [ ] Dockerネットワーク `watchme-network` が存在する
-- [ ] GitHub Secretsがすべて設定されている
 
 ---
 
 ### Nginx設定の反映方法
 
-**症状**: APIが正常に稼働しているのに、外部から `{"detail":"Not Found"}` が返る
+**症状**: APIは稼働しているが外部から404
 
-**原因**: Nginxの設定ファイルが `/etc/nginx/sites-available/` にコピーされていない
+**原因**: `/etc/nginx/sites-available/` にコピーされていない
 
-#### 正しい設定反映手順
-
-**ステップ1: server-configsリポジトリで設定を追加**
-
+**正しい手順**:
 ```bash
-cd /path/to/server-configs
-
-# Nginx設定を編集
-nano production/sites-available/api.hey-watch.me
-
-# 以下を追加
-location /{api-path}/ {
-    proxy_pass http://localhost:{port}/;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-
-    # タイムアウト設定（180秒）
-    proxy_read_timeout 180s;
-    proxy_connect_timeout 180s;
-    proxy_send_timeout 180s;
-
-    # CORS設定
-    add_header "Access-Control-Allow-Origin" "*";
-    add_header "Access-Control-Allow-Methods" "GET, POST, OPTIONS";
-    add_header "Access-Control-Allow-Headers" "Content-Type, Authorization, X-API-Token";
-
-    # OPTIONSリクエストの処理
-    if ($request_method = "OPTIONS") {
-        return 204;
-    }
-}
-
-# コミット・プッシュ
-git add production/sites-available/api.hey-watch.me
-git commit -m "feat: Add {API Name} Nginx location"
-git push origin main
-```
-
-**ステップ2: EC2で設定を反映**
-
-```bash
-ssh -i ~/watchme-key.pem ubuntu@{EC2_HOST}
-
-# server-configsリポジトリを更新
+# server-configsで編集・プッシュ後
+ssh ubuntu@{EC2_HOST}
 cd /home/ubuntu/watchme-server-configs
-git pull origin main
-
-# ⚠️ 重要: /etc/nginx/ に手動でコピー
-sudo cp production/sites-available/api.hey-watch.me /etc/nginx/sites-available/api.hey-watch.me
-
-# 設定テスト
-sudo nginx -t
-
-# Nginx再読み込み
-sudo systemctl reload nginx
-
-exit
-```
-
-**ステップ3: 動作確認**
-
-```bash
-# 外部からヘルスチェック
-curl https://api.hey-watch.me/{api-path}/health
-
-# 成功すると以下のようなレスポンスが返る
-# {"status":"healthy", ...}
-```
-
-#### なぜ自動でコピーされないのか？
-
-- `watchme-server-configs` リポジトリは単なるバックアップ・バージョン管理用
-- `/etc/nginx/sites-available/` は直接編集されることもあるため、自動同期していない
-- 手動でコピーすることで、意図しない上書きを防ぐ
-
-#### よくある間違い
-
-**❌ 間違い**: `git pull` だけして終わり
-```bash
-cd /home/ubuntu/watchme-server-configs
-git pull origin main
-# ← これだけではNginxに反映されない！
-```
-
-**✅ 正解**: コピー + reload まで実行
-```bash
-cd /home/ubuntu/watchme-server-configs
-git pull origin main
+git pull
 sudo cp production/sites-available/api.hey-watch.me /etc/nginx/sites-available/
-sudo nginx -t
-sudo systemctl reload nginx
+sudo nginx -t && sudo systemctl reload nginx
 ```
 
-#### 実際の例（Business API - 2026-01-10）
-
-```bash
-# Nginx設定が反映されず、404が返り続けた
-curl https://api.hey-watch.me/business/health
-# → {"detail":"Not Found"}
-
-# EC2内部では正常に動作していた
-ssh ubuntu@3.24.16.82 "curl http://localhost:8052/health"
-# → {"status":"healthy", ...}
-
-# 原因: Nginx設定ファイルがコピーされていなかった
-ssh ubuntu@3.24.16.82 "grep -A 20 'Business API' /etc/nginx/sites-available/api.hey-watch.me"
-# → (何も表示されない)
-
-# 解決: 手動でコピー
-ssh ubuntu@3.24.16.82 << 'ENDSSH'
-  sudo cp /home/ubuntu/watchme-server-configs/production/sites-available/api.hey-watch.me /etc/nginx/sites-available/
-  sudo nginx -t
-  sudo systemctl reload nginx
-ENDSSH
-
-# 再確認 → 成功
-curl https://api.hey-watch.me/business/health
-# → {"status":"healthy", "service":"watchme-business-api", ...}
-```
+**よくある間違い**: `git pull` だけして終わり → Nginxに反映されない
 
 ---
 
