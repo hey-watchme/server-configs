@@ -10,7 +10,197 @@
 
 ## 🚨 優先度：高
 
-### 1. DLQ監視・アラート体制の不足
+### 1. DLQ定期蓄積問題（週1回発生）
+
+**発見日**: 2026-01-09（4週間連続で発生）
+
+#### 問題の概要
+
+週に1回程度、SED/SER DLQに数百件のメッセージが蓄積する問題が**4週間連続**で発生しています。毎回手動でパージしていますが、根本原因は未解決です。
+
+#### 具体的な症状
+
+1. **DLQへの大量蓄積（2026-01-09時点）**
+   - `watchme-sed-dlq-v2.fifo`: **514件**
+   - `watchme-ser-dlq-v2.fifo`: **513件**
+   - `watchme-asr-dlq-v2.fifo`: 0件
+   - **合計: 1,027件**のメッセージが蓄積
+
+2. **発生頻度**
+   - 週1回程度
+   - 過去4週間連続で発生（2025-12-中旬〜2026-01-09）
+
+3. **影響**
+   - SED/SER処理が一部失敗（音響検出・感情分析が欠損）
+   - Daily/Weekly分析に影響する可能性
+   - システムパフォーマンス低下はなし（DLQは処理対象外のため）
+
+#### 応急処置（毎回実施）
+
+```bash
+# DLQ状態確認
+aws sqs get-queue-attributes \
+  --queue-url https://sqs.ap-southeast-2.amazonaws.com/754724220380/watchme-sed-dlq-v2.fifo \
+  --attribute-names ApproximateNumberOfMessages \
+  --region ap-southeast-2
+
+aws sqs get-queue-attributes \
+  --queue-url https://sqs.ap-southeast-2.amazonaws.com/754724220380/watchme-ser-dlq-v2.fifo \
+  --attribute-names ApproximateNumberOfMessages \
+  --region ap-southeast-2
+
+# DLQパージ（削除）
+aws sqs purge-queue \
+  --queue-url https://sqs.ap-southeast-2.amazonaws.com/754724220380/watchme-sed-dlq-v2.fifo \
+  --region ap-southeast-2
+
+aws sqs purge-queue \
+  --queue-url https://sqs.ap-southeast-2.amazonaws.com/754724220380/watchme-ser-dlq-v2.fifo \
+  --region ap-southeast-2
+```
+
+**⚠️ 注意**: パージは**データ損失**を伴います。削除前にメッセージの内容を確認することを推奨。
+
+#### 考えられる原因（未調査）
+
+1. **API一時的な障害**
+   - Behavior/Emotion APIのunhealthy状態
+   - メモリ不足・CPU過負荷
+   - ネットワークタイムアウト
+
+2. **Lambda Worker タイムアウト**
+   - 30秒タイムアウトで処理完了できないケース
+   - → 3回リトライ後にDLQへ移動
+
+3. **データ品質の問題**
+   - 音声ファイルの品質が低い
+   - 無音・ノイズのみの録音
+   - ファイル破損
+
+4. **環境変数・認証情報の問題**
+   - Hume API認証エラー
+   - S3アクセス権限エラー
+   - Supabase接続エラー
+
+5. **デモデバイスの処理不整合（仮説）⭐ 有力**
+   - **発見日**: 2026-01-09
+   - **DLQ分析結果**: デモデバイス（9f7d6e27-98c3-4c19-bdfb-f7fda58b9a93）が70%を占める
+   - **問題の構造**:
+     - デモデバイスは demo-generator-v2 Lambda が Spot データを直接 Supabase に生成
+     - 実際の音声ファイルは存在しない（S3にアップロードされない）
+     - しかし、audio-processor Lambda が S3 イベントを受信して SQS に送信してしまう
+     - Lambda Worker（ASR/SED/SER）が存在しない音声ファイルを処理しようとして失敗
+     - 3回リトライ → DLQ行き
+   - **影響範囲**:
+     - SED DLQ: 529件（約70%がデモデバイス）
+     - SER DLQ: 527件（約70%がデモデバイス）
+     - ASR DLQ: 0件（文字起こしは正常？）
+   - **根本原因**:
+     - デモデバイスのデータ生成フローが音声処理パイプラインと不整合
+     - audio-processor がデモデバイスを特別扱いしていない
+   - **解決策（案）**:
+     - audio-processor にデモデバイスのスキップロジックを追加
+     - または、demo-generator が S3 イベントをトリガーしないようにする
+     - または、デモデバイス用の音声ファイルを実際に S3 に配置する
+
+#### 恒久対策（未実施）
+
+**対策1: DLQ監視アラートの実装 ⭐ 最優先**
+
+CloudWatch Alarmでメッセージ数を監視：
+
+```bash
+aws cloudwatch put-metric-alarm \
+  --alarm-name watchme-sed-dlq-alarm \
+  --alarm-description "SED DLQに10件以上メッセージが溜まった" \
+  --metric-name ApproximateNumberOfMessagesVisible \
+  --namespace AWS/SQS \
+  --statistic Average \
+  --period 300 \
+  --evaluation-periods 1 \
+  --threshold 10 \
+  --comparison-operator GreaterThanThreshold \
+  --dimensions Name=QueueName,Value=watchme-sed-dlq-v2.fifo \
+  --region ap-southeast-2
+```
+
+**対策2: DLQメッセージ内容の調査**
+
+DLQに溜まったメッセージの内容を1件取り出して調査：
+
+```bash
+# メッセージ取得（削除しない）
+aws sqs receive-message \
+  --queue-url https://sqs.ap-southeast-2.amazonaws.com/754724220380/watchme-sed-dlq-v2.fifo \
+  --max-number-of-messages 1 \
+  --region ap-southeast-2 | jq .
+
+# エラーパターンの分析
+# - どのデバイスIDが多いか
+# - recorded_atの時間帯パターン
+# - file_pathの特徴
+```
+
+**対策3: Lambda Workerのエラーログ分析**
+
+CloudWatch Logsで失敗パターンを調査：
+
+```bash
+aws logs filter-log-events \
+  --log-group-name /aws/lambda/watchme-sed-worker \
+  --filter-pattern "ERROR" \
+  --start-time $(date -u -v-7d +%s)000 \
+  --region ap-southeast-2 | jq -r '.events[].message' | head -50
+```
+
+**対策4: API側のエラーログ確認**
+
+EC2上のDockerコンテナログを確認：
+
+```bash
+ssh -i ~/watchme-key.pem ubuntu@3.24.16.82
+docker logs behavior-analysis-feature-extractor --since 7d | grep -i "error\|fail\|timeout" | tail -100
+docker logs emotion-analysis-feature-extractor --since 7d | grep -i "error\|fail\|timeout" | tail -100
+```
+
+**優先度**: ⭐⭐⭐⭐⭐（週1回発生しており、早急な調査が必要）
+
+**調査期限**: 2週間以内に根本原因を特定すべき
+
+#### 一時停止方法（Hume API課金回避）
+
+**背景**: Hume APIはフリープランのため、本番環境で自動処理すると課金が発生します。
+
+**停止方法**: Lambda ser-workerのエンドポイントURLを変更（2026-01-09実施）
+
+```bash
+# 停止（エンドポイントURLを無効化）
+aws lambda update-function-configuration \
+  --function-name watchme-ser-worker \
+  --environment Variables="{API_BASE_URL=https://api.hey-watch.me-disabled}" \
+  --region ap-southeast-2
+
+# 再開（元のURLに戻す）
+aws lambda update-function-configuration \
+  --function-name watchme-ser-worker \
+  --environment Variables="{API_BASE_URL=https://api.hey-watch.me}" \
+  --region ap-southeast-2
+
+# 再開時はDLQをパージ（溜まったエラーメッセージを削除）
+aws sqs purge-queue \
+  --queue-url https://sqs.ap-southeast-2.amazonaws.com/754724220380/watchme-ser-dlq-v2.fifo \
+  --region ap-southeast-2
+```
+
+**効果**:
+- ✅ Hume API呼び出しが停止（課金なし）
+- ✅ 他のAPI（ASR/SED）は継続動作
+- ✅ Emotion API自体は稼働（手動curlテスト可能）
+- ⚠️ DLQに失敗メッセージが溜まる（再開時にパージ必要）
+
+---
+
+### 2. DLQ監視・アラート体制の不足
 
 **発見日**: 2025-12-13
 

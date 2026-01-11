@@ -488,6 +488,7 @@ done
 | **Pythonパッケージのバージョン競合** | 依存関係の互換性問題 | [Pythonパッケージ依存関係の解決](#pythonパッケージ依存関係の解決) 参照 |
 | **初回デプロイが必ず失敗する** | EC2上のディレクトリ未作成 | [初回デプロイの事前準備](#初回デプロイの事前準備必須) 参照 |
 | **Nginx設定が反映されない** | 設定ファイルが/etc/nginxにコピーされていない | [Nginx設定の反映方法](#nginx設定の反映方法) 参照 |
+| **CORSエラー（プリフライト失敗）** | ❌ NginxでOPTIONSを直接204返却、❌ FastAPIでワイルドカード使用 | [CORS問題の診断と修正](#cors問題の診断と修正) 参照 |
 
 ### 環境変数不足エラー
 
@@ -555,6 +556,28 @@ sudo nginx -t && sudo systemctl reload nginx
 ```
 
 **よくある間違い**: `git pull` だけして終わり → Nginxに反映されない
+
+---
+
+### CORS問題の診断と修正
+
+**診断コマンド**:
+```bash
+# OPTIONSリクエストテスト
+curl -X OPTIONS https://api.hey-watch.me/{path} -H "Origin: https://{domain}" -i
+# → access-control-allow-origin ヘッダーがあるか確認
+
+# Nginx設定確認
+grep "return 204" /etc/nginx/sites-available/api.hey-watch.me
+
+# FastAPI設定確認
+grep "allow_origins" backend/app.py
+```
+
+**修正観点**:
+1. **NginxでOPTIONSを直接204返却している場合** → 削除（FastAPIに任せる）
+2. **FastAPIでワイルドカード使用** → 具体的なドメインに変更
+3. **Cloudflare Proxy有効** → DNS only（グレー雲）に変更
 
 ---
 
