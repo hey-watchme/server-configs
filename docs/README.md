@@ -403,6 +403,39 @@ git pull origin main
 
 ---
 
+## 📁 テスト音源（共有リソース）
+
+全プロジェクトで使用可能なテスト音源を `watchme-vault` バケットに配置しています。
+
+### S3パス
+
+```
+s3://watchme-vault/test-audio/parent-interview-yoridokoro/
+├── full_raw.wav           # フルバージョン（87MB・約15分）
+├── section001_raw.wav     # 抜粋版・生音声（3.1MB・約30秒）★推奨
+└── section001_clean.wav   # 抜粋版・ノイズ除去（3.1MB・約30秒）
+```
+
+### 使用例
+
+```bash
+# Business API（トランスクリプションテスト）
+aws s3 cp s3://watchme-vault/test-audio/parent-interview-yoridokoro/section001_raw.wav . \
+  --region ap-southeast-2
+
+# 直接URL（署名付きURL生成）
+aws s3 presign s3://watchme-vault/test-audio/parent-interview-yoridokoro/section001_raw.wav \
+  --region ap-southeast-2 --expires-in 3600
+```
+
+### 音源について
+
+- **シチュエーション**: 保護者ヒアリング（児童発達支援）
+- **録音日**: 2025-05-08
+- **推奨**: `section001_raw.wav`（本番環境に最も近い）
+
+---
+
 ## 📚 関連ドキュメント
 
 詳細な仕様・運用手順は以下を参照:
