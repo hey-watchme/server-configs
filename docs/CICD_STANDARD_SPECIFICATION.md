@@ -8,10 +8,84 @@
 
 | 目的 | セクション |
 |-----|----------|
+| **環境変数管理** | **[環境変数管理の原則](#-環境変数管理の原則)** |
 | 新規API実装 | [実装ガイド](#実装ガイド新規api向け) |
 | 大規模AIモデル | [AIモデル対応](#-重要大きなaiモデルを使用する場合の必須対応) |
 | エラー対処 | [トラブルシューティング](#トラブルシューティング) |
 | 現状確認 | [起動方式の全体像](#-現在の起動方法管理方法の全体像2025-11-21更新) |
+
+---
+
+## 🔐 環境変数管理の原則
+
+**重要: この原則は全WatchMe APIで統一されています。**
+
+### ローカル開発環境
+
+```yaml
+# docker-compose.local.yml（ローカル専用）
+services:
+  api:
+    env_file:
+      - .env  # ← .envファイルから読み込み
+```
+
+- ✅ `.env` ファイルを使用する
+- ✅ `docker-compose.local.yml` で `env_file` を参照
+- ✅ `.gitignore` に `.env` を追加（Git管理外）
+
+### 本番環境（CI/CD）
+
+```yaml
+# docker-compose.prod.yml（本番専用）
+services:
+  api:
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}  # ← 明示的に展開
+      - SUPABASE_URL=${SUPABASE_URL}
+```
+
+- ✅ **GitHub Actions Secrets を唯一の source of truth とする**
+- ✅ `docker-compose.prod.yml` では `environment: ${VAR}` 形式で明示的に展開
+- ❌ **本番環境に `.env` ファイルが存在する構成は禁止**
+  - GitHub Actions が `.env` を動的生成するため、存在はするが Source of Truth ではない
+
+### 環境変数の流れ（本番）
+
+```
+GitHub Secrets
+  ↓（GitHub Actions）
+EC2 の .env ファイルに注入
+  ↓（docker-compose）
+${VAR} 形式で展開
+  ↓
+コンテナ環境変数
+```
+
+### 新規環境変数の追加手順
+
+1. **GitHub Secrets に追加**
+   ```bash
+   gh secret set NEW_VAR --repo hey-watchme/your-api --body "value"
+   ```
+
+2. **GitHub Actions ワークフローに追加**
+   ```yaml
+   # .github/workflows/deploy-to-ecr.yml
+   env:
+     NEW_VAR: ${{ secrets.NEW_VAR }}
+
+   run: |
+     echo "NEW_VAR=${NEW_VAR}" >> .env
+   ```
+
+3. **docker-compose.prod.yml に追加**
+   ```yaml
+   environment:
+     - NEW_VAR=${NEW_VAR}
+   ```
+
+**3箇所すべてを更新しないと動作しません。**
 
 ---
 
