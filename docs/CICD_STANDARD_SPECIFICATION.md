@@ -126,7 +126,7 @@ GROQ_API_KEY            # Groq APIキー（Organization設定済み）
 - 下部の **"Organization secrets"** セクションに上記Secretsが表示されていればOK
 - `gh secret list` コマンドはリポジトリレベルのSecretsのみ表示するため、Organization Secretsは表示されない
 
-**⚠️ 重要: 新規リポジトリ作成時は、必ずPublicリポジトリとして作成すること（Private不可）**
+**⚠️ 重要: Privateリポジトリの場合、Organization SecretsのRepository accessに明示的に追加が必要**
 
 **注意**: APIによって必要な環境変数は異なります。詳細は [環境変数の確認方法](#環境変数の確認方法) を参照。
 
