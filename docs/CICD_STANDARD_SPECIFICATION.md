@@ -107,17 +107,24 @@ git push → GitHub Actions → ECRへpush → EC2へデプロイ → コンテ�
 
 ### 必要なGitHub Secrets
 
-以下がリポジトリに設定されていることを確認（Settings > Secrets and variables > Actions）：
+**重要: WatchMeプロジェクトでは、全てのSecretsはOrganizationレベルで設定されています。**
+
+以下のSecretsは **hey-watchme Organization** で一元管理されており、全リポジトリで自動的に利用可能です：
 
 ```
-AWS_ACCESS_KEY_ID       # AWS認証
-AWS_SECRET_ACCESS_KEY   # AWS認証
-EC2_HOST                # デプロイ先EC2のIPアドレス
-EC2_SSH_PRIVATE_KEY     # SSH接続用秘密鍵
-EC2_USER                # SSHユーザー名（通常はubuntu）
-SUPABASE_URL            # Supabase プロジェクトURL
-SUPABASE_KEY            # Supabase サービスロールキー
+AWS_ACCESS_KEY_ID       # AWS認証（Organization設定済み）
+AWS_SECRET_ACCESS_KEY   # AWS認証（Organization設定済み）
+EC2_SSH_PRIVATE_KEY     # SSH接続用秘密鍵（Organization設定済み）
+SUPABASE_URL            # Supabase プロジェクトURL（Organization設定済み）
+SUPABASE_KEY            # Supabase サービスロールキー（Organization設定済み）
+OPENAI_API_KEY          # OpenAI APIキー（Organization設定済み）
+GROQ_API_KEY            # Groq APIキー（Organization設定済み）
 ```
+
+**確認方法:**
+- リポジトリの Settings > Secrets and variables > Actions
+- 下部の **"Organization secrets"** セクションに上記Secretsが表示されていればOK
+- `gh secret list` コマンドはリポジトリレベルのSecretsのみ表示するため、Organization Secretsは表示されない
 
 **注意**: APIによって必要な環境変数は異なります。詳細は [環境変数の確認方法](#環境変数の確認方法) を参照。
 
