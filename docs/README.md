@@ -1,6 +1,6 @@
 # WatchMe サーバー設定リポジトリ
 
-最終更新: 2026-01-15
+最終更新: 2026-01-21
 
 **⚠️ 重要: 2025-12-10にイベント駆動型アーキテクチャへ移行しました**
 
@@ -18,6 +18,56 @@
 - ✅ **推測ゼロ** - 実際のカラム名・型を確認してからコード実装
 - ✅ **エラー削減** - `child_id` vs `subject_id` のような間違いを防ぐ
 - ✅ **権限確認** - RLSポリシーや外部キー制約を事前把握
+
+---
+
+### 🌐 **local_date原則（最重要）**
+
+**🚨 システムの根本原則: 全ての処理は`local_date`/`local_time`のみを使用する**
+
+**基本方針**:
+1. ✅ **iOSアプリが録音時に決定した`local_date`/`local_time`を、パイプライン全体で一貫して使用**
+2. ✅ **`recorded_at` (UTC)は記録用のみ** - 処理には使用しない
+3. ❌ **UTCからの変換・計算は絶対禁止** - フォールバックも禁止
+4. ❌ **`local_date`が欠損している場合はエラーとする** - 推測・代替は混乱の元
+
+**理由**:
+- ユーザーのタイムゾーンで分析しないと意味がない（地球の裏側から分析したら「夜だから寝ている」と誤判断）
+- UTCで処理すると、日付をまたぐ録音が次の日扱いになり、Daily/Weekly分析から漏れる
+- 例: JST 00:03の録音 → UTC 15:03（前日）→ `local_date`が異なる日になる
+
+**データフロー**:
+```
+1. iOSアプリ録音
+   ↓ local_date/local_timeを決定（デバイスのタイムゾーン）
+   ↓ audio_filesテーブルに保存
+   ↓
+2. Vibe/Behavior/Emotion API
+   ↓ audio_filesからlocal_date/local_timeを取得
+   ↓ spot_featuresに保存
+   ↓
+3. aggregator-checker
+   ↓ spot_featuresからlocal_dateを取得
+   ↓ SQSメッセージにlocal_dateを含める
+   ↓
+4. Daily/Weekly分析
+   ✅ local_dateでグループ化
+```
+
+**絶対にやってはいけないこと**:
+```python
+# ❌ 絶対禁止！
+if not local_date:
+    dt = datetime.fromisoformat(recorded_at.replace('Z', '+00:00'))
+    local_date = dt.strftime('%Y-%m-%d')  # UTCで計算
+
+# ✅ 正しい
+if not local_date:
+    raise ValueError("local_date is required")
+```
+
+**修正履歴**:
+- 2026-01-21: aggregator-checker/dashboard-summary-workerでUTCフォールバックを削除、local_date必須化
 
 ---
 
@@ -255,8 +305,8 @@ weekly_resultsの主要カラム:
 
 - `/vault/` → Vault API
 - `/behavior-analysis/features/` → Behavior Features
-- `/emotion-analysis/features/` → Emotion Features
-- `/vibe-analysis/transcription/` → Vibe Transcriber
+- `/emotion-analysis/feature-extractor/` → Emotion Features
+- `/vibe-analysis/transcriber/` → Vibe Transcriber
 - `/aggregator/` → Aggregator API
   - `/aggregator/spot` - Spot集計
   - `/aggregator/daily` - Daily集計

@@ -1,306 +1,328 @@
 # WatchMe 既知の問題と対応TODO
 
-最終更新: 2025-12-12
+最終更新: 2026-01-23
 
-このドキュメントは、WatchMeシステムにおける既知の問題と、今後対応が必要な課題を記録します。
+このドキュメントは、WatchMeシステムにおける既知の問題を**本質的な課題別**に整理し、今後対応が必要な内容を記録します。
 
 **⚠️ 重要**: スケーラビリティ改善の包括的な計画は [SCALABILITY_ROADMAP.md](./SCALABILITY_ROADMAP.md) を参照してください。
 
 ---
 
-## 🚨 優先度：高
+## 🎯 本質的な課題の全体像
 
-### 1. DLQ定期蓄積問題（週1回発生）
+WatchMeシステムで発生している様々な症状（DLQ蓄積、SQSキュー詰まり、処理失敗等）は、以下の**4つの本質的な課題**に起因しています：
 
-**発見日**: 2026-01-09（4週間連続で発生）
-
-#### 問題の概要
-
-週に1回程度、SED/SER DLQに数百件のメッセージが蓄積する問題が**4週間連続**で発生しています。毎回手動でパージしていますが、根本原因は未解決です。
-
-#### 具体的な症状
-
-1. **DLQへの大量蓄積（2026-01-09時点）**
-   - `watchme-sed-dlq-v2.fifo`: **514件**
-   - `watchme-ser-dlq-v2.fifo`: **513件**
-   - `watchme-asr-dlq-v2.fifo`: 0件
-   - **合計: 1,027件**のメッセージが蓄積
-
-2. **発生頻度**
-   - 週1回程度
-   - 過去4週間連続で発生（2025-12-中旬〜2026-01-09）
-
-3. **影響**
-   - SED/SER処理が一部失敗（音響検出・感情分析が欠損）
-   - Daily/Weekly分析に影響する可能性
-   - システムパフォーマンス低下はなし（DLQは処理対象外のため）
-
-#### 応急処置（毎回実施）
-
-```bash
-# DLQ状態確認
-aws sqs get-queue-attributes \
-  --queue-url https://sqs.ap-southeast-2.amazonaws.com/754724220380/watchme-sed-dlq-v2.fifo \
-  --attribute-names ApproximateNumberOfMessages \
-  --region ap-southeast-2
-
-aws sqs get-queue-attributes \
-  --queue-url https://sqs.ap-southeast-2.amazonaws.com/754724220380/watchme-ser-dlq-v2.fifo \
-  --attribute-names ApproximateNumberOfMessages \
-  --region ap-southeast-2
-
-# DLQパージ（削除）
-aws sqs purge-queue \
-  --queue-url https://sqs.ap-southeast-2.amazonaws.com/754724220380/watchme-sed-dlq-v2.fifo \
-  --region ap-southeast-2
-
-aws sqs purge-queue \
-  --queue-url https://sqs.ap-southeast-2.amazonaws.com/754724220380/watchme-ser-dlq-v2.fifo \
-  --region ap-southeast-2
-```
-
-**⚠️ 注意**: パージは**データ損失**を伴います。削除前にメッセージの内容を確認することを推奨。
-
-#### 考えられる原因（未調査）
-
-1. **API一時的な障害**
-   - Behavior/Emotion APIのunhealthy状態
-   - メモリ不足・CPU過負荷
-   - ネットワークタイムアウト
-
-2. **Lambda Worker タイムアウト**
-   - 30秒タイムアウトで処理完了できないケース
-   - → 3回リトライ後にDLQへ移動
-
-3. **データ品質の問題**
-   - 音声ファイルの品質が低い
-   - 無音・ノイズのみの録音
-   - ファイル破損
-
-4. **環境変数・認証情報の問題**
-   - Hume API認証エラー
-   - S3アクセス権限エラー
-   - Supabase接続エラー
-
-5. **デモデバイスの処理不整合（仮説）⭐ 有力**
-   - **発見日**: 2026-01-09
-   - **DLQ分析結果**: デモデバイス（9f7d6e27-98c3-4c19-bdfb-f7fda58b9a93）が70%を占める
-   - **問題の構造**:
-     - デモデバイスは demo-generator-v2 Lambda が Spot データを直接 Supabase に生成
-     - 実際の音声ファイルは存在しない（S3にアップロードされない）
-     - しかし、audio-processor Lambda が S3 イベントを受信して SQS に送信してしまう
-     - Lambda Worker（ASR/SED/SER）が存在しない音声ファイルを処理しようとして失敗
-     - 3回リトライ → DLQ行き
-   - **影響範囲**:
-     - SED DLQ: 529件（約70%がデモデバイス）
-     - SER DLQ: 527件（約70%がデモデバイス）
-     - ASR DLQ: 0件（文字起こしは正常？）
-   - **根本原因**:
-     - デモデバイスのデータ生成フローが音声処理パイプラインと不整合
-     - audio-processor がデモデバイスを特別扱いしていない
-   - **解決策（案）**:
-     - audio-processor にデモデバイスのスキップロジックを追加
-     - または、demo-generator が S3 イベントをトリガーしないようにする
-     - または、デモデバイス用の音声ファイルを実際に S3 に配置する
-
-#### 恒久対策（未実施）
-
-**対策1: DLQ監視アラートの実装 ⭐ 最優先**
-
-CloudWatch Alarmでメッセージ数を監視：
-
-```bash
-aws cloudwatch put-metric-alarm \
-  --alarm-name watchme-sed-dlq-alarm \
-  --alarm-description "SED DLQに10件以上メッセージが溜まった" \
-  --metric-name ApproximateNumberOfMessagesVisible \
-  --namespace AWS/SQS \
-  --statistic Average \
-  --period 300 \
-  --evaluation-periods 1 \
-  --threshold 10 \
-  --comparison-operator GreaterThanThreshold \
-  --dimensions Name=QueueName,Value=watchme-sed-dlq-v2.fifo \
-  --region ap-southeast-2
-```
-
-**対策2: DLQメッセージ内容の調査**
-
-DLQに溜まったメッセージの内容を1件取り出して調査：
-
-```bash
-# メッセージ取得（削除しない）
-aws sqs receive-message \
-  --queue-url https://sqs.ap-southeast-2.amazonaws.com/754724220380/watchme-sed-dlq-v2.fifo \
-  --max-number-of-messages 1 \
-  --region ap-southeast-2 | jq .
-
-# エラーパターンの分析
-# - どのデバイスIDが多いか
-# - recorded_atの時間帯パターン
-# - file_pathの特徴
-```
-
-**対策3: Lambda Workerのエラーログ分析**
-
-CloudWatch Logsで失敗パターンを調査：
-
-```bash
-aws logs filter-log-events \
-  --log-group-name /aws/lambda/watchme-sed-worker \
-  --filter-pattern "ERROR" \
-  --start-time $(date -u -v-7d +%s)000 \
-  --region ap-southeast-2 | jq -r '.events[].message' | head -50
-```
-
-**対策4: API側のエラーログ確認**
-
-EC2上のDockerコンテナログを確認：
-
-```bash
-ssh -i ~/watchme-key.pem ubuntu@3.24.16.82
-docker logs behavior-analysis-feature-extractor --since 7d | grep -i "error\|fail\|timeout" | tail -100
-docker logs emotion-analysis-feature-extractor --since 7d | grep -i "error\|fail\|timeout" | tail -100
-```
-
-**優先度**: ⭐⭐⭐⭐⭐（週1回発生しており、早急な調査が必要）
-
-**調査期限**: 2週間以内に根本原因を特定すべき
-
-#### 一時停止方法（Hume API課金回避）
-
-**背景**: Hume APIはフリープランのため、本番環境で自動処理すると課金が発生します。
-
-**停止方法**: Lambda ser-workerのエンドポイントURLを変更（2026-01-09実施）
-
-```bash
-# 停止（エンドポイントURLを無効化）
-aws lambda update-function-configuration \
-  --function-name watchme-ser-worker \
-  --environment Variables="{API_BASE_URL=https://api.hey-watch.me-disabled}" \
-  --region ap-southeast-2
-
-# 再開（元のURLに戻す）
-aws lambda update-function-configuration \
-  --function-name watchme-ser-worker \
-  --environment Variables="{API_BASE_URL=https://api.hey-watch.me}" \
-  --region ap-southeast-2
-
-# 再開時はDLQをパージ（溜まったエラーメッセージを削除）
-aws sqs purge-queue \
-  --queue-url https://sqs.ap-southeast-2.amazonaws.com/754724220380/watchme-ser-dlq-v2.fifo \
-  --region ap-southeast-2
-```
-
-**効果**:
-- ✅ Hume API呼び出しが停止（課金なし）
-- ✅ 他のAPI（ASR/SED）は継続動作
-- ✅ Emotion API自体は稼働（手動curlテスト可能）
-- ⚠️ DLQに失敗メッセージが溜まる（再開時にパージ必要）
+| 課題 | 優先度 | 状態 | 影響範囲 |
+|------|--------|------|---------|
+| **1. タイムアウト・遅延問題** | ⭐⭐⭐⭐⭐ | 🔴 未解決 | Lambda Worker全体、DLQ蓄積 |
+| **2. 監視・検知体制の欠如** | ⭐⭐⭐⭐⭐ | 🟡 部分対応 | 問題の長期放置 |
+| **3. アーキテクチャ不整合** | ⭐⭐⭐ | 🔴 未解決 | デモデバイス処理 |
+| **4. APIエンドポイント構造の不統一** | ⭐⭐⭐⭐ | 🔴 未解決 | 設定ミス、推測による誤り |
 
 ---
 
-### 2. DLQ監視・アラート体制の不足
+## 🔴 課題1: タイムアウト・遅延問題（根本原因・未解決）
 
-**発見日**: 2025-12-13
+### 概要
 
-#### 問題の概要
+Lambda WorkerからEC2 APIへのHTTPSアクセスが30秒以上かかり、タイムアウトする問題。これが**すべてのDLQ蓄積問題の根本原因**となっています。
 
-Dead Letter Queue（DLQ）にメッセージが大量に蓄積しても、アラートがなく気づけない問題が発生しました。
+### 具体的な症状
 
-#### 具体的な症状
+#### 症状1-A: Lambda WorkerのHTTPSタイムアウト（2026-01-22発見）
 
-1. **Lambda関数のエラーが長期間放置**
-   - `watchme-dashboard-analysis-worker` Lambdaで`requests`モジュール不足
-   - インポートエラーで関数が起動できず、3日間気づかず
-   - DLQに991件のメッセージが蓄積（2025-12-10 ~ 2025-12-12）
+**現象**:
+- `https://api.hey-watch.me` 経由: **30秒以上** → タイムアウト
+- `http://3.24.16.82:ポート番号` 直接: **1-2秒** → 正常
 
-2. **監視体制の不足**
-   - DLQのメッセージ数を監視するアラートなし
-   - Lambda関数のエラー率を監視するアラートなし
-   - 手動で確認しない限り問題に気づけない
+**影響**:
+- Lambda Worker（asr/sed/ser-worker）が3回リトライ → DLQ行き
+- SED DLQ: 10件蓄積（2026-01-22時点）
 
-3. **DLQ処理方法の不明確さ**
-   - DLQに溜まったメッセージを元のキューに戻す手順が不明確
-   - パージ（削除）以外の選択肢がない
-   - 大量メッセージの再処理方法が確立されていない
-
-#### 応急処置（2025-12-13実施）
-
-1. **Lambda関数の修正**
-   ```bash
-   cd /Users/kaya.matsumoto/projects/watchme/server-configs/production/lambda-functions/watchme-dashboard-analysis-worker
-   ./build.sh
-   aws lambda update-function-code --function-name watchme-dashboard-analysis-worker --zip-file fileb://function.zip --region ap-southeast-2
-   ```
-
-2. **DLQのパージ（記録を残して削除）**
-   ```bash
-   # DLQ_PURGE_LOG.mdに記録を残してから削除
-   aws sqs purge-queue --queue-url https://sqs.ap-southeast-2.amazonaws.com/754724220380/watchme-dashboard-analysis-dlq --region ap-southeast-2
-   ```
-
-3. **手動で最新データのDaily分析をトリガー**
-   ```bash
-   aws sqs send-message --queue-url https://sqs.ap-southeast-2.amazonaws.com/754724220380/watchme-dashboard-summary-queue \
-     --message-body '{"device_id":"...","local_date":"2025-12-13",...}' --region ap-southeast-2
-   ```
-
-**⚠️ 影響**: 過去のDaily分析（2025-12-10 ~ 2025-12-12）は実行されていない
-
-#### 恒久対策の提案
-
-**対策1: CloudWatch Alarmによる監視 ⭐ 最優先**
-
-以下のメトリクスを監視し、SNS通知を設定：
-
-1. **DLQメッセージ数監視**
-   - メトリクス: `ApproximateNumberOfMessagesVisible`
-   - 条件: > 10件
-   - アクション: SNS → メール/Slack通知
-
-2. **Lambda Error Rate監視**
-   - メトリクス: `Errors / Invocations * 100`
-   - 条件: > 10%（1時間で3データポイント）
-   - アクション: SNS → メール/Slack通知
-
-3. **Lambda Duration監視**
-   - メトリクス: `Duration`
-   - 条件: タイムアウト近く（例: > 800秒）
-   - アクション: SNS → メール/Slack通知
-
-**実装方法**（例: DLQ監視）:
+**応急処置（2026-01-22実施）**:
 ```bash
-aws cloudwatch put-metric-alarm \
-  --alarm-name watchme-dashboard-analysis-dlq-alarm \
-  --alarm-description "DLQに10件以上メッセージが溜まった" \
-  --metric-name ApproximateNumberOfMessagesVisible \
-  --namespace AWS/SQS \
-  --statistic Average \
-  --period 300 \
-  --evaluation-periods 1 \
-  --threshold 10 \
-  --comparison-operator GreaterThanThreshold \
-  --dimensions Name=QueueName,Value=watchme-dashboard-analysis-dlq \
-  --alarm-actions arn:aws:sns:ap-southeast-2:754724220380:watchme-alerts
+# Lambda環境変数を直接IP経由に変更
+aws lambda update-function-configuration --function-name watchme-asr-worker \
+  --environment 'Variables={API_BASE_URL=http://3.24.16.82:8013,...}'
+
+aws lambda update-function-configuration --function-name watchme-sed-worker \
+  --environment 'Variables={API_BASE_URL=http://3.24.16.82:8017,...}'
+
+aws lambda update-function-configuration --function-name watchme-ser-worker \
+  --environment 'Variables={API_BASE_URL=http://3.24.16.82:8018,...}'
 ```
 
-**対策2: DLQ再処理スクリプトの作成**
+**効果**: ✅ タイムアウト回避、⚠️ 根本原因は未解決
 
-DLQからメッセージを元のキューに戻すスクリプトを用意：
+---
+
+#### 症状1-B: `/health` エンドポイントのタイムアウト（2025-12-11発見）
+
+**現象**:
+- コンテナ内部から: **0.8秒** → 正常
+- 外部（Nginx/Cloudflare経由）から: **30秒以上** → タイムアウト
+- `/async-process`は外部からも **1.6秒** → 正常
+
+**影響**:
+- Dockerコンテナがunhealthyと判定される
+- Lambda Workerからの処理リクエストも影響を受ける
+
+---
+
+#### 症状1-C: API一時的unhealthy状態（2025-12-11発見）
+
+**現象**:
+- Behavior/Emotion APIが突然unhealthyになる
+- `/health`エンドポイントがタイムアウト
+- 実際の処理は正常に動作している
+
+**影響**:
+- Lambda Workerが処理できない → SQSメッセージ蓄積
+- 49件のメッセージが溜まり、CPU 97%消費（2025-12-11事例）
+
+**応急処置**:
+- SQSキューパージ（⚠️ データ損失）
+- APIコンテナ再起動
+
+---
+
+### 考えられる根本原因（要調査）
+
+1. **Cloudflare設定の問題**
+   - 過去に「Cloudflare Proxy問題」で51秒レスポンス（2025-12-29修正済み）
+   - 現在はDNS Onlyだが、別の設定（SSL/TLS、Argo Smart Routing等）が影響？
+
+2. **Nginx SSL/TLS設定の問題**
+   - HTTPSのみ遅延が発生
+   - SSL証明書検証タイムアウト
+
+3. **EC2セキュリティグループ・ネットワーク問題**
+   - HTTPSポート443へのアクセス制限
+   - VPCルーティング問題
+
+4. **API側の負荷・メモリ不足**
+   - 特定の条件下でリソース枯渇
+   - uvicorn/FastAPIの非同期処理の問題
+
+---
+
+### 恒久対策
+
+#### 対策1: 根本原因の徹底調査（最優先 ⭐⭐⭐⭐⭐）
+
+**調査手順**:
+
+1. **Cloudflare設定の全確認**
+   ```bash
+   # レスポンス時間計測
+   time curl -I https://api.hey-watch.me/behavior-analysis/features/health
+   time curl -I http://3.24.16.82:8017/health
+
+   # Cloudflare設定確認（ブラウザで）
+   # - SSL/TLS設定
+   # - Page Rules
+   # - Firewall Rules
+   # - Argo Smart Routing
+   ```
+
+2. **Nginx SSL設定の確認**
+   ```bash
+   ssh -i ~/watchme-key.pem ubuntu@3.24.16.82
+   cat /etc/nginx/sites-available/api.hey-watch.me | grep -A 20 "ssl"
+   nginx -T | grep -A 10 "api.hey-watch.me"
+   ```
+
+3. **EC2セキュリティグループ確認**
+   ```bash
+   aws ec2 describe-security-groups --region ap-southeast-2 | \
+     jq '.SecurityGroups[] | select(.GroupName | contains("watchme"))'
+   ```
+
+4. **Lambda VPC設定確認**
+   ```bash
+   aws lambda get-function --function-name watchme-sed-worker \
+     --region ap-southeast-2 | jq '.Configuration.VpcConfig'
+   ```
+
+5. **APIログの詳細分析**
+   ```bash
+   # タイムアウト時のNginxアクセスログ
+   ssh -i ~/watchme-key.pem ubuntu@3.24.16.82
+   tail -f /var/log/nginx/access.log | grep "behavior-analysis"
+
+   # APIコンテナログ
+   docker logs behavior-analysis-feature-extractor -f | grep -i "timeout\|slow\|error"
+   ```
+
+---
+
+#### 対策2: 代替アーキテクチャの検討
+
+**案1: Lambda VPC配置 + プライベートIP接続**
+- Lambda関数をVPC内に配置
+- EC2のプライベートIPで直接アクセス
+- HTTPSの問題を完全に回避
+
+**案2: API Gateway経由**
+- API GatewayをHTTPSエンドポイントとして配置
+- Lambda → API Gateway → EC2
+- 安定したHTTPS接続
+
+**案3: HTTPのみ運用（非推奨）**
+- セキュリティリスクあり
+- 一時的な回避策としてのみ検討
+
+---
+
+## 🟡 課題2: 監視・検知体制の欠如（部分対応済み）
+
+### 概要
+
+DLQに数百件のメッセージが蓄積しても、Lambda関数がエラーを出し続けても、気づけない問題。
+
+### 具体的な症状
+
+#### 症状2-A: DLQ大量蓄積の長期放置
+
+**事例1（2025-12-12）**:
+- `watchme-dashboard-analysis-dlq`: **991件**蓄積
+- 原因: Lambda関数で`requests`モジュール不足（インポートエラー）
+- 期間: **3日間**放置
+- 発見: 手動確認するまで気づかず
+
+**事例2（2026-01-21）**:
+- `watchme-sed-dlq-v2.fifo`: **671件**
+- `watchme-ser-dlq-v2.fifo`: **670件**
+- 合計: **1,342件**
+- 発見: 定期確認で発覚
+
+#### 症状2-B: 週1回のDLQ蓄積パターン（2026-01-09発見）
+
+**パターン**:
+- 週1回程度、数百件のDLQメッセージが蓄積
+- **4週間連続**で発生
+- 毎回手動でパージ
+
+**主な原因**:
+- デモデバイス処理不整合（約70%）
+- タイムアウト問題（残り30%）
+
+---
+
+### 恒久対策
+
+#### 対策1: CloudWatch Alarm実装（最優先 ⭐⭐⭐⭐⭐）
+
+**監視項目**:
+
+1. **DLQメッセージ数監視**
+   ```bash
+   # 全DLQに対してアラーム設定
+   for dlq in watchme-asr-dlq-v2.fifo watchme-sed-dlq-v2.fifo \
+               watchme-ser-dlq-v2.fifo watchme-dashboard-summary-dlq \
+               watchme-dashboard-analysis-dlq; do
+
+     aws cloudwatch put-metric-alarm \
+       --alarm-name "${dlq}-alarm" \
+       --alarm-description "DLQに10件以上メッセージが溜まった" \
+       --metric-name ApproximateNumberOfMessagesVisible \
+       --namespace AWS/SQS \
+       --statistic Average \
+       --period 300 \
+       --evaluation-periods 1 \
+       --threshold 10 \
+       --comparison-operator GreaterThanThreshold \
+       --dimensions Name=QueueName,Value=${dlq} \
+       --alarm-actions arn:aws:sns:ap-southeast-2:754724220380:watchme-alerts \
+       --region ap-southeast-2
+   done
+   ```
+
+2. **Lambda Error Rate監視**
+   ```bash
+   # 全Lambda関数のエラー率監視
+   for func in watchme-asr-worker watchme-sed-worker watchme-ser-worker \
+               watchme-audio-processor watchme-aggregator-checker \
+               watchme-dashboard-summary-worker watchme-dashboard-analysis-worker; do
+
+     aws cloudwatch put-metric-alarm \
+       --alarm-name "${func}-error-rate" \
+       --metric-name Errors \
+       --namespace AWS/Lambda \
+       --statistic Sum \
+       --period 300 \
+       --evaluation-periods 2 \
+       --threshold 5 \
+       --comparison-operator GreaterThanThreshold \
+       --dimensions Name=FunctionName,Value=${func} \
+       --alarm-actions arn:aws:sns:ap-southeast-2:754724220380:watchme-alerts \
+       --region ap-southeast-2
+   done
+   ```
+
+3. **SQS Message Age監視**
+   ```bash
+   # メッセージが10分以上滞留したらアラート
+   aws cloudwatch put-metric-alarm \
+     --alarm-name watchme-sed-queue-age \
+     --metric-name ApproximateAgeOfOldestMessage \
+     --namespace AWS/SQS \
+     --statistic Maximum \
+     --period 300 \
+     --evaluation-periods 1 \
+     --threshold 600 \
+     --comparison-operator GreaterThanThreshold \
+     --dimensions Name=QueueName,Value=watchme-sed-queue-v2.fifo \
+     --region ap-southeast-2
+   ```
+
+4. **API Health Check監視**
+   - CloudWatch Synthetics Canaryで5分ごとにヘルスチェック
+   - 3回連続失敗 → SNS通知
+
+---
+
+#### 対策2: SNS通知先の設定
+
+```bash
+# SNSトピック作成
+aws sns create-topic --name watchme-alerts --region ap-southeast-2
+
+# メール購読
+aws sns subscribe \
+  --topic-arn arn:aws:sns:ap-southeast-2:754724220380:watchme-alerts \
+  --protocol email \
+  --notification-endpoint your-email@example.com \
+  --region ap-southeast-2
+```
+
+---
+
+#### 対策3: DLQ再処理スクリプト
+
+DLQからメッセージを元のキューに戻すスクリプト:
 
 ```bash
 #!/bin/bash
-# redrive-dlq.sh - DLQから元のキューへメッセージを移動
+# redrive-dlq.sh
 
-SOURCE_QUEUE_URL="https://sqs.ap-southeast-2.amazonaws.com/754724220380/watchme-dashboard-analysis-dlq"
-TARGET_QUEUE_URL="https://sqs.ap-southeast-2.amazonaws.com/754724220380/watchme-dashboard-analysis-queue"
+SOURCE_QUEUE_URL="$1"
+TARGET_QUEUE_URL="$2"
 
+if [ -z "$SOURCE_QUEUE_URL" ] || [ -z "$TARGET_QUEUE_URL" ]; then
+  echo "Usage: $0 <source-dlq-url> <target-queue-url>"
+  exit 1
+fi
+
+count=0
 while true; do
-  MESSAGE=$(aws sqs receive-message --queue-url $SOURCE_QUEUE_URL --max-number-of-messages 1 --region ap-southeast-2)
+  MESSAGE=$(aws sqs receive-message \
+    --queue-url $SOURCE_QUEUE_URL \
+    --max-number-of-messages 1 \
+    --region ap-southeast-2)
 
-  if [ -z "$MESSAGE" ]; then
-    echo "No more messages in DLQ"
+  if [ -z "$MESSAGE" ] || [ "$MESSAGE" == "null" ]; then
+    echo "✅ 完了: ${count}件のメッセージを移動しました"
     break
   fi
 
@@ -308,231 +330,157 @@ while true; do
   RECEIPT_HANDLE=$(echo $MESSAGE | jq -r '.Messages[0].ReceiptHandle')
 
   # 元のキューに送信
-  aws sqs send-message --queue-url $TARGET_QUEUE_URL --message-body "$BODY" --region ap-southeast-2
+  aws sqs send-message \
+    --queue-url $TARGET_QUEUE_URL \
+    --message-body "$BODY" \
+    --region ap-southeast-2
 
   # DLQから削除
-  aws sqs delete-message --queue-url $SOURCE_QUEUE_URL --receipt-handle "$RECEIPT_HANDLE" --region ap-southeast-2
+  aws sqs delete-message \
+    --queue-url $SOURCE_QUEUE_URL \
+    --receipt-handle "$RECEIPT_HANDLE" \
+    --region ap-southeast-2
 
-  echo "Moved 1 message"
+  count=$((count + 1))
+  echo "移動: ${count}件"
 done
 ```
 
-**対策3: Lambda関数のデプロイ検証**
+---
 
-Lambda関数のデプロイ後、自動的に動作確認を行う：
+## 🟢 課題3: アーキテクチャ不整合（未解決）
 
-1. デプロイ後にテストメッセージを送信
-2. 正常に処理されることを確認
-3. エラーがあれば即座にロールバック
+### 概要
 
-**優先度**: ⭐⭐⭐⭐⭐（監視体制は即座に実装すべき）
+デモデバイスのデータ生成フローが、音声処理パイプラインと不整合を起こしている。
+
+### 具体的な症状
+
+#### デモデバイス処理の問題（2026-01-09発見）
+
+**デバイスID**: `9f7d6e27-98c3-4c19-bdfb-f7fda58b9a93`
+
+**問題の構造**:
+1. `demo-generator-v2` LambdaがSpotデータを直接Supabaseに生成
+2. **実際の音声ファイルはS3に存在しない**
+3. しかし、`audio-processor` LambdaがS3イベントを受信（なぜ？）
+4. SQSに送信 → Lambda Worker起動
+5. 存在しない音声ファイルを処理しようとして失敗
+6. 3回リトライ → DLQ行き
+
+**影響範囲**:
+- SED DLQ: 約70%がデモデバイス（529件中370件）
+- SER DLQ: 約70%がデモデバイス（527件中370件）
+- ASR DLQ: 影響なし
 
 ---
 
-### 2. SQSキュー詰まり問題（イベント駆動型アーキテクチャ）
+### 恒久対策
 
-**発見日**: 2025-12-11
+#### 対策1: audio-processorにスキップロジック追加（推奨 ⭐⭐⭐⭐）
 
-#### 問題の概要
+```python
+# audio-processor Lambda
+DEMO_DEVICE_IDS = [
+    '9f7d6e27-98c3-4c19-bdfb-f7fda58b9a93'
+]
 
-Behavior/Emotion APIが一時的にunhealthyになると、Lambda Worker（sed-worker/ser-worker）からのリクエストがタイムアウトし、SQSメッセージが溜まる問題が発生します。
+def lambda_handler(event, context):
+    for record in event['Records']:
+        s3_key = record['s3']['object']['key']
 
-#### 具体的な症状
+        # デバイスIDを抽出
+        device_id = extract_device_id(s3_key)
 
-1. **APIがunhealthyになる**
-   - `/health` エンドポイントがタイムアウト（理由不明、処理自体は正常）
-   - Dockerコンテナのヘルスチェックが失敗
+        # デモデバイスはスキップ
+        if device_id in DEMO_DEVICE_IDS:
+            print(f"Skipping demo device: {device_id}")
+            continue
 
-2. **Lambda Workerがタイムアウト**
-   - タイムアウト設定: 30秒
-   - `/async-process` エンドポイントへのリクエストが30秒以内に202を返さない
-
-3. **SQSメッセージが溜まる**
-   - タイムアウトしたメッセージはSQSキューに戻る（可視性タイムアウト後）
-   - 最大リトライ回数まで繰り返し処理を試行
-   - 49件のメッセージが溜まった事例あり（2025-12-11）
-
-4. **高負荷状態が継続**
-   - 溜まったメッセージを処理するためCPU 97%を消費
-   - 新しい録音が処理されない（古いメッセージを先に処理するため）
-   - 場合によっては処理が追いつかない可能性
-
-#### 応急処置（2025-12-11実施）
-
-1. SQSキューをパージ（全メッセージ削除）
-   ```bash
-   aws sqs purge-queue --queue-url https://sqs.ap-southeast-2.amazonaws.com/754724220380/watchme-sed-queue
-   aws sqs purge-queue --queue-url https://sqs.ap-southeast-2.amazonaws.com/754724220380/watchme-ser-queue
-   ```
-
-2. APIコンテナを再起動
-   ```bash
-   ssh -i ~/watchme-key.pem ubuntu@3.24.16.82
-   cd /home/ubuntu/behavior-analysis-feature-extractor && docker-compose -f docker-compose.prod.yml restart
-   cd /home/ubuntu/emotion-analysis-feature-extractor && docker-compose -f docker-compose.prod.yml restart
-   ```
-
-**⚠️ 注意**: パージは本番環境では許容されない（データ損失）ため、恒久対策が必須。
-
----
-
-## 📋 恒久対策の提案
-
-### 対策1: Lambda Workerのタイムアウト延長 ⭐ 最優先
-
-**現状**: 30秒
-**推奨**: 60秒
-
-**実装方法**:
-```bash
-aws lambda update-function-configuration --function-name watchme-ser-worker --timeout 60
-aws lambda update-function-configuration --function-name watchme-sed-worker --timeout 60
-aws lambda update-function-configuration --function-name watchme-asr-worker --timeout 60
+        # 通常処理
+        send_to_sqs(s3_key, device_id)
 ```
 
-**効果**:
-- 一時的なAPI遅延に対応可能
-- Cloudflare 100秒制限内に収まる
-- タイムアウトによるメッセージ蓄積を軽減
+---
 
-**優先度**: ⭐⭐⭐⭐⭐（即座に実装可能）
+#### 対策2: demo-generatorが実際の音声ファイルを配置（代替案）
+
+デモデータ生成時に、実際の音声ファイル（無音またはダミー音声）をS3に配置する。
+
+**メリット**: パイプライン全体が一貫して動作
+**デメリット**: S3ストレージコスト、処理コスト増
 
 ---
 
-### 対策2: DLQ（Dead Letter Queue）の適切な設定
+## 🔴 課題4: APIエンドポイント構造の不統一（未解決）
 
-**現状**: 設定済み（要確認）
-**推奨設定**:
-- 最大リトライ回数: 3回
-- 3回失敗後 → DLQに移動
-- DLQの定期的な監視・パージ
+### 概要（2026-01-23発見）
 
-**確認方法**:
+各APIでエンドポイント構造に統一されたルールがないため、AIや開発者が「このAPIならこのエンドポイントだろう」と推測すると間違える。
+
+### 具体例
+
+- Vibe Transcriber: `/async-process` と `/fetch-and-transcribe` の両方が存在
+- Behavior Features: `/async-process` のみ
+- Emotion Features: `/async-process` のみ
+
+**問題**: 構造に一貫性がないため、パスの推測・変換が失敗し、設定ミスを引き起こす。
+
+### 実際に発生した問題（2026-01-23）
+
+Claude（AI）が「Vibe Transcriberは `/fetch-and-transcribe` を使うべき」と誤推測し、Lambda環境変数を誤った値に設定。結果として404エラーが発生し、処理が停止した。
+
+### 恒久対策
+
+全APIで `/async-process` エンドポイントに統一し、推測不要な明確なルールを確立する。
+
+---
+
+## 📊 全DLQ一覧と確認コマンド
+
+### DLQ一覧
+
+| DLQ名 | 処理段階 | 失敗原因 |
+|-------|---------|---------|
+| `watchme-asr-dlq-v2.fifo` | Spot分析（ASR） | Vibe API停止、タイムアウト |
+| `watchme-sed-dlq-v2.fifo` | Spot分析（SED） | Behavior API停止、unhealthy、タイムアウト |
+| `watchme-ser-dlq-v2.fifo` | Spot分析（SER） | Emotion API停止、タイムアウト |
+| `watchme-dashboard-summary-dlq` | Daily集計 | Aggregator API停止 |
+| `watchme-dashboard-analysis-dlq` | Daily分析 | Profiler API停止、プッシュ通知失敗 |
+
+### 全DLQ一括確認コマンド
+
 ```bash
-aws sqs get-queue-attributes \
-  --queue-url https://sqs.ap-southeast-2.amazonaws.com/754724220380/watchme-sed-queue \
-  --attribute-names RedrivePolicy
+echo "=== Spot分析DLQ（FIFO Queue） ==="
+aws sqs get-queue-attributes --queue-url https://sqs.ap-southeast-2.amazonaws.com/754724220380/watchme-asr-dlq-v2.fifo --attribute-names ApproximateNumberOfMessages --region ap-southeast-2 | jq -r '"ASR DLQ: " + .Attributes.ApproximateNumberOfMessages'
+
+aws sqs get-queue-attributes --queue-url https://sqs.ap-southeast-2.amazonaws.com/754724220380/watchme-sed-dlq-v2.fifo --attribute-names ApproximateNumberOfMessages --region ap-southeast-2 | jq -r '"SED DLQ: " + .Attributes.ApproximateNumberOfMessages'
+
+aws sqs get-queue-attributes --queue-url https://sqs.ap-southeast-2.amazonaws.com/754724220380/watchme-ser-dlq-v2.fifo --attribute-names ApproximateNumberOfMessages --region ap-southeast-2 | jq -r '"SER DLQ: " + .Attributes.ApproximateNumberOfMessages'
+
+echo ""
+echo "=== Daily分析DLQ（Standard Queue） ==="
+aws sqs get-queue-attributes --queue-url https://sqs.ap-southeast-2.amazonaws.com/754724220380/watchme-dashboard-summary-dlq --attribute-names ApproximateNumberOfMessages --region ap-southeast-2 | jq -r '"Dashboard Summary DLQ: " + .Attributes.ApproximateNumberOfMessages'
+
+aws sqs get-queue-attributes --queue-url https://sqs.ap-southeast-2.amazonaws.com/754724220380/watchme-dashboard-analysis-dlq --attribute-names ApproximateNumberOfMessages --region ap-southeast-2 | jq -r '"Dashboard Analysis DLQ: " + .Attributes.ApproximateNumberOfMessages'
 ```
 
-**効果**:
-- 失敗メッセージが無限に再試行されない
-- メインキューの詰まりを防止
-- 問題のあるメッセージを隔離して後で調査可能
+### 全DLQ一括パージコマンド
 
-**優先度**: ⭐⭐⭐⭐（設定確認 → 必要なら修正）
+**⚠️ 警告**: パージは**データ損失**を伴います。削除前にメッセージ内容を確認することを推奨。
 
----
-
-### 対策3: CloudWatch Alarmによる監視強化
-
-#### 3-1. APIヘルスチェック監視
-
-**アラーム条件**:
-- Behavior/Emotion APIの `/health` が3回連続失敗
-- → SNS通知 → 担当者に即座にアラート
-
-**実装箇所**:
-- CloudWatch Synthetics Canary（定期的にヘルスチェック）
-- または Lambda関数で5分ごとにヘルスチェック
-
-**効果**:
-- APIのunhealthy状態を早期発見
-- 自動またはマニュアルでコンテナ再起動
-
-**優先度**: ⭐⭐⭐⭐（監視体制の強化）
-
-#### 3-2. SQS Message Age監視
-
-**アラーム条件**:
-- `ApproximateAgeOfOldestMessage` > 600秒（10分）
-- → SNS通知
-
-**効果**:
-- メッセージが溜まり始めたことを早期発見
-- 手動介入の判断材料
-
-**優先度**: ⭐⭐⭐（追加の安全策）
-
----
-
-### 対策4: SQS可視性タイムアウトの調整
-
-**現状**: 15分（900秒）
-**推奨**: Lambda timeout + 余裕（例: 5分 = 300秒）
-
-**理由**:
-- Lambda Workerが60秒でタイムアウト
-- 可視性タイムアウトが長すぎると、失敗メッセージの再処理が遅れる
-- 短くすることで、問題を早期に検出・対処可能
-
-**実装方法**:
 ```bash
-aws sqs set-queue-attributes \
-  --queue-url https://sqs.ap-southeast-2.amazonaws.com/754724220380/watchme-sed-queue \
-  --attributes VisibilityTimeout=300
+# Spot分析DLQ（FIFO Queue）
+aws sqs purge-queue --queue-url https://sqs.ap-southeast-2.amazonaws.com/754724220380/watchme-asr-dlq-v2.fifo --region ap-southeast-2
+aws sqs purge-queue --queue-url https://sqs.ap-southeast-2.amazonaws.com/754724220380/watchme-sed-dlq-v2.fifo --region ap-southeast-2
+aws sqs purge-queue --queue-url https://sqs.ap-southeast-2.amazonaws.com/754724220380/watchme-ser-dlq-v2.fifo --region ap-southeast-2
+
+# Daily分析DLQ（Standard Queue）
+aws sqs purge-queue --queue-url https://sqs.ap-southeast-2.amazonaws.com/754724220380/watchme-dashboard-summary-dlq --region ap-southeast-2
+aws sqs purge-queue --queue-url https://sqs.ap-southeast-2.amazonaws.com/754724220380/watchme-dashboard-analysis-dlq --region ap-southeast-2
+
+echo "🎉 全DLQのパージ完了"
 ```
-
-**効果**:
-- 失敗メッセージの再試行が早くなる
-- DLQへの移動も早くなる
-
-**優先度**: ⭐⭐⭐（Lambda timeout延長と同時実施）
-
----
-
-### 対策5: APIコンテナの自動再起動メカニズム
-
-**提案**: ヘルスチェック失敗時の自動再起動
-
-**実装方法**:
-- Docker Composeの `restart: always` は既に設定済み
-- さらに、Dockerヘルスチェックの `--health-retries` を調整
-- または、CloudWatch Alarm → Lambda → EC2 SSMでコンテナ再起動
-
-**効果**:
-- unhealthy状態の自動復旧
-- 人手介入を減らす
-
-**優先度**: ⭐⭐（中期的な改善）
-
----
-
-## 🔍 根本原因の調査が必要な問題
-
-### `/health` エンドポイントのタイムアウト問題
-
-**現象**:
-- コンテナ内部から `/health` → 即座に応答（0.8秒）
-- 外部（Nginx/Cloudflare経由）から `/health` → タイムアウト（30秒+）
-- 一方で `/async-process` → 外部からも正常（1.6秒）
-
-**考えられる原因**:
-1. Nginxの設定問題（特定のエンドポイントへのルーティング）
-2. Cloudflareのキャッシュ/CDN設定
-3. Dockerネットワークの問題
-4. uvicorn/FastAPIの非同期処理の問題
-
-**調査が必要な項目**:
-- [ ] Nginxアクセスログの詳細分析
-- [ ] Cloudflareの設定確認（Page Rulesなど）
-- [ ] uvicornのワーカー数・スレッド設定
-- [ ] `/health` と `/async-process` のコードの差異分析
-
-**優先度**: ⭐⭐⭐（根本解決のため調査が必要）
-
----
-
-## 📊 実装の優先順位
-
-| 対策 | 優先度 | 実装難易度 | 効果 | 実施時期 |
-|------|--------|-----------|------|---------|
-| 1. Lambda timeout延長 | ⭐⭐⭐⭐⭐ | 低 | 高 | **即時** |
-| 2. DLQ設定確認・修正 | ⭐⭐⭐⭐ | 低 | 高 | **即時** |
-| 3-1. ヘルスチェック監視 | ⭐⭐⭐⭐ | 中 | 高 | 1週間以内 |
-| 4. 可視性タイムアウト調整 | ⭐⭐⭐ | 低 | 中 | 即時〜1週間 |
-| 3-2. Message Age監視 | ⭐⭐⭐ | 中 | 中 | 1週間以内 |
-| 5. 自動再起動メカニズム | ⭐⭐ | 高 | 高 | 1ヶ月以内 |
-| 根本原因調査 | ⭐⭐⭐ | 高 | 不明 | 継続的に |
 
 ---
 
@@ -540,72 +488,37 @@ aws sqs set-queue-attributes \
 
 ### ✅ フェーズ0: 緊急安定化対策（完了: 2025-12-12）
 
-- [x] **Lambda並列実行数の制限**
-  - [x] watchme-sed-worker: 2並列
-  - [x] watchme-ser-worker: 2並列
-  - [x] watchme-asr-worker: 10並列
-- [x] **Lambda Worker timeout を 60秒に延長**
-  - [x] watchme-asr-worker: 60秒
-  - [x] watchme-sed-worker: 60秒
-  - [x] watchme-ser-worker: 60秒
-- [x] **可視性タイムアウトを300秒に調整**
-  - [x] watchme-asr-queue: 300秒
-  - [x] watchme-sed-queue: 300秒
-  - [x] watchme-ser-queue: 300秒
+- [x] Lambda並列実行数の制限（2並列/10並列）
+- [x] Lambda Worker timeout を 60秒に延長
+- [x] 可視性タイムアウトを300秒に調整
 
-**効果**:
-- CPU枯渇によるAPIのunhealthy状態を防止
-- タイムアウト耐性が2倍に向上（30秒 → 60秒）
-- 失敗時の復旧が3倍高速化（15分 → 5分）
+### ✅ フェーズ1: 応急処置（完了: 2026-01-22）
 
-### フェーズ1: FIFO Queue移行（目標: 2025-12-19）
+- [x] Lambda Worker環境変数を直接IP経由に変更
+- [x] SED DLQパージ（10件削除）
 
-- [ ] FIFO Queue作成
-  - [ ] watchme-asr-queue-v2.fifo
-  - [ ] watchme-sed-queue-v2.fifo
-  - [ ] watchme-ser-queue-v2.fifo
-- [ ] audio-processor Lambda修正
-  - [ ] Message Group ID実装
-  - [ ] Deduplication ID実装
-  - [ ] FIFO Queue送信ロジック
-- [ ] Lambda Workerのイベントソースマッピング更新
-  - [ ] watchme-asr-worker
-  - [ ] watchme-sed-worker
-  - [ ] watchme-ser-worker
-- [ ] 段階的切り替え・動作確認
-- [ ] Standard Queue無効化・削除
+### 🚧 フェーズ2: 監視体制構築（目標: 2026-01-29）
 
-**詳細**: [SCALABILITY_ROADMAP.md](./SCALABILITY_ROADMAP.md#phase-1-fifo-queue移行)
+- [ ] DLQ監視アラーム（5つのDLQ）
+- [ ] Lambda Error Rate監視（7つのLambda）
+- [ ] SQS Message Age監視
+- [ ] SNS通知先設定
+- [ ] CloudWatch Synthetics Canary（API Health Check）
+- [ ] DLQ再処理スクリプト作成
 
-### フェーズ2: 監視体制構築（1週間以内）
+### 🚧 フェーズ3: 根本原因調査（目標: 2026-02-05）
 
-- [ ] **DLQ監視（最優先）**
-  - [ ] watchme-dashboard-analysis-dlq: メッセージ数 > 10件
-  - [ ] watchme-dashboard-summary-dlq: メッセージ数 > 10件（存在する場合）
-  - [ ] その他すべてのDLQ
-- [ ] **Lambda Error Rate監視**
-  - [ ] watchme-dashboard-analysis-worker: エラー率 > 10%
-  - [ ] watchme-dashboard-summary-worker: エラー率 > 10%
-  - [ ] watchme-aggregator-checker: エラー率 > 10%
-  - [ ] watchme-audio-processor: エラー率 > 10%
-  - [ ] watchme-asr-worker: エラー率 > 10%
-  - [ ] watchme-sed-worker: エラー率 > 10%
-  - [ ] watchme-ser-worker: エラー率 > 10%
-- [ ] CloudWatch Synthetics Canaryでヘルスチェック監視
-  - [ ] Behavior API
-  - [ ] Emotion API
-  - [ ] Vibe Transcriber API
-- [ ] CloudWatch Alarm設定
-  - [ ] SQS Message Age > 10分
-  - [ ] API Unhealthy 3回連続
-- [ ] SNS通知先の設定（メール/Slack）
-- [ ] DLQ再処理スクリプトの作成
+- [ ] Cloudflare設定の全確認
+- [ ] Nginx SSL設定の確認
+- [ ] EC2セキュリティグループ確認
+- [ ] Lambda VPC設定確認
+- [ ] APIログの詳細分析
+- [ ] **根本原因の特定と修正**
 
-### フェーズ3: 長期改善（1ヶ月以内）
+### 🚧 フェーズ4: アーキテクチャ修正（目標: 2026-02-05）
 
-- [ ] 自動再起動メカニズムの実装
-- [ ] `/health` タイムアウト問題の根本原因調査
-- [ ] 負荷テスト（大量メッセージ処理時の挙動確認）
+- [ ] audio-processorにデモデバイススキップロジック追加
+- [ ] デモデバイスDLQの確認・パージ
 
 ---
 
@@ -614,16 +527,36 @@ aws sqs set-queue-attributes \
 - [処理アーキテクチャ](./PROCESSING_ARCHITECTURE.md) - イベント駆動型アーキテクチャの詳細
 - [技術仕様](./TECHNICAL_REFERENCE.md) - Lambda関数とSQSの設定
 - [運用ガイド](./OPERATIONS_GUIDE.md) - デプロイ・運用手順
-- [トラブルシューティング](./EC2_RESTART_TROUBLESHOOTING.md) - 既存のトラブル対応
+- [スケーラビリティロードマップ](./SCALABILITY_ROADMAP.md) - 長期改善計画
 
 ---
 
-## 📞 緊急時の連絡先
+## 📞 緊急時の対応フロー
 
-**問題発生時の対応フロー**:
-1. CloudWatch Logs でエラー確認
-2. SQSキューの状態確認
-3. APIコンテナの再起動
-4. それでも解決しない場合 → SQSキューパージ（最終手段）
+### 問題発生時の基本手順
 
-**重要**: SQSパージは**データ損失**を伴うため、本番環境では慎重に判断すること。
+1. **CloudWatch Logs でエラー確認**
+   ```bash
+   aws logs tail /aws/lambda/watchme-sed-worker --region ap-southeast-2 --since 10m
+   ```
+
+2. **DLQの状態確認**（上記の一括確認コマンドを実行）
+
+3. **APIコンテナの状態確認**
+   ```bash
+   ssh -i ~/watchme-key.pem ubuntu@3.24.16.82
+   docker ps | grep -E "behavior|emotion|vibe"
+   ```
+
+4. **APIコンテナの再起動**
+   ```bash
+   cd /home/ubuntu/behavior-analysis-feature-extractor
+   docker-compose -f docker-compose.prod.yml restart
+   ```
+
+5. **それでも解決しない場合**
+   - DLQメッセージを1件取得して内容確認
+   - 問題が明確なら redrive-dlq.sh で再処理
+   - 不明な場合のみパージを検討（最終手段）
+
+**重要**: DLQパージは**データ損失**を伴うため、本番環境では慎重に判断すること。

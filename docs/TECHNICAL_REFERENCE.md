@@ -100,8 +100,8 @@ aws ec2 modify-instance-attribute --profile admin ...
 |---------|---------|--------|--------------|-----|------|
 | **ゲートウェイ** | Vault API | 8000 | `/vault/` | watchme-api-vault | S3音声ファイル配信 |
 | **音声処理** | Behavior Features | 8017 | `/behavior-analysis/features/` | watchme-behavior-analysis-feature-extractor | 527種類の音響検出 |
-| | Emotion Features | 8018 | `/emotion-analysis/features/` | watchme-emotion-analysis-feature-extractor-v3 | 8感情認識 |
-| | Vibe Transcriber | 8013 | `/vibe-analysis/transcription/` | watchme-vibe-analysis-transcriber | Groq Whisper v3文字起こし |
+| | Emotion Features | 8018 | `/emotion-analysis/feature-extractor/` | watchme-emotion-analysis-feature-extractor-v3 | 8感情認識 |
+| | Vibe Transcriber | 8013 | `/vibe-analysis/transcriber/` | watchme-vibe-analysis-transcriber | Deepgram Nova-2文字起こし |
 | **集計・分析** | **Aggregator API** | **8011** | **`/aggregator/`** | **watchme-aggregator** | **Spot/Daily集計** |
 | | **Profiler API** | **8051** | **`/profiler/`** | **watchme-profiler** | **Spot/Daily LLM分析** |
 | **管理** | Admin | 9000 | `/admin/` | watchme-admin | 管理UI |
@@ -283,8 +283,8 @@ aws ec2 modify-instance-attribute --profile admin ...
 |------|---------|------|
 | `/vault/` | Vault API | S3音声ファイル配信 |
 | `/behavior-analysis/features/` | Behavior Features | 音響イベント検出 |
-| `/emotion-analysis/features/` | Emotion Features | 感情認識 |
-| `/vibe-analysis/transcription/` | Vibe Transcriber | 文字起こし |
+| `/emotion-analysis/feature-extractor/` | Emotion Features | 感情認識 |
+| `/vibe-analysis/transcriber/` | Vibe Transcriber | 文字起こし |
 | `/aggregator/` | Aggregator API | Spot/Daily集計 |
 | `/profiler/` | Profiler API | Spot/Daily LLM分析 |
 | `/janitor/` | Janitor | 音声データ削除 |
@@ -309,8 +309,8 @@ aws ec2 modify-instance-attribute --profile admin ...
 | API | パス | タイムアウト | 理由 |
 |-----|------|------------|------|
 | Behavior Features | `/behavior-analysis/features/` | 180秒 | 大規模モデル処理 |
-| Emotion Features | `/emotion-analysis/features/` | 180秒 | 感情認識処理 |
-| Vibe Transcriber | `/vibe-analysis/transcription/` | 180秒 | Groq API処理 |
+| Emotion Features | `/emotion-analysis/feature-extractor/` | 180秒 | 感情認識処理 |
+| Vibe Transcriber | `/vibe-analysis/transcriber/` | 180秒 | Groq API処理 |
 | Aggregator | `/aggregator/` | 60秒 | 軽量集計 |
 | Profiler | `/profiler/` | 180秒 | LLM分析 |
 | その他 | - | 60秒 | デフォルト |
