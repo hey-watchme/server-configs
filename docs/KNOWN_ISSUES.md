@@ -1,6 +1,6 @@
 # WatchMe 既知の問題と対応TODO
 
-最終更新: 2026-01-23
+最終更新: 2026-01-25
 
 このドキュメントは、WatchMeシステムにおける既知の問題を**本質的な課題別**に整理し、今後対応が必要な内容を記録します。
 
@@ -18,6 +18,7 @@ WatchMeシステムで発生している様々な症状（DLQ蓄積、SQSキュ�
 | **2. 監視・検知体制の欠如** | ⭐⭐⭐⭐⭐ | 🟡 部分対応 | 問題の長期放置 |
 | **3. アーキテクチャ不整合** | ⭐⭐⭐ | 🔴 未解決 | デモデバイス処理 |
 | **4. APIエンドポイント構造の不統一** | ⭐⭐⭐⭐ | 🔴 未解決 | 設定ミス、推測による誤り |
+| **5. CORS設定の分散・不統一** | ⭐⭐⭐⭐ | 🔴 未解決 | API修正時に他APIが壊れる |
 
 ---
 
@@ -433,6 +434,108 @@ Claude（AI）が「Vibe Transcriberは `/fetch-and-transcribe` を使うべき�
 ### 恒久対策
 
 全APIで `/async-process` エンドポイントに統一し、推測不要な明確なルールを確立する。
+
+---
+
+## 🔴 課題5: CORS設定の分散・不統一（未解決）
+
+### 概要（2026-01-25発見）
+
+CORS（Cross-Origin Resource Sharing）設定がNginxとFastAPIの両方に分散しており、APIを修正すると別のAPIが壊れる問題。
+
+### 発生した問題
+
+**事例（2026-01-25 Business API）**:
+1. 他のAPI（Aggregator等）を修正
+2. 依存ライブラリ更新 or Docker再ビルドでCORSミドルウェアの挙動が変化
+3. Nginx側のCORS設定（`*`）とFastAPI側のCORS設定（`https://business.hey-watch.me`）が重複
+4. レスポンスヘッダーが`Access-Control-Allow-Origin: https://business.hey-watch.me, *`となる
+5. ブラウザがCORSエラーを返す
+
+**エラーメッセージ**:
+```
+Access to fetch at 'https://api.hey-watch.me/business/api/support-plans'
+has been blocked by CORS policy: The 'Access-Control-Allow-Origin' header
+contains multiple values 'https://business.hey-watch.me, *', but only one is allowed.
+```
+
+### 現状の問題
+
+| API | CORS設定場所 | リスク |
+|-----|-------------|-------|
+| Business API | FastAPI（修正済み） | ✅ 解決 |
+| Aggregator | Nginx | ❌ FastAPIにCORS追加したら壊れる |
+| Profiler | Nginx | ❌ 同上 |
+| Behavior Features | Nginx | ❌ 同上 |
+| Emotion Features | Nginx | ❌ 同上 |
+| Vibe Transcriber | Nginx | ❌ 同上 |
+| その他全API | Nginx | ❌ 同上 |
+
+**根本原因**: 設定が分散しているため、どこかを触ると別の場所が壊れる
+
+---
+
+### 恒久対策
+
+#### 対策: 全APIのCORS設定を統一（推奨 ⭐⭐⭐⭐）
+
+**方針**: 全てFastAPI側で管理し、Nginx側からCORS設定を削除
+
+**理由**:
+- アプリケーション側で制御する方が柔軟
+- オリジンごとの細かい制御が可能
+- 設定が1箇所に集約され、管理しやすい
+
+**作業手順**:
+
+1. **各APIのFastAPIにCORSミドルウェアを追加**
+   ```python
+   from fastapi.middleware.cors import CORSMiddleware
+
+   app.add_middleware(
+       CORSMiddleware,
+       allow_origins=["*"],  # または特定のオリジン
+       allow_credentials=True,
+       allow_methods=["*"],
+       allow_headers=["*"],
+   )
+   ```
+
+2. **Nginx設定からCORS関連を削除**
+   ```nginx
+   # 削除する行
+   add_header "Access-Control-Allow-Origin" "*";
+   add_header "Access-Control-Allow-Methods" "GET, POST, OPTIONS";
+   add_header "Access-Control-Allow-Headers" "Content-Type, Authorization";
+
+   # OPTIONSリクエスト処理も削除
+   if ($request_method = "OPTIONS") {
+       return 204;
+   }
+   ```
+
+3. **Nginx設定をEC2に反映**
+   ```bash
+   ssh -i ~/watchme-key.pem ubuntu@3.24.16.82
+   cd /home/ubuntu/watchme-server-configs
+   git pull origin main
+   sudo cp production/sites-available/api.hey-watch.me /etc/nginx/sites-available/
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
+
+**対象API一覧**:
+- [ ] Aggregator API（ポート8050）
+- [ ] Profiler API（ポート8051）
+- [ ] Behavior Features API（ポート8017）
+- [ ] Emotion Features API（ポート8018）
+- [ ] Vibe Transcriber API（ポート8013）
+- [ ] Vault API（ポート8000）
+- [ ] Avatar Uploader API（ポート8014）
+- [ ] Janitor API（ポート8030）
+- [ ] Demo Generator API（ポート8020）
+- [ ] QR Code Generator API（ポート8021）
+
+**参照ドキュメント**: [TECHNICAL_REFERENCE.md](./TECHNICAL_REFERENCE.md) のCORS設定セクション
 
 ---
 
