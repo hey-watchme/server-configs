@@ -326,6 +326,60 @@ location /profiler/ {
 }
 ```
 
+### ⚠️ CORS設定の原則（重要）
+
+**CORS（Cross-Origin Resource Sharing）はブラウザのセキュリティ機能**で、異なるドメイン間のAPIリクエストを制御します。
+
+#### 絶対ルール：CORSは1箇所のみで設定
+
+```
+❌ NginxとFastAPI両方で設定 → ヘッダー重複でエラー
+✅ どちらか一方のみで設定
+```
+
+**実例（2026-01-25発生）**:
+```
+Access-Control-Allow-Origin: https://business.hey-watch.me, *
+                             ↑ FastAPIが追加    ↑ Nginxが追加
+→ ブラウザがCORSエラーを返す
+```
+
+#### 現在の設定方針
+
+| API種別 | 呼び出し元 | CORS設定場所 | 理由 |
+|---------|-----------|-------------|------|
+| **Business API** | ブラウザ | **FastAPI** | 細かいオリジン制御が必要 |
+| Aggregator, Profiler等 | Lambda（サーバー間） | Nginx | サーバー間通信ではCORS不要だが互換性のため設定 |
+| Behavior, Emotion等 | Lambda（サーバー間） | Nginx | 同上 |
+
+#### 新規API追加時のガイドライン
+
+1. **ブラウザから呼ばれるAPI** → FastAPI側でCORS設定、Nginx側は設定しない
+2. **サーバー間通信のみのAPI** → Nginx側で`*`設定（または設定なし）
+3. **既存APIにFastAPI CORSを追加する場合** → 必ずNginx側のCORS設定を削除
+
+```python
+# FastAPI側のCORS設定例（推奨）
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "https://business.hey-watch.me",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+```
+
+```nginx
+# Nginx側：FastAPIでCORS設定済みのAPIは、CORS関連の記述を削除
+location /business/ {
+    proxy_pass http://localhost:8052/;
+    # CORS設定なし（FastAPI側で処理）
+}
+```
+
 ---
 
 ## 🔧 systemd サービス
