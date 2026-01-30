@@ -89,8 +89,8 @@ def lambda_handler(event, context):
                                 # ✅ UPDATE spot_results.profiler_status to 'completed'
                                 update_profiler_status(device_id, recorded_at, "completed")
 
-                                # Trigger dashboard summary
-                                trigger_dashboard_summary(device_id, recorded_at)
+                                # Trigger dashboard summary with local_date
+                                trigger_dashboard_summary(device_id, recorded_at, statuses.get('local_date'))
 
                             else:
                                 print(f"Profiler failed: {prof_response.status_code}")
@@ -138,7 +138,7 @@ def get_feature_statuses(device_id: str, recorded_at: str) -> dict:
             params={
                 "device_id": f"eq.{device_id}",
                 "recorded_at": f"eq.{recorded_at}",
-                "select": "vibe_status,behavior_status,emotion_status"
+                "select": "vibe_status,behavior_status,emotion_status,local_date"
             },
             headers={
                 "apikey": SUPABASE_KEY,
@@ -224,14 +224,19 @@ def update_profiler_status(device_id: str, recorded_at: str, status: str):
         print(f"Error updating spot_results.profiler_status: {str(e)}")
 
 
-def trigger_dashboard_summary(device_id: str, recorded_at: str):
+def trigger_dashboard_summary(device_id: str, recorded_at: str, local_date: str):
     """
-    Send message to dashboard summary queue
+    Send message to dashboard summary queue with local_date
     """
     try:
+        if not local_date:
+            print(f"ERROR: local_date is None, cannot trigger dashboard summary")
+            raise ValueError("local_date is required for dashboard summary")
+
         message_body = json.dumps({
             "device_id": device_id,
-            "recorded_at": recorded_at
+            "recorded_at": recorded_at,
+            "local_date": local_date
         })
 
         response = sqs.send_message(
@@ -239,7 +244,8 @@ def trigger_dashboard_summary(device_id: str, recorded_at: str):
             MessageBody=message_body
         )
 
-        print(f"Dashboard summary triggered: MessageId={response['MessageId']}")
+        print(f"Dashboard summary triggered: MessageId={response['MessageId']}, local_date={local_date}")
 
     except Exception as e:
         print(f"Error triggering dashboard summary: {str(e)}")
+        raise

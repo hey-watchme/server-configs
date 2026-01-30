@@ -258,6 +258,7 @@ graph TB
 **Lambda: dashboard-analysis-worker**
 - SQSキューからトリガー
 - Profiler API呼び出し
+- **プッシュ通知送信**（分析完了後）
 
 **Profiler API** (`/profiler/daily-profiler`):
 - daily_aggregatorsからプロンプト取得
@@ -272,6 +273,56 @@ graph TB
 - `vibe_scores`: 録音時刻ベースのスコア配列（JSONB配列）
 - `burst_events`: 感情変化イベント（JSONB配列）
 - `processed_count`: 処理済みspot数
+
+#### 📲 プッシュ通知（Daily分析完了時）
+
+**送信フロー**:
+```
+dashboard-analysis-worker
+  ↓
+1. デバイスIDからユーザーID取得 (user_devices)
+2. ユーザーのAPNsトークン取得 (user_profiles.apns_token)
+3. デバイスのSubject名取得 (subjects)
+4. SNS Platform Endpoint作成/更新
+5. APNsプッシュ通知送信
+  ↓
+iOSアプリに通知表示
+```
+
+**通知内容**:
+- タイトル: 「{Subject名}さんのデイリー分析完了」
+- 本文: 「{日付}の分析が完了しました」
+- アクション: タップでダッシュボードを開く
+
+**AWS SNS設定**:
+- **Production**: `arn:aws:sns:ap-southeast-2:754724220380:app/APNS/watchme-ios-app-token`
+- **Sandbox**: `arn:aws:sns:ap-southeast-2:754724220380:app/APNS_SANDBOX/watchme-ios-app-token-sandbox`
+
+**IAM権限**:
+- Lambda Role: `watchme-dashboard-analysis-worker-role-ff2gu1tt`
+- 必要な権限: `sns:CreatePlatformEndpoint`, `sns:Publish`, `sns:SetEndpointAttributes`
+
+**メッセージフォーマット**:
+```json
+{
+  "default": "{Subject名}さんのデイリー分析完了",
+  "APNS_SANDBOX": "{
+    \"aps\": {
+      \"alert\": {\"body\": \"{日付}の分析が完了しました\"},
+      \"sound\": \"default\",
+      \"content-available\": 1
+    },
+    \"device_id\": \"...\",
+    \"date\": \"2026-01-21\",
+    \"action\": \"refresh_dashboard\"
+  }"
+}
+```
+
+**重要な注意点**:
+1. ✅ **環境に応じてAPNsキーを動的選択** (`APNS` vs `APNS_SANDBOX`)
+2. ✅ **`default`キーは必須** (SNS MessageStructure='json'の仕様)
+3. ❌ **Weekly分析ではプッシュ通知を送信しない** (Daily分析のみ)
 
 ---
 

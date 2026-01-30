@@ -28,17 +28,13 @@ def lambda_handler(event, context):
             device_id = message['device_id']
             recorded_at = message['recorded_at']
 
-            # Use local_date from message (provided by audio-worker)
+            # local_date must be provided by aggregator-checker
             local_date = message.get('local_date')
 
-            # Fallback: calculate from recorded_at if not provided (for backward compatibility)
             if not local_date:
-                print(f"Warning: local_date not in message, calculating from recorded_at (UTC)")
-                try:
-                    dt = datetime.fromisoformat(recorded_at.replace('Z', '+00:00'))
-                    local_date = dt.strftime('%Y-%m-%d')
-                except:
-                    local_date = datetime.utcnow().strftime('%Y-%m-%d')
+                error_msg = f"ERROR: local_date is missing in message. This violates the system's core principle: all processing must use local_date from iOS app, not UTC conversion."
+                print(error_msg)
+                raise ValueError(error_msg)
 
             print(f"Processing dashboard summary for: {device_id}/{local_date}")
             print(f"Triggered by recording: {recorded_at}")

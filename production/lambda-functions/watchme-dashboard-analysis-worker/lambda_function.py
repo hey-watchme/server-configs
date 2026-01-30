@@ -245,20 +245,26 @@ def send_push_notification(device_id, local_date, recorded_at):
         print(f"[PUSH] SNS Endpoint ARN: {endpoint_arn}")
 
         # 5. 通知ペイロードを作成（バナー表示）
-        # APNS_KEY is dynamically set based on APNS_ENVIRONMENT
-        message = {
-            APNS_KEY: json.dumps({
-                'aps': {
-                    'alert': {
-                        'body': body_text
-                    },
-                    'sound': 'default',
-                    'content-available': 1
+        # Determine APNS key based on environment
+        apns_key = 'APNS_SANDBOX' if apns_environment == 'sandbox' else 'APNS'
+
+        apns_payload = {
+            'aps': {
+                'alert': {
+                    'body': body_text
                 },
-                'device_id': device_id,
-                'date': local_date,
-                'action': 'refresh_dashboard'
-            })
+                'sound': 'default',
+                'content-available': 1
+            },
+            'device_id': device_id,
+            'date': local_date,
+            'action': 'refresh_dashboard'
+        }
+
+        # SNS requires 'default' key when using MessageStructure='json'
+        message = {
+            'default': body_text,
+            apns_key: json.dumps(apns_payload)
         }
 
         # 4. プッシュ通知を送信
@@ -283,7 +289,7 @@ def send_push_notification(device_id, local_date, recorded_at):
                 )
                 print(f"[PUSH] Endpoint re-enabled successfully")
 
-                # リトライ
+                # リトライ（同じメッセージペイロード）
                 response = sns_client.publish(
                     TargetArn=endpoint_arn,
                     Message=json.dumps(message),

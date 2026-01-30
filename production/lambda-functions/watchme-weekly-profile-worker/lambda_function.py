@@ -5,24 +5,52 @@ from datetime import datetime, timedelta
 
 # Environment variables
 API_BASE_URL = os.environ.get('API_BASE_URL', 'https://api.hey-watch.me')
+SUPABASE_URL = os.environ.get('SUPABASE_URL')
+SUPABASE_KEY = os.environ.get('SUPABASE_KEY')
 # Device IDs to process (comma-separated)
 DEVICE_IDS = os.environ.get('DEVICE_IDS', '9f7d6e27-98c3-4c19-bdfb-f7fda58b9a93').split(',')
+
+def get_latest_local_date(device_id):
+    """
+    Get the latest local_date from spot_features for a device
+    This ensures we use the device's timezone, not UTC
+    """
+    try:
+        response = requests.get(
+            f"{SUPABASE_URL}/rest/v1/spot_features",
+            params={
+                "device_id": f"eq.{device_id}",
+                "select": "local_date",
+                "order": "recorded_at.desc",
+                "limit": "1"
+            },
+            headers={
+                "apikey": SUPABASE_KEY,
+                "Authorization": f"Bearer {SUPABASE_KEY}"
+            },
+            timeout=10
+        )
+
+        if response.status_code == 200:
+            data = response.json()
+            if data and len(data) > 0:
+                return data[0].get('local_date')
+
+        return None
+    except Exception as e:
+        print(f"Error getting latest local_date: {e}")
+        return None
 
 def lambda_handler(event, context):
     """
     Weekly Profile Worker Lambda
     Triggered daily at 00:00 (JST) by EventBridge
-    Processes the week containing yesterday's date (Monday-Sunday)
+    Processes the week containing the latest recording's date (Monday-Sunday)
+
+    IMPORTANT: Uses local_date from device, NOT UTC calculation
     """
 
-    print(f"Starting Weekly Profile Worker at {datetime.utcnow().isoformat()}")
-
-    # Calculate week_start_date (Monday of the week containing yesterday)
-    yesterday = datetime.utcnow().date() - timedelta(days=1)
-    week_start_date = yesterday - timedelta(days=yesterday.weekday())
-
-    print(f"Yesterday: {yesterday.isoformat()}")
-    print(f"Week start date (Monday): {week_start_date.isoformat()}")
+    print(f"Starting Weekly Profile Worker")
     print(f"Processing {len(DEVICE_IDS)} device(s)")
 
     results = []
@@ -32,6 +60,29 @@ def lambda_handler(event, context):
         print(f"\n--- Processing device: {device_id} ---")
 
         try:
+            # Get latest local_date from device
+            latest_local_date = get_latest_local_date(device_id)
+
+            if not latest_local_date:
+                print(f"ERROR: No local_date found for device {device_id}")
+                results.append({
+                    'device_id': device_id,
+                    'success': False,
+                    'error': 'No local_date found',
+                    'step': 'get_local_date'
+                })
+                continue
+
+            # Calculate week_start_date (Monday) from latest local_date
+            latest_date = datetime.strptime(latest_local_date, '%Y-%m-%d').date()
+            # Subtract 1 day to get "yesterday" in device timezone
+            yesterday = latest_date - timedelta(days=1)
+            week_start_date = yesterday - timedelta(days=yesterday.weekday())
+
+            print(f"Latest local_date: {latest_local_date}")
+            print(f"Yesterday (device time): {yesterday.isoformat()}")
+            print(f"Week start date (Monday): {week_start_date.isoformat()}")
+
             # Step 1: Call Weekly Aggregator API
             aggregator_result = call_weekly_aggregator_api(device_id, week_start_date)
 
