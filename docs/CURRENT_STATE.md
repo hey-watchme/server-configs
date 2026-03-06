@@ -1,0 +1,108 @@
+# WatchMe Current State
+
+最終更新: 2026-03-07  
+Status: Active  
+Source of truth: 現在の運用モデル・責務分担
+
+## この文書の目的
+
+この文書は「今の WatchMe がどう運用されているか」を短く固定するためのものです。  
+歴史や移行経緯ではなく、現時点で作業判断に使う情報だけを置きます。
+
+## 全体像
+
+- クライアント: iOS App / Web Dashboard / Observer Device
+- サーバー: EC2 上の Docker コンテナ群
+- DB: Supabase
+- 非同期処理: Lambda + SQS + EventBridge
+
+重要:
+- **実行基盤は Docker**
+- ただし **デプロイ制御の経路は 1 本ではない**
+
+## 現在のデプロイ責務
+
+### 1. API アプリ本体
+
+対象例:
+- Aggregator API
+- Profiler API
+- その他の独立 API リポジトリ
+
+原則:
+- アプリコードは各 API リポジトリで管理
+- デプロイは各 API リポジトリの **GitHub Actions CI/CD** が担当
+- EC2 上には `/home/ubuntu/{api-name}/` に `docker-compose.prod.yml`, `.env`, `run-prod.sh` が配置される
+
+つまり:
+- **API のコード変更を `server-configs` から直接デプロイしない**
+- まず各 API リポジトリの workflow を確認する
+
+### 2. EC2 基盤設定
+
+対象:
+- Nginx
+- `production/systemd/`
+- `production/docker-compose-files/`
+- ネットワーク・集中管理用設定
+
+原則:
+- これらは `server-configs` が source of truth
+- EC2 に `production/` を反映する
+
+### 3. AWS 非同期基盤
+
+対象:
+- Lambda
+- SQS
+- EventBridge
+- Spot/Daily パイプラインのワーカーと配線
+
+原則:
+- **Lambda は `server-configs` から直接反映**
+- API の CI/CD とは別経路
+
+## systemd の位置づけ
+
+現時点の理解:
+- すべてのランタイムは Docker ベース
+- 一部は `systemd -> docker-compose` のラッパーで管理
+- 一部は GitHub Actions により `/home/ubuntu/{api-name}` 配下へ配備される運用
+
+重要:
+- **「systemd で起動している = そのサービスのコード変更も server-configs から反映する」とは限らない**
+- 特に Aggregator / Profiler は API リポジトリ側 CI/CD を先に確認する
+
+## Spot パイプラインの現行構成
+
+Spot の主要要素:
+- `watchme-audio-processor`
+- `watchme-asr-worker`
+- `watchme-sed-worker`
+- `watchme-ser-worker`
+- `watchme-aggregator-checker`
+- `watchme-spot-analysis-worker`
+- `watchme-spot-analysis-queue.fifo`
+- `watchme-feature-completed-queue`
+- `watchme-dashboard-summary-queue`
+- `watchme-aggregator-reconciliation-every-5-minutes`
+
+責務:
+- feature extractor 完了後の合流判定と enqueue は Lambda/SQS 側
+- Spot Aggregator / Spot Profiler の実処理本体は API 側
+
+## 作業前の確認原則
+
+1. Supabase で対象テーブルと対象レコードを確認
+2. AWS で Lambda/SQS/EventBridge/CloudWatch の現状を確認
+3. API 本体変更か、基盤変更か、Lambda 変更かを分類
+4. その分類に応じた反映経路を選ぶ
+
+## 更新ルール
+
+以下が変わったらこの文書を更新します。
+
+- デプロイ方式の変更
+- source of truth の変更
+- Spot/Daily パイプラインの主要構成変更
+- GitHub Actions 管理対象と `server-configs` 管理対象の境界変更

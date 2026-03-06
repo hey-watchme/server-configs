@@ -1,6 +1,9 @@
 # WatchMe API CI/CD 標準仕様書
 
-**目的**: 全WatchMe APIで統一されたCI/CDプロセスを定義
+Status: Active  
+Source of truth: API リポジトリ側の CI/CD 方式
+
+**目的**: 全 WatchMe API で統一された CI/CD プロセスを定義
 
 ---
 

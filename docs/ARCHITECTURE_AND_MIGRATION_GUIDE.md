@@ -1,5 +1,8 @@
 # 🏗️ WatchMe アーキテクチャ・移行ガイド
 
+Status: Historical  
+Source of truth: これは移行経緯の記録です。現行運用の判断には使わず、[CURRENT_STATE.md](./CURRENT_STATE.md) を参照してください。
+
 **プロジェクト**: 心理・感情モニタリングプラットフォーム
 **作成日**: 2025-11-11
 **最終更新**: 2025-11-14

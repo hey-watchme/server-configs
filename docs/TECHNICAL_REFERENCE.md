@@ -2,6 +2,10 @@
 
 最終更新: 2025-11-15
 
+> Status: Reference
+> Source of truth: 現在の運用判断には [CURRENT_STATE.md](./CURRENT_STATE.md) と [DEPLOYMENT_RUNBOOK.md](./DEPLOYMENT_RUNBOOK.md) を優先してください。
+> Note: この文書には広い技術情報が残っていますが、一部の運用記述は現状より古い可能性があります。
+
 ## 🏗️ システムアーキテクチャ
 
 ### AWS EC2

@@ -2,6 +2,10 @@
 
 最終更新: 2025年9月6日
 
+> Status: Reference
+> Source of truth: デプロイ判断は [DEPLOYMENT_RUNBOOK.md](./DEPLOYMENT_RUNBOOK.md) を優先してください。
+> Note: この文書は旧来の systemd 前提手順を含みます。API ごとの現在のデプロイ経路とは一致しない箇所があります。
+
 ## 🎯 このガイドの目的
 
 このガイドは、WatchMeプラットフォームにおける、**2つの異なるデプロイ作業**の手順を明確に分離して定義します。

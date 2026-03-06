@@ -19,6 +19,7 @@ RECONCILIATION_LOOKBACK_MINUTES = int(
 RECONCILIATION_BATCH_SIZE = int(os.environ.get("RECONCILIATION_BATCH_SIZE", "200"))
 
 FEATURE_STATUS_FIELDS = ("vibe_status", "behavior_status", "emotion_status")
+PROFILER_IN_PROGRESS_STATUSES = {"queued", "processing"}
 
 sqs = boto3.client("sqs", region_name="ap-southeast-2")
 
@@ -146,27 +147,39 @@ def attempt_enqueue(device_id, recorded_at, trigger_source):
             "status": "already_completed",
         }
 
-    if pipeline_state["profiler_in_progress"]:
-        print(f"[{trigger_source}] Profiler already in progress for {recording_key}")
+    local_date = statuses.get("local_date")
+    claim_result = claim_profiler_queue_slot(
+        device_id,
+        recorded_at,
+        local_date,
+        pipeline_state,
+    )
+
+    if claim_result["status"] != "claimed":
+        print(f"[{trigger_source}] Queue claim skipped for {recording_key}: {claim_result}")
         return {
             "device_id": device_id,
             "recorded_at": recorded_at,
-            "status": "profiler_in_progress",
+            **claim_result,
         }
 
-    response = sqs.send_message(
-        QueueUrl=SPOT_ANALYSIS_QUEUE_URL,
-        MessageBody=json.dumps(
-            {
-                "device_id": device_id,
-                "recorded_at": recorded_at,
-                "local_date": statuses.get("local_date"),
-                "trigger_source": trigger_source,
-            }
-        ),
-        MessageGroupId=f"{device_id}-spot-analysis",
-        MessageDeduplicationId=get_deduplication_id(device_id, recorded_at),
-    )
+    try:
+        response = sqs.send_message(
+            QueueUrl=SPOT_ANALYSIS_QUEUE_URL,
+            MessageBody=json.dumps(
+                {
+                    "device_id": device_id,
+                    "recorded_at": recorded_at,
+                    "local_date": local_date,
+                    "trigger_source": trigger_source,
+                }
+            ),
+            MessageGroupId=f"{device_id}-spot-analysis",
+            MessageDeduplicationId=get_deduplication_id(device_id, recorded_at),
+        )
+    except Exception:
+        revert_profiler_queue_claim(device_id, recorded_at)
+        raise
 
     print(
         f"[{trigger_source}] Enqueued spot analysis for {recording_key}: "
@@ -180,6 +193,80 @@ def attempt_enqueue(device_id, recorded_at, trigger_source):
         "trigger_source": trigger_source,
         "message_id": response["MessageId"],
     }
+
+
+def claim_profiler_queue_slot(device_id, recorded_at, local_date, pipeline_state):
+    profiler_row = pipeline_state["profiler_row"]
+    profiler_status = pipeline_state["profiler_status"]
+
+    if pipeline_state["profiler_completed"]:
+        return {"status": "already_completed"}
+
+    if profiler_status in PROFILER_IN_PROGRESS_STATUSES:
+        return {"status": "already_in_progress", "profiler_status": profiler_status}
+
+    if profiler_row:
+        updated_rows = patch_rows(
+            "spot_results",
+            {
+                "device_id": f"eq.{device_id}",
+                "recorded_at": f"eq.{recorded_at}",
+                "or": (
+                    "(profiler_status.is.null,"
+                    "profiler_status.eq.pending,"
+                    "profiler_status.eq.failed)"
+                ),
+            },
+            {"profiler_status": "queued"},
+        )
+
+        if updated_rows:
+            return {"status": "claimed", "profiler_status": "queued"}
+
+        refreshed_state = get_pipeline_state(device_id, recorded_at)
+        if refreshed_state["profiler_completed"]:
+            return {"status": "already_completed"}
+
+        refreshed_status = refreshed_state["profiler_status"]
+        if refreshed_status in PROFILER_IN_PROGRESS_STATUSES:
+            return {
+                "status": "already_in_progress",
+                "profiler_status": refreshed_status,
+            }
+
+        return {
+            "status": "claim_failed",
+            "profiler_status": refreshed_status,
+        }
+
+    create_profiler_placeholder(device_id, recorded_at, local_date, "queued")
+    return {"status": "claimed", "profiler_status": "queued"}
+
+
+def revert_profiler_queue_claim(device_id, recorded_at):
+    patch_rows(
+        "spot_results",
+        {
+            "device_id": f"eq.{device_id}",
+            "recorded_at": f"eq.{recorded_at}",
+            "profiler_status": "eq.queued",
+        },
+        {"profiler_status": "failed"},
+    )
+
+
+def create_profiler_placeholder(device_id, recorded_at, local_date, profiler_status):
+    payload = {
+        "device_id": device_id,
+        "recorded_at": recorded_at,
+        "profile_result": {"pipeline_state": profiler_status},
+        "profiler_status": profiler_status,
+    }
+
+    if local_date:
+        payload["local_date"] = local_date
+
+    upsert_row("spot_results", payload, "device_id,recorded_at")
 
 
 def get_deduplication_id(device_id, recorded_at):
@@ -210,29 +297,47 @@ def get_feature_statuses(device_id, recorded_at):
 
 
 def get_pipeline_state(device_id, recorded_at):
+    aggregator_row = fetch_single_row(
+        "spot_aggregators",
+        device_id,
+        recorded_at,
+        "aggregator_status,prompt,created_at",
+    )
     profiler_row = fetch_single_row(
         "spot_results",
         device_id,
         recorded_at,
-        "profiler_status,created_at,summary,vibe_score",
+        "profiler_status,created_at,summary,vibe_score,profile_result,daily_aggregator_status",
     )
 
-    profiler_completed = bool(
-        profiler_row
-        and (
-            profiler_row.get("profiler_status") == "completed"
-            or profiler_row.get("summary")
-            or profiler_row.get("vibe_score") is not None
-        )
-    )
-    profiler_in_progress = bool(
-        profiler_row and profiler_row.get("profiler_status") in {"queued", "processing"}
-    )
+    profiler_status = (profiler_row or {}).get("profiler_status")
+    profiler_completed = is_profiler_completed(profiler_row)
 
     return {
+        "aggregator_row": aggregator_row,
+        "profiler_row": profiler_row,
+        "aggregator_status": (aggregator_row or {}).get("aggregator_status"),
+        "profiler_status": profiler_status,
         "profiler_completed": profiler_completed,
-        "profiler_in_progress": profiler_in_progress,
     }
+
+
+def is_profiler_completed(profiler_row):
+    if not profiler_row:
+        return False
+
+    if profiler_row.get("profiler_status") == "completed":
+        return True
+
+    if profiler_row.get("summary") or profiler_row.get("vibe_score") is not None:
+        return True
+
+    profile_result = profiler_row.get("profile_result")
+    return bool(
+        profile_result
+        and profile_result
+        not in ({"pipeline_state": "queued"}, {"pipeline_state": "processing"})
+    )
 
 
 def fetch_single_row(table_name, device_id, recorded_at, select_clause):
@@ -256,6 +361,52 @@ def fetch_single_row(table_name, device_id, recorded_at, select_clause):
 
     data = response.json()
     return data[0] if data else None
+
+
+def upsert_row(table_name, payload, on_conflict):
+    response = requests.post(
+        f"{SUPABASE_URL}/rest/v1/{table_name}",
+        params={"on_conflict": on_conflict},
+        json=payload,
+        headers={
+            **supabase_headers(),
+            "Content-Type": "application/json",
+            "Prefer": "resolution=merge-duplicates,return=representation",
+        },
+        timeout=10,
+    )
+
+    if response.status_code not in {200, 201}:
+        raise RuntimeError(
+            f"Failed to upsert into {table_name}: "
+            f"{response.status_code} {response.text}"
+        )
+
+    return response.json()
+
+
+def patch_rows(table_name, filters, payload):
+    response = requests.patch(
+        f"{SUPABASE_URL}/rest/v1/{table_name}",
+        params={**filters, "select": "*"},
+        json=payload,
+        headers={
+            **supabase_headers(),
+            "Content-Type": "application/json",
+            "Prefer": "return=representation",
+        },
+        timeout=10,
+    )
+
+    if response.status_code not in {200, 204}:
+        raise RuntimeError(
+            f"Failed to update {table_name}: {response.status_code} {response.text}"
+        )
+
+    try:
+        return response.json()
+    except ValueError:
+        return []
 
 
 def get_recent_completed_candidates():

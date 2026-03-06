@@ -1,108 +1,95 @@
 # WatchMe Server Configurations
 
-最終更新: 2026-03-06
+最終更新: 2026-03-07
 
-WatchMeとは音声録音から心理・感情分析までを自動実行するプラットフォーム。
-EC2サーバーの設定ファイル（`production/`）とドキュメント（`docs/`）を管理するリポジトリ。
+WatchMe 全体のサーバー設定と運用ドキュメントを集約するリポジトリ。  
+このリポジトリ自体はアプリ本体ではなく、`EC2/Nginx/systemd/docker-compose/Lambda/運用文書` の基盤レイヤーを管理します。
+
+## 最初に読むもの
+
+1. [docs/DOCS_INDEX.md](./docs/DOCS_INDEX.md)
+2. [docs/CURRENT_STATE.md](./docs/CURRENT_STATE.md)
+3. [docs/DEPLOYMENT_RUNBOOK.md](./docs/DEPLOYMENT_RUNBOOK.md)
+4. [docs/PROCESSING_ARCHITECTURE.md](./docs/PROCESSING_ARCHITECTURE.md)
+
+この順で読むと、`どの文書が現行の正か` と `何をどこからデプロイするか` が分かるようにしています。
 
 > **⚠️ 開発の前提**
 >
-> - **データベースファースト**: テーブル構造・データは必ずSupabase MCP経由で確認すること
-> - **AWS現状確認ファースト**: インフラ状態（EC2/Lambda/SQS/ECR/CloudWatch）は必ずAWS MCPで確認してから実装・変更すること
-> - **MCP優先運用**: 調査・検証は `Supabase MCP + AWS MCP` を第一選択とし、AWS CLIは補助的に使用すること
-> - **実装前チェック順序（必須）**:
->   1. Supabase MCPでDB構造・対象レコード確認
->   2. AWS MCPで関連サービスの稼働状況・リソース状況確認
->   3. 影響範囲を確定後に実装
-> - **local_date原則**: すべての日付処理はデバイスのローカル日付（`local_date`）を使用。UTCからの変換・計算は禁止
+> - **データベースファースト**: テーブル構造・データは必ず Supabase 側の現状を確認すること
+> - **AWS現状確認ファースト**: EC2/Lambda/SQS/ECR/CloudWatch の現状を確認してから変更すること
+> - **MCP優先運用**: 調査・検証は `Supabase MCP + AWS MCP` を第一選択とし、AWS CLI は補助的に使用すること
+> - **実装前チェック順序**:
+>   1. DB 構造・対象レコード確認
+>   2. AWS の関連サービス確認
+>   3. 影響範囲を確定してから実装
+> - **local_date原則**: すべての日付処理はデバイスの `local_date` を使用。UTC 変換・計算は禁止
 
----
+## このリポジトリの役割
 
-## 📊 システム構成
+- `production/`: 本番 EC2 に反映する設定ファイル
+- `docs/`: 運用・設計・調査用ドキュメント
+- `production/lambda-functions/`: Lambda / SQS / EventBridge 関連の実装と反映スクリプト
+- `production/sites-available/`: Nginx 設定
+- `production/systemd/`, `production/docker-compose-files/`: EC2 側の起動・ネットワーク・集中管理用設定
 
-**クライアント**: iOS App / Web Dashboard / Observer Device (M5 Core2)
-**サーバー**: EC2 t4g.small? (Sydney, 3.24.16.82)
-**データベース**: Supabase (PostgreSQL)
-**ドメイン**: api.hey-watch.me（DNS: Cloudflare, DNS Onlyモード）
+重要:
+- **API アプリ本体のコードは原則このリポジトリにはありません**
+- `Aggregator API` や `Profiler API` のアプリコード変更は各 API リポジトリで管理します
+- **Lambda はこのリポジトリから直接デプロイする運用です**
 
-### EC2 APIサービス
+## デプロイ責務の早見表
 
-| サービス | ポート | 役割 |
-|---------|--------|------|
-| Vault API | 8000 | S3音声ファイル配信、SKIP機能 |
-| Vibe Transcriber | 8013 | Deepgram Nova-2 文字起こし |
-| Behavior Features | 8017 | 527種類の音響検出（PaSST） |
-| Emotion Features | 8018 | 8感情認識（Kushinada） |
-| Aggregator API | 8050 | Spot/Daily/Weekly集計・プロンプト生成 |
-| Profiler API | 8051 | LLM分析（OpenAI GPT-5 Nano） |
-| Janitor | 8030 | 音声データ自動削除 |
-| Admin | 9000 | 管理ツール |
-| API Manager | 9001 | API管理 |
-| Avatar Uploader | 8014 | アバター画像管理 |
-| Demo Generator | 8020 | デモデータ生成 |
-| QR Code Generator | 8021 | デバイス共有用QRコード生成 |
+| 変更対象 | どこを触るか | 反映方法 |
+|---------|-------------|---------|
+| Lambda 関数 | `server-configs/production/lambda-functions/` | 手動で AWS に反映 |
+| SQS / EventBridge / Lambda 配線 | `server-configs` | 手動で AWS に反映 |
+| Nginx / systemd / docker-compose-files | `server-configs/production/` | EC2 で `setup_server.sh` 等を実行 |
+| Aggregator / Profiler など API 本体 | 各 API リポジトリ | GitHub Actions CI/CD |
+| DB スキーマ | プロジェクト全体の Supabase migrations | migration 実行 |
 
----
+詳細は [docs/DEPLOYMENT_RUNBOOK.md](./docs/DEPLOYMENT_RUNBOOK.md) を参照。
 
-## 📁 ディレクトリ構造
+## ディレクトリ構造
 
-```
+```text
 server-configs/
-├── production/              # 本番環境設定ファイル（EC2に配置）
-│   ├── systemd/            # systemd サービス定義
-│   ├── docker-compose-files/ # Docker Compose設定
-│   ├── sites-available/    # Nginx設定
-│   ├── lambda-functions/   # AWS Lambda関数ソース
-│   ├── scripts/            # デプロイ・運用スクリプト
+├── production/
+│   ├── docker-compose-files/
+│   ├── lambda-functions/
+│   ├── scripts/
+│   ├── sites-available/
+│   ├── systemd/
 │   └── setup_server.sh
-│
-└── docs/                   # ドキュメント（EC2不要）
+└── docs/
 ```
 
-**運用方針**: EC2には `production/` のみデプロイ。`docs/` はEC2に配置しない。
+運用方針:
+- EC2 に配置するのは基本的に `production/`
+- `docs/` は作業者向けの知識集約
 
----
+## 文書の見方
 
-## 📚 ドキュメント一覧
+- 文書の索引: [docs/DOCS_INDEX.md](./docs/DOCS_INDEX.md)
+- 現在の運用状態: [docs/CURRENT_STATE.md](./docs/CURRENT_STATE.md)
+- デプロイ判断: [docs/DEPLOYMENT_RUNBOOK.md](./docs/DEPLOYMENT_RUNBOOK.md)
 
-| 目的 | ドキュメント |
-|------|-------------|
-| 🔄 **処理の流れ** | [PROCESSING_ARCHITECTURE.md](./docs/PROCESSING_ARCHITECTURE.md) |
-| 🔧 **技術仕様（全サービス・エンドポイント）** | [TECHNICAL_REFERENCE.md](./docs/TECHNICAL_REFERENCE.md) |
-| 📝 **デプロイ・運用手順** | [OPERATIONS_GUIDE.md](./docs/OPERATIONS_GUIDE.md) |
-| 🚀 **CI/CD実装ガイド** | [CICD_STANDARD_SPECIFICATION.md](./docs/CICD_STANDARD_SPECIFICATION.md) |
-| 📈 **スケーラビリティ計画** | [SCALABILITY_ROADMAP.md](./docs/SCALABILITY_ROADMAP.md) |
-| ⚠️ **既知の問題** | [KNOWN_ISSUES.md](./docs/KNOWN_ISSUES.md) |
-| 🏗️ **アーキテクチャ移行ガイド** | [ARCHITECTURE_AND_MIGRATION_GUIDE.md](./docs/ARCHITECTURE_AND_MIGRATION_GUIDE.md) |
-| 🔍 **Spot/Daily分析ガイド** | [SPOT_AND_DAILY_ANALYSIS_GUIDE.md](./docs/SPOT_AND_DAILY_ANALYSIS_GUIDE.md) |
-| 🆕 **新規API統合ガイド** | [NEW_API_INTEGRATION_GUIDE.md](./docs/NEW_API_INTEGRATION_GUIDE.md) |
-| 💰 **コスト管理** | [COST_MANAGEMENT.md](./docs/COST_MANAGEMENT.md) |
-| 🔮 **長期記憶（将来構想）** | [FUTURE_LONG_TERM_MEMORY.md](./docs/FUTURE_LONG_TERM_MEMORY.md) |
-| 🖥️ **EC2再起動トラブルシューティング** | [EC2_RESTART_TROUBLESHOOTING.md](./docs/EC2_RESTART_TROUBLESHOOTING.md) |
-| 📜 **変更履歴** | [CHANGELOG.md](./docs/CHANGELOG.md) |
+補足:
+- `TECHNICAL_REFERENCE.md` は広い参照用
+- `CICD_STANDARD_SPECIFICATION.md` は API 側 CI/CD の基準
+- `OPERATIONS_GUIDE.md` は旧来の運用説明を含むため、まず Runbook を読むこと
+- handoff / migration 文書は履歴・調査文脈として扱うこと
 
----
+## 関連プロジェクト
 
-## 🔗 関連プロジェクト
+### WatchMe iOS App
 
-### 📱 WatchMe iOS App
+- リポジトリ: `/Users/kaya.matsumoto/projects/watchme/app/ios-watchme`
+- 役割: 録音、Spot/Daily/Weekly の閲覧、通知、QR 共有
+- 詳細: `/Users/kaya.matsumoto/projects/watchme/app/ios-watchme/README.md`
 
-音声録音とリアルタイム分析結果の閲覧を行うiOSアプリ。
+### WatchMe Business
 
-- **リポジトリ**: `/Users/kaya.matsumoto/projects/watchme/app/ios-watchme`
-- **技術スタック**: Swift 5.9+ / SwiftUI / Supabase Swift SDK
-- **主要機能**: 手動録音・S3アップロード、Spot/Daily/Weekly分析の閲覧、プッシュ通知、QRコードデバイス共有
-- **データアクセス**: Supabaseテーブル直接参照（同一DB）
-- **詳細**: `/Users/kaya.matsumoto/projects/watchme/app/ios-watchme/README.md`
-
-### 💼 WatchMe Business
-
-WatchMeからスピンアウトしたB2B向けサービス。児童発達支援事業所/放課後等デイサービス向けに、保護者ヒアリング音声からAIで個別支援計画書を自動生成する。
-
-- **リポジトリ**: `/Users/kaya.matsumoto/projects/watchme/business`
-- **技術スタック**: FastAPI (Python) + React PWA (TypeScript)
-- **ポート**: Backend 8052 / Frontend 5176
-- **インフラ共有**: 同一EC2・同一Supabase DB（`business_*` テーブル）、S3バケット `watchme-business`
-- **ASR**: Speechmatics Batch API（話者分離対応）
-- **LLM**: OpenAI GPT-4o
-- **詳細**: [business/README.md](/Users/kaya.matsumoto/projects/watchme/business/README.md)
+- リポジトリ: `/Users/kaya.matsumoto/projects/watchme/business`
+- 役割: B2B 向け音声分析・支援計画生成
+- 詳細: [business/README.md](/Users/kaya.matsumoto/projects/watchme/business/README.md)
