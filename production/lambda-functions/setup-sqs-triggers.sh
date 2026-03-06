@@ -44,6 +44,15 @@ aws lambda create-event-source-mapping \
   --maximum-batching-window-in-seconds 0 \
   --region ${REGION} 2>/dev/null || echo "Trigger already exists"
 
+# 5. Spot Analysis Worker - triggered by spot analysis FIFO queue
+echo "Setting up watchme-spot-analysis-worker trigger..."
+aws lambda create-event-source-mapping \
+  --function-name watchme-spot-analysis-worker \
+  --event-source-arn arn:aws:sqs:${REGION}:${ACCOUNT_ID}:watchme-spot-analysis-queue.fifo \
+  --batch-size 1 \
+  --maximum-batching-window-in-seconds 0 \
+  --region ${REGION} 2>/dev/null || echo "Trigger already exists"
+
 echo ""
 echo "✅ All SQS triggers configured!"
 echo ""

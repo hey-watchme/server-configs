@@ -57,7 +57,7 @@ deploy_lambda() {
             --function-name ${FUNCTION_NAME} \
             --timeout ${TIMEOUT} \
             --memory-size ${MEMORY} \
-            --environment Variables="{API_BASE_URL='https://api.hey-watch.me',SUPABASE_URL='${SUPABASE_URL}',SUPABASE_KEY='${SUPABASE_KEY}',ASR_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-asr-queue-v2.fifo',SED_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-sed-queue-v2.fifo',SER_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-ser-queue-v2.fifo',FEATURE_COMPLETED_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-feature-completed-queue',DASHBOARD_SUMMARY_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-dashboard-summary-queue',RECONCILIATION_LOOKBACK_MINUTES='1440',RECONCILIATION_BATCH_SIZE='200'}" \
+            --environment Variables="{API_BASE_URL='https://api.hey-watch.me',SUPABASE_URL='${SUPABASE_URL}',SUPABASE_KEY='${SUPABASE_KEY}',ASR_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-asr-queue-v2.fifo',SED_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-sed-queue-v2.fifo',SER_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-ser-queue-v2.fifo',FEATURE_COMPLETED_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-feature-completed-queue',SPOT_ANALYSIS_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-spot-analysis-queue.fifo',DASHBOARD_SUMMARY_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-dashboard-summary-queue',RECONCILIATION_LOOKBACK_MINUTES='1440',RECONCILIATION_BATCH_SIZE='200'}" \
             --region ${REGION}
     else
         echo "Creating new function..."
@@ -69,7 +69,7 @@ deploy_lambda() {
             --zip-file fileb://function.zip \
             --timeout ${TIMEOUT} \
             --memory-size ${MEMORY} \
-            --environment Variables="{API_BASE_URL='https://api.hey-watch.me',SUPABASE_URL='${SUPABASE_URL}',SUPABASE_KEY='${SUPABASE_KEY}',ASR_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-asr-queue-v2.fifo',SED_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-sed-queue-v2.fifo',SER_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-ser-queue-v2.fifo',FEATURE_COMPLETED_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-feature-completed-queue',DASHBOARD_SUMMARY_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-dashboard-summary-queue',RECONCILIATION_LOOKBACK_MINUTES='1440',RECONCILIATION_BATCH_SIZE='200'}" \
+            --environment Variables="{API_BASE_URL='https://api.hey-watch.me',SUPABASE_URL='${SUPABASE_URL}',SUPABASE_KEY='${SUPABASE_KEY}',ASR_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-asr-queue-v2.fifo',SED_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-sed-queue-v2.fifo',SER_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-ser-queue-v2.fifo',FEATURE_COMPLETED_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-feature-completed-queue',SPOT_ANALYSIS_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-spot-analysis-queue.fifo',DASHBOARD_SUMMARY_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-dashboard-summary-queue',RECONCILIATION_LOOKBACK_MINUTES='1440',RECONCILIATION_BATCH_SIZE='200'}" \
             --region ${REGION}
     fi
 
@@ -98,15 +98,20 @@ echo "4️⃣ Deploying Aggregator Checker..."
 deploy_lambda "watchme-aggregator-checker" "lambda_function.lambda_handler" 300 512
 
 echo ""
-echo "5️⃣ Updating audio-processor..."
+echo "5️⃣ Deploying Spot Analysis Worker..."
+deploy_lambda "watchme-spot-analysis-worker" "lambda_function.lambda_handler" 300 512
+
+echo ""
+echo "6️⃣ Updating audio-processor..."
 deploy_lambda "watchme-audio-processor" "lambda_function.lambda_handler" 30 256
 
 echo ""
 echo "🎉 All Lambda functions deployed successfully!"
 echo ""
 echo "Next steps:"
-echo "1. Configure SQS triggers for each Lambda function"
-echo "2. Configure the EventBridge reconciliation schedule"
-echo "3. Disable the old audio-worker function"
-echo "4. Deploy EC2 API changes"
-echo "5. Test the new event-driven pipeline"
+echo "1. Create the spot analysis FIFO queue"
+echo "2. Configure SQS triggers for each Lambda function"
+echo "3. Configure the EventBridge reconciliation schedule"
+echo "4. Disable the old audio-worker function"
+echo "5. Deploy EC2 API changes"
+echo "6. Test the new event-driven pipeline"

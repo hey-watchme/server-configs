@@ -90,6 +90,11 @@ graph TB
         J2[EventBridge fallback<br/>5分ごとに取りこぼし回収]
     end
 
+    subgraph SpotQueue["📬 Spot分析キュー"]
+        J3[SQS: spot-analysis-queue.fifo]
+        J4[Lambda: spot-analysis-worker]
+    end
+
     subgraph Aggregation["📊 集計 (5-10秒)"]
         K[Aggregator API<br/>/aggregator/spot]
         L[spot_aggregators テーブル]
@@ -119,7 +124,7 @@ graph TB
 
     I --> J
     J2 --> J
-    J -->|全て完了| K --> L --> M --> N --> O
+    J -->|全て完了| J3 --> J4 --> K --> L --> M --> N --> O
 
     classDef uploadStyle fill:#e3f2fd,stroke:#1976d2
     classDef triggerStyle fill:#f3e5f5,stroke:#7b1fa2
@@ -134,6 +139,8 @@ graph TB
     class F1,F2,F3 workerStyle
     class G1,G2,G3,H1,H2,H3 apiStyle
     class I,J queueStyle
+    class J3 queueStyle
+    class J4 workerStyle
     class K,L,M,N aggStyle
 ```
 
@@ -180,13 +187,22 @@ graph TB
 - トリガー: SQS `feature-completed-queue`
 - 処理内容:
   1. `spot_features` テーブルから3つのステータスを確認
-  2. 全て `completed` なら → Aggregator/Profiler実行
+  2. 全て `completed` なら → `watchme-spot-analysis-queue.fifo` に録音単位で enqueue
   3. まだ完了していないものがあれば → 何もせず終了（次の完了通知で再チェック）
 
 **EventBridge fallback（補修経路）**:
 - 5分ごとに `aggregator-checker` を定期実行
 - 対象: `spot_features` で3つ全て `completed` だが、`spot_results` が未作成の録音
 - 目的: feature 完了通知が欠落しても、Spot分析を再開できるようにする
+
+**Lambda: spot-analysis-worker**:
+- トリガー: FIFO SQS `watchme-spot-analysis-queue.fifo`
+- 役割:
+  1. Spot分析対象の録音を1件ずつ処理
+  2. `spot_aggregators` が未作成なら Aggregator API を実行
+  3. Profiler API を実行して `spot_results` を作成
+  4. Daily集計用の `dashboard-summary-queue` に送信
+- 目的: Spot分析の重い処理を `aggregator-checker` から分離し、SQS リトライ/DLQ を使えるようにする
 
 #### 📊 集計フェーズ (5-10秒)
 
@@ -588,7 +604,8 @@ ORDER BY recorded_at ASC
 | **asr-worker** | SQS: asr-queue | Vibe Transcriber API呼び出し | 30秒 | ✅ 稼働中 |
 | **sed-worker** | SQS: sed-queue | Behavior Features API呼び出し | 30秒 | ✅ 稼働中 |
 | **ser-worker** | SQS: ser-queue | Emotion Features API呼び出し | 30秒 | ✅ 稼働中 |
-| **aggregator-checker** | SQS: feature-completed-queue / EventBridge | 3つ完了後にAggregator/Profiler実行、取りこぼし回収 | 5分 | ✅ 稼働中 |
+| **aggregator-checker** | SQS: feature-completed-queue / EventBridge | 3つ完了後にSpot分析キューへ送信、取りこぼし回収 | 5分 | ✅ 稼働中 |
+| **spot-analysis-worker** | SQS: spot-analysis-queue.fifo | Aggregator/Profiler実行、Daily集計キュー送信 | 5分 | ✅ 新規 |
 
 ### Daily/Weekly分析用
 
@@ -606,7 +623,8 @@ ORDER BY recorded_at ASC
 | **watchme-sed-queue-v2.fifo** | **FIFO** | SED処理キュー（順序保証） | audio-processor | sed-worker |
 | **watchme-ser-queue-v2.fifo** | **FIFO** | SER処理キュー（順序保証） | audio-processor | ser-worker |
 | **watchme-feature-completed-queue** | Standard | 完了通知キュー | 各EC2 API | aggregator-checker |
-| watchme-dashboard-summary-queue | Standard | Daily集計キュー | aggregator-checker | dashboard-summary-worker |
+| **watchme-spot-analysis-queue.fifo** | **FIFO** | Spot分析実行キュー | aggregator-checker | spot-analysis-worker |
+| watchme-dashboard-summary-queue | Standard | Daily集計キュー | spot-analysis-worker | dashboard-summary-worker |
 | watchme-dashboard-analysis-queue | Standard | Daily分析キュー | dashboard-summary-worker | dashboard-analysis-worker |
 
 **FIFO Queue設定:**
@@ -632,6 +650,9 @@ ORDER BY recorded_at ASC
 - `watchme-feature-completed-queue` に完了通知送信
 
 **aggregator-checker** (3つ全て completed の場合):
+- `watchme-spot-analysis-queue.fifo` にメッセージ送信
+
+**spot-analysis-worker**:
 - `https://api.hey-watch.me/aggregator/spot`
 - `https://api.hey-watch.me/profiler/spot-profiler`
 - `watchme-dashboard-summary-queue` にメッセージ送信
