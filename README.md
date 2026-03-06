@@ -2,12 +2,12 @@
 
 最終更新: 2026-03-06
 
-音声録音から心理・感情分析までを自動実行するプラットフォーム。
+WatchMeとは音声録音から心理・感情分析までを自動実行するプラットフォーム。
 EC2サーバーの設定ファイル（`production/`）とドキュメント（`docs/`）を管理するリポジトリ。
 
 > **⚠️ 開発の前提**
 >
-> - **データベースファースト**: テーブル構造・データは必ずSupabase MCP経由で確認すること（詳細はCLAUDE.md参照）
+> - **データベースファースト**: テーブル構造・データは必ずSupabase MCP経由で確認すること
 > - **AWS現状確認ファースト**: インフラ状態（EC2/Lambda/SQS/ECR/CloudWatch）は必ずAWS MCPで確認してから実装・変更すること
 > - **MCP優先運用**: 調査・検証は `Supabase MCP + AWS MCP` を第一選択とし、AWS CLIは補助的に使用すること
 > - **実装前チェック順序（必須）**:
@@ -21,7 +21,7 @@ EC2サーバーの設定ファイル（`production/`）とドキュメント（`
 ## 📊 システム構成
 
 **クライアント**: iOS App / Web Dashboard / Observer Device (M5 Core2)
-**サーバー**: EC2 t4g.large (Sydney, 3.24.16.82)
+**サーバー**: EC2 t4g.small? (Sydney, 3.24.16.82)
 **データベース**: Supabase (PostgreSQL)
 **ドメイン**: api.hey-watch.me（DNS: Cloudflare, DNS Onlyモード）
 
@@ -89,15 +89,15 @@ server-configs/
 
 音声録音とリアルタイム分析結果の閲覧を行うiOSアプリ。
 
-- **リポジトリ**: `/Users/kaya.matsumoto/ios_watchme_v9`
+- **リポジトリ**: `/Users/kaya.matsumoto/projects/watchme/app/ios-watchme`
 - **技術スタック**: Swift 5.9+ / SwiftUI / Supabase Swift SDK
 - **主要機能**: 手動録音・S3アップロード、Spot/Daily/Weekly分析の閲覧、プッシュ通知、QRコードデバイス共有
 - **データアクセス**: Supabaseテーブル直接参照（同一DB）
-- **詳細**: [ios_watchme_v9/README.md](/Users/kaya.matsumoto/ios_watchme_v9/README.md)
+- **詳細**: `/Users/kaya.matsumoto/projects/watchme/app/ios-watchme/README.md`
 
 ### 💼 WatchMe Business
 
-WatchMeからスピンアウトしたB2B向けサービス。児童発達支援事業所向けに、保護者ヒアリング音声からAIで個別支援計画書を自動生成する。
+WatchMeからスピンアウトしたB2B向けサービス。児童発達支援事業所/放課後等デイサービス向けに、保護者ヒアリング音声からAIで個別支援計画書を自動生成する。
 
 - **リポジトリ**: `/Users/kaya.matsumoto/projects/watchme/business`
 - **技術スタック**: FastAPI (Python) + React PWA (TypeScript)

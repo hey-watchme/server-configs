@@ -87,6 +87,7 @@ graph TB
 
     subgraph Checker["🔍 完了チェック"]
         J[Lambda: aggregator-checker<br/>3つ全て completed?]
+        J2[EventBridge fallback<br/>5分ごとに取りこぼし回収]
     end
 
     subgraph Aggregation["📊 集計 (5-10秒)"]
@@ -117,6 +118,7 @@ graph TB
     H3 -->|完了通知| I
 
     I --> J
+    J2 --> J
     J -->|全て完了| K --> L --> M --> N --> O
 
     classDef uploadStyle fill:#e3f2fd,stroke:#1976d2
@@ -180,6 +182,11 @@ graph TB
   1. `spot_features` テーブルから3つのステータスを確認
   2. 全て `completed` なら → Aggregator/Profiler実行
   3. まだ完了していないものがあれば → 何もせず終了（次の完了通知で再チェック）
+
+**EventBridge fallback（補修経路）**:
+- 5分ごとに `aggregator-checker` を定期実行
+- 対象: `spot_features` で3つ全て `completed` だが、`spot_results` が未作成の録音
+- 目的: feature 完了通知が欠落しても、Spot分析を再開できるようにする
 
 #### 📊 集計フェーズ (5-10秒)
 
@@ -581,7 +588,7 @@ ORDER BY recorded_at ASC
 | **asr-worker** | SQS: asr-queue | Vibe Transcriber API呼び出し | 30秒 | ✅ 稼働中 |
 | **sed-worker** | SQS: sed-queue | Behavior Features API呼び出し | 30秒 | ✅ 稼働中 |
 | **ser-worker** | SQS: ser-queue | Emotion Features API呼び出し | 30秒 | ✅ 稼働中 |
-| **aggregator-checker** | SQS: feature-completed-queue | 3つ完了後にAggregator/Profiler実行 | 5分 | ✅ 稼働中 |
+| **aggregator-checker** | SQS: feature-completed-queue / EventBridge | 3つ完了後にAggregator/Profiler実行、取りこぼし回収 | 5分 | ✅ 稼働中 |
 
 ### Daily/Weekly分析用
 

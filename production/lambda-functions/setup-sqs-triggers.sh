@@ -12,7 +12,7 @@ echo "🔗 Setting up SQS triggers for Lambda functions..."
 echo "Setting up watchme-asr-worker trigger..."
 aws lambda create-event-source-mapping \
   --function-name watchme-asr-worker \
-  --event-source-arn arn:aws:sqs:${REGION}:${ACCOUNT_ID}:watchme-asr-queue \
+  --event-source-arn arn:aws:sqs:${REGION}:${ACCOUNT_ID}:watchme-asr-queue-v2.fifo \
   --batch-size 1 \
   --maximum-batching-window-in-seconds 0 \
   --region ${REGION} 2>/dev/null || echo "Trigger already exists"
@@ -21,7 +21,7 @@ aws lambda create-event-source-mapping \
 echo "Setting up watchme-sed-worker trigger..."
 aws lambda create-event-source-mapping \
   --function-name watchme-sed-worker \
-  --event-source-arn arn:aws:sqs:${REGION}:${ACCOUNT_ID}:watchme-sed-queue \
+  --event-source-arn arn:aws:sqs:${REGION}:${ACCOUNT_ID}:watchme-sed-queue-v2.fifo \
   --batch-size 1 \
   --maximum-batching-window-in-seconds 0 \
   --region ${REGION} 2>/dev/null || echo "Trigger already exists"
@@ -30,7 +30,7 @@ aws lambda create-event-source-mapping \
 echo "Setting up watchme-ser-worker trigger..."
 aws lambda create-event-source-mapping \
   --function-name watchme-ser-worker \
-  --event-source-arn arn:aws:sqs:${REGION}:${ACCOUNT_ID}:watchme-ser-queue \
+  --event-source-arn arn:aws:sqs:${REGION}:${ACCOUNT_ID}:watchme-ser-queue-v2.fifo \
   --batch-size 1 \
   --maximum-batching-window-in-seconds 0 \
   --region ${REGION} 2>/dev/null || echo "Trigger already exists"
