@@ -623,6 +623,14 @@ echo "🎉 全DLQのパージ完了"
 - [ ] audio-processorにデモデバイススキップロジック追加
 - [ ] デモデバイスDLQの確認・パージ
 
+### 🚧 フェーズ5: 通知仕様の実運用確認（次回セッション）
+
+- [ ] `watchme-dashboard-analysis-worker` の push 通知フローを実装と実データで再確認
+- [ ] `apns_environment` に応じて `APNS` / `APNS_SANDBOX` が実際に使い分けられているか確認
+- [ ] テストビルド / TestFlight / 本番ビルドでどの通知経路が使われるか確定
+- [ ] APNs token の参照先が `public.users.apns_token` で正しいことを実データで確認
+- [ ] 現行仕様に合わせて `PROCESSING_ARCHITECTURE.md` の通知節を更新
+
 ---
 
 ## 📚 関連ドキュメント

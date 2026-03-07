@@ -219,6 +219,8 @@ README の前提どおり、実装前に現状確認を行うこと。
 - 起きていても fallback で収束しているか
 - `watchme-spot-analysis-worker` のリトライ / DLQ が動いているか
 - `dashboard-summary` が二重送信されていないか
+- Daily 完了後の push 通知が、テスト環境 / 本番環境でどう振る舞うか
+- `apns_environment` と実際の SNS Platform Application の対応が合っているか
 
 ---
 
@@ -257,6 +259,14 @@ README の前提どおり、実装前に現状確認を行うこと。
 今回は「欠落しても止まらない」ようにしただけで、なぜ `emotion` 通知が落ちるのかはまだ未解明です。
 
 次回必要なら、EC2 側の Emotion Features サービスログを確認すること。
+
+### 4. push 通知仕様の実運用確認が未完了
+
+- `PROCESSING_ARCHITECTURE.md` には、`apns_environment` に応じて `APNS` / `APNS_SANDBOX` を動的選択する実装意図が記載されている
+- `watchme-dashboard-analysis-worker` の APNs token 参照先は `public.users.apns_token` に修正済み（`user_profiles` は使わない）
+- 一方で、運用記憶としては「テストでは通知が来ず、本番のみ」という前提で扱われていた可能性がある
+- 次回は、文書ではなく実データ・実ログ・実機 build 種別を基準に仕様を確定すること
+- 仕様確定までは、通知に関する文書を「あるべき姿」と「現行運用」が混ざる可能性ありとして扱うこと
 
 ---
 

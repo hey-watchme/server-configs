@@ -302,12 +302,20 @@ graph TB
 
 #### 📲 プッシュ通知（Daily分析完了時）
 
+> **⚠️ 運用メモ（2026-03-07時点）**
+>
+> - 以下は **あるべき構成 / 実装上の意図** を含みます
+> - 実コード `watchme-dashboard-analysis-worker` は `production` / `sandbox` の両方の SNS Platform Application を持ち、`apns_environment` に応じて切り替える実装です
+> - ただし、実運用では「テストでは通知が来ず、本番のみで届く」前提で扱われていたセッション記憶があり、**実際に sandbox 経路が有効かは未確認** です
+> - 次回セッションでは、`apns_environment`、参照テーブル、SNS endpoint 作成先、実機テスト時の build / token 種別を突き合わせて、現行仕様を確定してください
+> - 現時点では、この節だけを根拠に「テストでも通知が届くはず」と判断しないこと
+
 **送信フロー**:
 ```
 dashboard-analysis-worker
   ↓
 1. デバイスIDからユーザーID取得 (user_devices)
-2. ユーザーのAPNsトークン取得 (user_profiles.apns_token)
+2. ユーザーのAPNsトークン取得 (`public.users.apns_token`)
 3. デバイスのSubject名取得 (subjects)
 4. SNS Platform Endpoint作成/更新
 5. APNsプッシュ通知送信
@@ -349,6 +357,7 @@ iOSアプリに通知表示
 1. ✅ **環境に応じてAPNsキーを動的選択** (`APNS` vs `APNS_SANDBOX`)
 2. ✅ **`default`キーは必須** (SNS MessageStructure='json'の仕様)
 3. ❌ **Weekly分析ではプッシュ通知を送信しない** (Daily分析のみ)
+4. ⚠️ **sandbox 通知の実運用可否は別途確認が必要** (この節は実装意図を含む)
 
 ---
 

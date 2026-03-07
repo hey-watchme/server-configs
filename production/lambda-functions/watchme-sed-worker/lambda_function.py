@@ -1,10 +1,16 @@
 import json
-import boto3
 import requests
 import os
 
-# Environment variables
-API_BASE_URL = os.environ.get('API_BASE_URL', 'https://api.hey-watch.me')
+DEFAULT_API_BASE_URL = "https://api.hey-watch.me"
+API_ENDPOINT_URL = os.environ.get(
+    "API_ENDPOINT_URL",
+    f"{os.environ.get('API_BASE_URL', DEFAULT_API_BASE_URL).rstrip('/')}/behavior-analysis/features/async-process",
+)
+API_HOST_HEADER = os.environ.get("API_HOST_HEADER", "")
+VERIFY_TLS = os.environ.get("VERIFY_TLS", "true").lower() not in {"0", "false", "no"}
+REQUEST_CONNECT_TIMEOUT = float(os.environ.get("REQUEST_CONNECT_TIMEOUT", "3"))
+REQUEST_READ_TIMEOUT = float(os.environ.get("REQUEST_READ_TIMEOUT", "10"))
 
 def lambda_handler(event, context):
     """
@@ -23,16 +29,21 @@ def lambda_handler(event, context):
 
             print(f"Processing SED for device {device_id} at {recorded_at}")
             print(f"File path: {file_path}")
+            print(f"Endpoint URL: {API_ENDPOINT_URL}")
+            if API_HOST_HEADER:
+                print(f"Host header: {API_HOST_HEADER}")
 
             # Call SED API async endpoint (returns 202 immediately)
             response = requests.post(
-                f"{API_BASE_URL}/behavior-analysis/features/async-process",
+                API_ENDPOINT_URL,
                 json={
                     "file_path": file_path,
                     "device_id": device_id,
                     "recorded_at": recorded_at
                 },
-                timeout=30  # 30 seconds is enough for 202 response
+                headers={"Host": API_HOST_HEADER} if API_HOST_HEADER else None,
+                verify=VERIFY_TLS,
+                timeout=(REQUEST_CONNECT_TIMEOUT, REQUEST_READ_TIMEOUT),
             )
 
             if response.status_code == 202:

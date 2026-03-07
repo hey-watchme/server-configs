@@ -57,6 +57,12 @@ Source of truth: 変更内容ごとの反映経路
 補足:
 - `watchme-lambda-s3-processor` のような共有ロールでは、queue を新設しても自動で `sqs:SendMessage` 権限は増えない
 - `watchme-spot-analysis-queue.fifo` 追加時は、`SQSSendMessagePolicy` に対象 ARN を追加しないと `aggregator-checker` で `AccessDenied` が発生する
+- `watchme-asr-worker` / `watchme-sed-worker` / `watchme-ser-worker` は、現時点では公開 HTTPS (`https://api.hey-watch.me`) ではなく、`https://3.24.16.82/...` + `Host: api.hey-watch.me` の `API_ENDPOINT_URL` / `API_HOST_HEADER` を維持すること。`deploy-new-lambdas.sh` もこの前提で更新済み
+
+運用メモ:
+- feature worker を再デプロイするときは、公開 HTTPS に戻さないこと
+- 監視追加は `production/lambda-functions/create-watchme-alarms.sh`
+- DLQ 再投入は `production/lambda-functions/redrive-dlq.sh`
 
 ### EC2 基盤設定変更
 

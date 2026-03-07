@@ -311,7 +311,7 @@ def send_push_notification(device_id, local_date, recorded_at):
 def get_user_apns_token(device_id):
     """
     device_idからユーザーIDを取得し、そのユーザーのAPNsトークンと環境を取得
-    2段階クエリで確実に取得
+    public.users を参照する
     Returns: (apns_token, apns_environment) or (None, None)
     """
     try:
@@ -335,17 +335,17 @@ def get_user_apns_token(device_id):
         if response.status_code != 200:
             print(f"[PUSH] Failed to get user_ids for device: {device_id}, status: {response.status_code}")
             print(f"[PUSH] Response: {response.text}")
-            return None
+            return (None, None)
 
         data = response.json()
         if not data or len(data) == 0:
             print(f"[PUSH] No users found for device: {device_id}")
-            return None
+            return (None, None)
 
-        user_ids = [item.get('user_id') for item in data if item.get('user_id')]
+        user_ids = list(dict.fromkeys(item.get('user_id') for item in data if item.get('user_id')))
         if not user_ids:
             print(f"[PUSH] No valid user_ids found")
-            return None
+            return (None, None)
 
         print(f"[PUSH] Found {len(user_ids)} user(s) for device: {user_ids}")
 
@@ -356,29 +356,35 @@ def get_user_apns_token(device_id):
                 f"{SUPABASE_URL}/rest/v1/users",
                 params={
                     'user_id': f'eq.{user_id}',
-                    'select': 'apns_token,apns_environment'
+                    'select': 'user_id,apns_token,apns_environment'
                 },
                 headers=headers,
                 timeout=10
             )
 
             if response.status_code != 200:
-                print(f"[PUSH] Failed to get APNs token for user: {user_id}, status: {response.status_code}")
+                print(
+                    f"[PUSH] Failed to get APNs token from users for user: {user_id}, "
+                    f"status: {response.status_code}, response: {response.text}"
+                )
                 continue
 
             user_data = response.json()
             if not user_data or len(user_data) == 0:
-                print(f"[PUSH] User not found: {user_id}")
+                print(f"[PUSH] User not found in public.users: {user_id}")
                 continue
 
             apns_token = user_data[0].get('apns_token')
-            apns_environment = user_data[0].get('apns_environment', 'production')  # Default to production
+            apns_environment = user_data[0].get('apns_environment', 'production')
 
             if apns_token:
-                print(f"[PUSH] ✅ APNs token found for user: {user_id}, token: {apns_token[:20]}..., environment: {apns_environment}")
+                print(
+                    f"[PUSH] ✅ APNs token found in public.users for user: {user_id}, "
+                    f"token: {apns_token[:20]}..., environment: {apns_environment}"
+                )
                 return (apns_token, apns_environment)
-            else:
-                print(f"[PUSH] No APNs token for user: {user_id}, checking next user...")
+
+            print(f"[PUSH] No APNs token in public.users for user: {user_id}, checking next user...")
 
         print(f"[PUSH] No APNs token found for any user of device: {device_id}")
         return (None, None)
@@ -387,7 +393,7 @@ def get_user_apns_token(device_id):
         print(f"[PUSH] Error fetching APNs token: {str(e)}")
         import traceback
         traceback.print_exc()
-        return None
+        return (None, None)
 
 
 def get_subject_name_for_device(device_id):

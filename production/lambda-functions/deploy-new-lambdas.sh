@@ -8,6 +8,14 @@ set -e
 REGION="ap-southeast-2"
 ACCOUNT_ID="754724220380"
 ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/watchme-lambda-s3-processor"
+PUBLIC_API_BASE_URL="${API_BASE_URL:-https://api.hey-watch.me}"
+WORKER_CONNECT_TIMEOUT="${WORKER_CONNECT_TIMEOUT:-3}"
+WORKER_READ_TIMEOUT="${WORKER_READ_TIMEOUT:-10}"
+WORKER_API_HOST_HEADER="${WORKER_API_HOST_HEADER:-api.hey-watch.me}"
+WORKER_VERIFY_TLS="${WORKER_VERIFY_TLS:-false}"
+ASR_WORKER_API_ENDPOINT_URL="${ASR_WORKER_API_ENDPOINT_URL:-https://3.24.16.82/vibe-analysis/transcriber/async-process}"
+SED_WORKER_API_ENDPOINT_URL="${SED_WORKER_API_ENDPOINT_URL:-https://3.24.16.82/behavior-analysis/features/async-process}"
+SER_WORKER_API_ENDPOINT_URL="${SER_WORKER_API_ENDPOINT_URL:-https://3.24.16.82/emotion-analysis/feature-extractor/async-process}"
 
 # Environment variables for Lambda functions
 SUPABASE_URL="${SUPABASE_URL}"
@@ -15,12 +23,71 @@ SUPABASE_KEY="${SUPABASE_KEY}"
 
 echo "🚀 Deploying Lambda functions for event-driven architecture..."
 
+join_by_comma() {
+    local IFS=","
+    echo "$*"
+}
+
+build_environment_string() {
+    local function_name=$1
+    local env_vars=(
+        "SUPABASE_URL='${SUPABASE_URL}'"
+        "SUPABASE_KEY='${SUPABASE_KEY}'"
+        "ASR_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-asr-queue-v2.fifo'"
+        "SED_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-sed-queue-v2.fifo'"
+        "SER_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-ser-queue-v2.fifo'"
+        "FEATURE_COMPLETED_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-feature-completed-queue'"
+        "SPOT_ANALYSIS_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-spot-analysis-queue.fifo'"
+        "DASHBOARD_SUMMARY_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-dashboard-summary-queue'"
+        "RECONCILIATION_LOOKBACK_MINUTES='1440'"
+        "RECONCILIATION_BATCH_SIZE='200'"
+    )
+
+    case "${function_name}" in
+        watchme-asr-worker)
+            env_vars+=(
+                "API_ENDPOINT_URL='${ASR_WORKER_API_ENDPOINT_URL}'"
+                "API_HOST_HEADER='${WORKER_API_HOST_HEADER}'"
+                "VERIFY_TLS='${WORKER_VERIFY_TLS}'"
+                "REQUEST_CONNECT_TIMEOUT='${WORKER_CONNECT_TIMEOUT}'"
+                "REQUEST_READ_TIMEOUT='${WORKER_READ_TIMEOUT}'"
+            )
+            ;;
+        watchme-sed-worker)
+            env_vars+=(
+                "API_ENDPOINT_URL='${SED_WORKER_API_ENDPOINT_URL}'"
+                "API_HOST_HEADER='${WORKER_API_HOST_HEADER}'"
+                "VERIFY_TLS='${WORKER_VERIFY_TLS}'"
+                "REQUEST_CONNECT_TIMEOUT='${WORKER_CONNECT_TIMEOUT}'"
+                "REQUEST_READ_TIMEOUT='${WORKER_READ_TIMEOUT}'"
+            )
+            ;;
+        watchme-ser-worker)
+            env_vars+=(
+                "API_ENDPOINT_URL='${SER_WORKER_API_ENDPOINT_URL}'"
+                "API_HOST_HEADER='${WORKER_API_HOST_HEADER}'"
+                "VERIFY_TLS='${WORKER_VERIFY_TLS}'"
+                "REQUEST_CONNECT_TIMEOUT='${WORKER_CONNECT_TIMEOUT}'"
+                "REQUEST_READ_TIMEOUT='${WORKER_READ_TIMEOUT}'"
+            )
+            ;;
+        watchme-aggregator-checker|watchme-spot-analysis-worker)
+            env_vars+=("API_BASE_URL='${PUBLIC_API_BASE_URL}'")
+            ;;
+    esac
+
+    echo "Variables={$(join_by_comma "${env_vars[@]}")}"
+}
+
 # Function to create/update Lambda function
 deploy_lambda() {
     local FUNCTION_NAME=$1
     local HANDLER=$2
     local TIMEOUT=$3
     local MEMORY=$4
+    local ENVIRONMENT
+
+    ENVIRONMENT=$(build_environment_string "${FUNCTION_NAME}")
 
     echo ""
     echo "📦 Deploying ${FUNCTION_NAME}..."
@@ -57,7 +124,7 @@ deploy_lambda() {
             --function-name ${FUNCTION_NAME} \
             --timeout ${TIMEOUT} \
             --memory-size ${MEMORY} \
-            --environment Variables="{API_BASE_URL='https://api.hey-watch.me',SUPABASE_URL='${SUPABASE_URL}',SUPABASE_KEY='${SUPABASE_KEY}',ASR_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-asr-queue-v2.fifo',SED_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-sed-queue-v2.fifo',SER_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-ser-queue-v2.fifo',FEATURE_COMPLETED_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-feature-completed-queue',SPOT_ANALYSIS_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-spot-analysis-queue.fifo',DASHBOARD_SUMMARY_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-dashboard-summary-queue',RECONCILIATION_LOOKBACK_MINUTES='1440',RECONCILIATION_BATCH_SIZE='200'}" \
+            --environment "${ENVIRONMENT}" \
             --region ${REGION}
     else
         echo "Creating new function..."
@@ -69,7 +136,7 @@ deploy_lambda() {
             --zip-file fileb://function.zip \
             --timeout ${TIMEOUT} \
             --memory-size ${MEMORY} \
-            --environment Variables="{API_BASE_URL='https://api.hey-watch.me',SUPABASE_URL='${SUPABASE_URL}',SUPABASE_KEY='${SUPABASE_KEY}',ASR_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-asr-queue-v2.fifo',SED_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-sed-queue-v2.fifo',SER_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-ser-queue-v2.fifo',FEATURE_COMPLETED_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-feature-completed-queue',SPOT_ANALYSIS_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-spot-analysis-queue.fifo',DASHBOARD_SUMMARY_QUEUE_URL='https://sqs.ap-southeast-2.amazonaws.com/${ACCOUNT_ID}/watchme-dashboard-summary-queue',RECONCILIATION_LOOKBACK_MINUTES='1440',RECONCILIATION_BATCH_SIZE='200'}" \
+            --environment "${ENVIRONMENT}" \
             --region ${REGION}
     fi
 
@@ -107,6 +174,11 @@ deploy_lambda "watchme-audio-processor" "lambda_function.lambda_handler" 30 256
 
 echo ""
 echo "🎉 All Lambda functions deployed successfully!"
+echo ""
+echo "Feature worker endpoints:"
+echo "  ASR: ${ASR_WORKER_API_ENDPOINT_URL}"
+echo "  SED: ${SED_WORKER_API_ENDPOINT_URL}"
+echo "  SER: ${SER_WORKER_API_ENDPOINT_URL}"
 echo ""
 echo "Next steps:"
 echo "1. Create the spot analysis FIFO queue"
