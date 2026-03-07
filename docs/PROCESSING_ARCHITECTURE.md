@@ -1,6 +1,6 @@
 # WatchMe 処理アーキテクチャ
 
-最終更新: 2025-12-12
+最終更新: 2026-03-07
 
 > Status: Active
 > Source of truth: パイプラインの処理順序と役割分担
@@ -219,7 +219,7 @@ graph TB
 
 **Profiler API** (`/profiler/spot-profiler`):
 - プロンプトを取得
-- LLM分析実行（Groq openai/gpt-oss-120b）
+- LLM分析実行（OpenAI gpt-5.4-2026-03-05）
 - `spot_results` テーブルに保存
 - **ステータス管理**: `spot_results.profiler_status` を `completed` に更新
 
@@ -484,7 +484,7 @@ ORDER BY recorded_at ASC
 
 **Profiler API** (`/profiler/weekly-profiler`):
 - `weekly_aggregators.prompt` からプロンプト取得
-- LLM分析実行（Groq openai/gpt-oss-120b）
+- LLM分析実行（OpenAI gpt-5.4-2026-03-05）
   - 1週間の録音データから印象的なイベント5件を選出
   - 選出基準: 興味深い会話内容、記憶に残る出来事、週全体の多様性
 - `weekly_results` テーブルに保存（UPSERT）
