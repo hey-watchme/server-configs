@@ -30,7 +30,7 @@
 `api-emotion-analysis-feature-extractor-v2` に以下を反映。
 
 - Commit: `47ee633`
-- Workflow: `22796466068`（進行中）
+- Workflow: `22796466068`（`cancelled`）
 - URL: <https://github.com/hey-watchme/api-emotion-analysis-feature-extractor-v2/actions/runs/22796466068>
 
 変更内容:
@@ -54,6 +54,11 @@
 - `api-emotion-analysis-feature-extractor-v2`
 - `api-vibe-analysis-transcriber-v2`
 
+反映コミット:
+- Behavior: `f01c1bb`（run: `22796680462`）
+- Emotion: `c4186cd`（run: `22796682082`）
+- Vibe: `a7e5e94`（run: `22796684688`）
+
 補足:
 - queue モードが未設定/失敗時は in-process executor にフォールバック（既存互換）
 - `server-configs/production/lambda-functions/create-feature-job-queues.sh` を追加（ASR/SED/SER job queue 作成用）
@@ -63,20 +68,26 @@
 
 ## 2. 本番デプロイ状況（確認時点）
 
-確認時刻: 2026-03-07 JST
+確認時刻: 2026-03-07 19:02 JST（単発確認）
 
 | サービス | Repo | Commit | Workflow Run | 状態 |
 |---|---|---|---|---|
 | Behavior Features v2 | `api-behavior-analysis-feature-extractor-v2` | `40eaf79` | `22796060409` | `success` |
 | Emotion Features v2 (`/async-process` 即時ACK修正) | `api-emotion-analysis-feature-extractor-v2` | `ea9e24a` | `22796060425` | `success` |
-| Emotion Features v2 (CI高速化) | `api-emotion-analysis-feature-extractor-v2` | `47ee633` | `22796466068` | `in_progress` |
+| Emotion Features v2 (CI高速化) | `api-emotion-analysis-feature-extractor-v2` | `47ee633` | `22796466068` | `cancelled` |
 | Vibe Transcriber v2 | `api-vibe-analysis-transcriber-v2` | `7cc1fb0` | `22796060720` | `success` |
+| Behavior Features v2 (queue-driven第1段) | `api-behavior-analysis-feature-extractor-v2` | `f01c1bb` | `22796680462` | `success` |
+| Emotion Features v2 (queue-driven第1段) | `api-emotion-analysis-feature-extractor-v2` | `c4186cd` | `22796682082` | `in_progress` |
+| Vibe Transcriber v2 (queue-driven第1段) | `api-vibe-analysis-transcriber-v2` | `a7e5e94` | `22796684688` | `success` |
 
 URL:
 - Behavior: <https://github.com/hey-watchme/api-behavior-analysis-feature-extractor-v2/actions/runs/22796060409>
 - Emotion (`ea9e24a`): <https://github.com/hey-watchme/api-emotion-analysis-feature-extractor-v2/actions/runs/22796060425>
 - Emotion (`47ee633`): <https://github.com/hey-watchme/api-emotion-analysis-feature-extractor-v2/actions/runs/22796466068>
 - Vibe: <https://github.com/hey-watchme/api-vibe-analysis-transcriber-v2/actions/runs/22796060720>
+- Behavior (`f01c1bb`): <https://github.com/hey-watchme/api-behavior-analysis-feature-extractor-v2/actions/runs/22796680462>
+- Emotion (`c4186cd`): <https://github.com/hey-watchme/api-emotion-analysis-feature-extractor-v2/actions/runs/22796682082>
+- Vibe (`a7e5e94`): <https://github.com/hey-watchme/api-vibe-analysis-transcriber-v2/actions/runs/22796684688>
 
 補足:
 - Emotion は `Build, tag, and push image to Amazon ECR` が長時間化しやすい。次セッションで build cache / image 分割 / 不要レイヤー削減を優先調査する。
@@ -132,7 +143,7 @@ URL:
 
 ## 5. 次セッション開始チェックリスト
 
-1. GitHub Actions の最終結論確認（Behavior/Emotion が success か）
+1. GitHub Actions の最終結論確認（`c4186cd` の Emotion run `22796682082` が success か）
 2. 直近テスト録音で `spot_features` の3 status 推移を確認
 3. `feature-completed-queue` / `spot-analysis-queue.fifo` の滞留有無確認
 4. `spot_aggregators` / `spot_results` が連続録音で欠損しないことを確認
