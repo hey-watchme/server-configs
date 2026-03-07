@@ -74,9 +74,9 @@ graph TB
     end
 
     subgraph API["🎙️ EC2 API (非同期処理)"]
-        G1[Vibe Transcriber v2<br/>/async-process<br/>202 Accepted]
-        G2[Behavior Features v2<br/>/async-process<br/>202 Accepted]
-        G3[Emotion Features v2<br/>/async-process<br/>202 Accepted]
+        G1[Vibe Transcriber<br/>/async-process<br/>202 Accepted]
+        G2[Behavior Features<br/>/async-process<br/>202 Accepted]
+        G3[Emotion Features<br/>/async-process<br/>202 Accepted]
     end
 
     subgraph Background["🔄 バックグラウンド処理"]
@@ -165,9 +165,9 @@ graph TB
 
 | Lambda Worker | 呼び出し先API | エンドポイント | HTTPタイムアウト | Lambda実行タイムアウト |
 |--------------|-------------|--------------|----------------|----------------------|
-| **asr-worker** | Vibe Transcriber v2 | `/async-process` | connect=3秒 / read=10秒 | 60秒 |
-| **sed-worker** | Behavior Features v2 | `/async-process` | connect=3秒 / read=10秒 | 60秒 |
-| **ser-worker** | Emotion Features v2 | `/async-process` | connect=3秒 / read=10秒 | 60秒 |
+| **asr-worker** | Vibe Transcriber | `/async-process` | connect=3秒 / read=10秒 | 60秒 |
+| **sed-worker** | Behavior Features | `/async-process` | connect=3秒 / read=10秒 | 60秒 |
+| **ser-worker** | Emotion Features | `/async-process` | connect=3秒 / read=10秒 | 60秒 |
 
 **コード確認済みの判定条件（2026-03-07）**:
 - Worker Lambda は `HTTP 202` のときだけ「受付成功」として扱う
@@ -181,11 +181,11 @@ queue投入に失敗した場合は `503` を返し、Lambda/SQS の再試行へ
 
 投入後の処理は API 側 queue consumer が実行:
 
-| API | バージョン | 処理時間 | 役割 | ステータス管理 |
-|-----|---------|---------|------|--------------|
-| Vibe Transcriber | **v2** | 26-28秒 | Groq Whisper v3文字起こし | `vibe_status` |
-| Behavior Features | **v2** | 10-20秒 | 527種類の音響検出 | `behavior_status` |
-| Emotion Features | **v2** | 10-20秒 | 4感情認識 | `emotion_status` |
+| API | 処理時間 | 役割 | ステータス管理 |
+|-----|---------|------|--------------|
+| Vibe Transcriber | 26-28秒 | 音声文字起こし | `vibe_status` |
+| Behavior Features | 10-20秒 | 音響イベント検出 | `behavior_status` |
+| Emotion Features | 10-20秒 | 音声感情認識 | `emotion_status` |
 
 **処理の流れ:**
 1. `/async-process` 受付時に DBステータスを `queued` に更新
@@ -735,7 +735,7 @@ ORDER BY recorded_at ASC
 | Daily | dashboard-analysis-worker | Supabase REST（通知対象検索） | 10秒 |
 | Weekly | weekly-profile-worker | Supabase REST（最新 local_date） | 10秒 |
 | Weekly | weekly-profile-worker | Aggregator Weekly / Profiler Weekly API | 180秒 |
-| API内部 | vibe-transcriber(v2, Azure経路) | `done.wait(...)` | 通常300秒 / 高精度600秒 |
+| API内部 | vibe-transcriber | `done.wait(...)` | 通常300秒 / 高精度600秒 |
 
 ### 3. Reverse Proxy（Nginx）
 
@@ -793,20 +793,23 @@ ORDER BY recorded_at ASC
 
 全サービスはEC2上のDockerコンテナとして稼働。
 
-| カテゴリ | サービス | バージョン | ポート | 役割 |
-|---------|---------|-----------|--------|------|
-| **ゲートウェイ** | Vault API | - | 8000 | S3音声ファイル配信 |
-| **音声処理** | Behavior Features | **v2** | 8017 | 527種類の音響検出 |
-| | Emotion Features | **v2** | 8018 | 8感情認識 |
-| | Vibe Transcriber | **v2** | 8013 | Groq Whisper v3文字起こし |
-| **集計・分析** | Aggregator API | - | 8011 | Spot/Daily集計 |
-| | Profiler API | - | 8051 | Spot/Daily LLM分析 |
-| **管理** | Janitor | - | 8030 | 音声データ自動削除 |
+| カテゴリ | サービス | ポート | 役割 |
+|---------|---------|--------|------|
+| **ゲートウェイ** | Vault API | 8000 | S3音声ファイル配信 |
+| **音声処理** | Behavior Features | 8017 | 音響イベント検出 |
+| | Emotion Features | 8018 | 音声感情認識 |
+| | Vibe Transcriber | 8013 | 音声文字起こし |
+| **集計・分析** | Aggregator API | 8011 | Spot/Daily集計 |
+| | Profiler API | 8051 | Spot/Daily LLM分析 |
+| **管理** | Janitor | 8030 | 音声データ自動削除 |
 
-**⚠️ 重要: 本番稼働中のAPIバージョン**
-- **Vibe Transcriber**: `/api/vibe-analysis/transcriber-v2`
-- **Behavior Features**: `/api/behavior-analysis/feature-extractor-v2`
-- **Emotion Features**: `/api/emotion-analysis/feature-extractor-v2`
+**Nginx ルーティング（バージョンなし）**:
+- `/vibe-analysis/transcriber/` → localhost:8013
+- `/behavior-analysis/features/` → localhost:8017
+- `/emotion-analysis/feature-extractor/` → localhost:8018
+
+> **注**: 各 feature API の実装モデル（Kushinada / Hume 等）はリポジトリ単位で管理される。
+> Nginx ルーティングはモデルに依存しない。デプロイ先の ECR リポジトリ名とポートは共通。
 
 ---
 

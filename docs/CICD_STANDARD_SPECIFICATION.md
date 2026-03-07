@@ -553,7 +553,7 @@ done
 - キャッシュが効くため数秒で起動
 - ヘルスチェックは1-2回目で成功
 
-**参考実装**: `emotion-analysis-feature-extractor-v3` (Kushinadaモデル)
+**参考実装**: `emotion-analysis-feature-extractor`
 
 ---
 
@@ -710,7 +710,7 @@ EC2にSSH → ディレクトリ内に.env/docker-compose.prod.yml配置 →
 | Profiler API | 8051 | ✅ 正常（2025-11-21移行完了） | profiler-api |
 | Aggregator API | 8050 | ✅ 正常 | aggregator-api |
 | Behavior Features | 8017 | ✅ 正常（AST） | behavior-analysis-feature-extractor |
-| Emotion Features | 8018 | ✅ 正常（Kushinada） | emotion-analysis-feature-extractor |
+| Emotion Features | 8018 | ✅ 正常 | emotion-analysis-feature-extractor |
 | Vibe Transcriber | 8013 | ✅ 正常（Groq Whisper） | vibe-analysis-transcriber |
 | Vault API | 8000 | ✅ 正常 | watchme-vault-api |
 | Admin | 9000 | ✅ 正常 | watchme-admin |

@@ -104,7 +104,7 @@ aws ec2 modify-instance-attribute --profile admin ...
 |---------|---------|--------|--------------|-----|------|
 | **ゲートウェイ** | Vault API | 8000 | `/vault/` | watchme-api-vault | S3音声ファイル配信 |
 | **音声処理** | Behavior Features | 8017 | `/behavior-analysis/features/` | watchme-behavior-analysis-feature-extractor | 527種類の音響検出 |
-| | Emotion Features | 8018 | `/emotion-analysis/feature-extractor/` | watchme-emotion-analysis-feature-extractor-v3 | 8感情認識 |
+| | Emotion Features | 8018 | `/emotion-analysis/feature-extractor/` | watchme-emotion-analysis-feature-extractor | 音声感情認識 |
 | | Vibe Transcriber | 8013 | `/vibe-analysis/transcriber/` | watchme-vibe-analysis-transcriber | Deepgram Nova-2文字起こし |
 | **集計・分析** | **Aggregator API** | **8011** | **`/aggregator/`** | **watchme-aggregator** | **Spot/Daily集計** |
 | | **Profiler API** | **8051** | **`/profiler/`** | **watchme-profiler** | **Spot/Daily LLM分析** |
@@ -148,18 +148,14 @@ aws ec2 modify-instance-attribute --profile admin ...
 
 ### 2. Emotion Features API
 
-**役割**: 8感情認識
+**役割**: 音声感情認識
 
 **技術スタック**:
-- モデル: Kushinada (HuBERT-large-JTES-ER)
-- 学習データ: 日本語音声（JTES）
 - 処理時間: 10-20秒（60秒音声）
+- 実装モデルはリポジトリ単位で管理（Kushinada / Hume 等、入れ替え可能）
 
-**検出感情**:
-- neutral（中立）
-- joy（喜び）
-- anger（怒り）
-- sadness（悲しみ）
+> 検出感情の種類・粒度は使用モデルに依存する。
+> 結果カラムもモデルにより異なる（`emotion_extractor_result` / `emotion_features_result_hume` 等）。
 - その他4感情
 
 **エンドポイント**:

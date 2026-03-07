@@ -92,7 +92,7 @@ Spot の主要要素:
 - Spot Aggregator / Spot Profiler の実処理本体は API 側
 
 2026-03-07 時点の補足:
-- feature API v2 (`behavior` / `emotion` / `vibe`) の `/async-process` は「ジョブ受付専用（queue enqueue）」として運用する
+- 各 feature API (`behavior` / `emotion` / `vibe`) の `/async-process` は「ジョブ受付専用（queue enqueue）」として運用する
 - デフォルトは queue モード (`*_JOB_QUEUE_ENABLED=true`)。queue が無効/不達のときは `503` を返し、Lambda 側の SQS リトライに委譲する
 - `*_ALLOW_IN_PROCESS_FALLBACK` はデフォルト `false`（本番では無効）。ローカル検証でのみ明示有効化
 
