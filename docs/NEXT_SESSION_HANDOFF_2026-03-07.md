@@ -1,171 +1,113 @@
 # Next Session Handoff (2026-03-07)
 
-最終更新: 2026-03-07
+最終更新: 2026-03-07  
+Status: Active  
+Scope: Spot/Daily パイプライン堅牢化の継続
 
-> Status: Active
-> Scope: Spot/Daily/Weekly パイプラインの「タイムアウト依存を減らし、完了イベント駆動へ戻す」ための引き継ぎ
+> この文書は `SPOT_PIPELINE_HANDOFF_2026-03-07.md` を統合した唯一のハンドオフ資料です。
 
-## 1. このセッションで実施したこと
+## 1. このセッションで完了したこと
 
-### 1-1. feature API の `/async-process` 即時応答化
+### 1-1. SED停止再発に対する本命ホットフィックス
 
-3つの feature API v2 で、`/async-process` の応答を先に返し、実処理を executor ワーカーへ渡す修正を反映。
+3つの feature API（ASR/SED/SER）の `/async-process` を queue-first 運用へ統一。
 
-- Behavior API: `40eaf79`
-- Emotion API: `ea9e24a`
-- Vibe API: `7cc1fb0`
-
-修正目的:
-- Lambda Worker 側 (`read timeout=10秒`) が API 応答待ちで再試行に入る事象を減らす
-
-重要な制約:
-- 現状は「APIプロセス内スレッド」で処理継続しているだけで、完全なキュー分離ではない
-
-### 1-2. ドキュメント更新
-
-- `PROCESSING_ARCHITECTURE.md` にタイムアウト設定インベントリと、イベント駆動から外れている箇所を反映済み
-
-### 1-3. Emotion デプロイ時間短縮の改善（CI/Docker）
-
-`api-emotion-analysis-feature-extractor-v2` に以下を反映。
-
-- Commit: `47ee633`
-- Workflow: `22796466068`（`cancelled`）
-- URL: <https://github.com/hey-watchme/api-emotion-analysis-feature-extractor-v2/actions/runs/22796466068>
-
-変更内容:
-- GitHub Actions:
-  - `--no-cache` を削除
-  - Buildx registry cache (`:buildcache`) を追加
-  - `concurrency.cancel-in-progress: true` を追加（同一ブランチ多重実行を抑制）
-- Dockerfile:
-  - モデルダウンロードレイヤーをアプリコード `COPY` より前に移動し、コード変更時でも重いレイヤーを再利用しやすくした
-  - `TRANSFORMERS_CACHE` / `HF_HOME` をビルド時と実行時で統一
-- `.dockerignore`:
-  - `_archive/`, `s3prl_cache/` を除外して build context を軽量化
-
-### 1-4. 本命対応の第1段（feature job queue モード実装）
-
-3つの feature API に、`/async-process` の「受付専用 + SQSジョブ投入」モードを実装。
-環境変数が有効な場合、APIはジョブを `*-job-queue-v1.fifo` へ投入し、別スレッドの queue consumer が実処理を実行する。
-
-対象:
-- `api-behavior-analysis-feature-extractor-v2`
-- `api-emotion-analysis-feature-extractor-v2`
-- `api-vibe-analysis-transcriber-v2`
+- queue enqueue 成功時のみ `202 Accepted`
+- queue 無効/未設定/投入失敗時は `503` を返し、Lambda/SQS の再試行へ戻す
+- `*_ALLOW_IN_PROCESS_FALLBACK` を追加（デフォルト `false`）
+- status 更新を upsert に統一（特に vibe 側の未反映分を解消）
 
 反映コミット:
-- Behavior: `f01c1bb`（run: `22796680462`）
-- Emotion: `c4186cd`（run: `22796682082`）
-- Vibe: `a7e5e94`（run: `22796684688`）
+- Behavior: `f292958`
+- Emotion: `9e33808`
+- Vibe: `226ac4d`
 
-補足:
-- queue モードが未設定/失敗時は in-process executor にフォールバック（既存互換）
-- `server-configs/production/lambda-functions/create-feature-job-queues.sh` を追加（ASR/SED/SER job queue 作成用）
-- 2026-03-07 に上記スクリプトを実行し、`watchme-asr/sed/ser-job-queue-v1.fifo` と各DLQを本番作成済み
+### 1-2. Spot停止対策（前段で完了済み、継続運用）
 
-### 1-5. 追加ホットフィックス（2026-03-07 夜）
+- `aggregator-checker` の fallback reconciliation（5分ごとの再走査）
+- Spot本体を専用 `watchme-spot-analysis-queue.fifo` + `watchme-spot-analysis-worker` へ分離
+- `or` 条件不正・IAM権限不足の修正済み
 
-SED 停滞再発（`behavior_status=processing` のまま）を受けて、`/async-process` の運用を以下に統一。
+主要コミット（server-configs）:
+- `63e65e1` Add spot pipeline reconciliation fallback
+- `8350886` Queue spot analysis behind aggregator checker
 
-- 3 feature API の queue 設定デフォルトを `enabled=true` + 既定 queue URL に変更
-- queue が無効/未設定、または enqueue 失敗時は `503` を返却
-- Lambda Worker 側は 202 以外を失敗として SQS リトライするため、「受付成功なのに未実行」の取りこぼしを防止
-- `*_ALLOW_IN_PROCESS_FALLBACK` を追加（デフォルト `false`、ローカル検証時のみ明示有効化）
+### 1-3. ドキュメント整備
 
-補足:
-- 既存の in-process フォールバックは「互換用に明示有効化した場合のみ」動作
-- 本番は queue モードを前提に運用する
+- `PROCESSING_ARCHITECTURE.md` にコード確認済み挙動を追記
+- 非エンジニア向け概念資料を追加: `NON_TECH_PIPELINE_OVERVIEW.md`
 
----
+関連コミット（server-configs）:
+- `70fe8fd` docs: record strict queue-mode operation for feature async APIs
+- `22857c2` docs: add code-verified pipeline notes and non-tech overview
 
-## 2. 本番デプロイ状況（確認時点）
+## 2. 現在の到達点（2026-03-07時点）
 
-確認時刻: 2026-03-07 19:02 JST（単発確認）
+- ユーザーテストで Spot が最後まで完走することを確認済み
+- 以前の「SEDで processing のまま停止」再発経路は、queue-first 運用で抑止済み
+- ただし「堅牢化の本命」は未完（下記タスク）
 
-| サービス | Repo | Commit | Workflow Run | 状態 |
-|---|---|---|---|---|
-| Behavior Features v2 | `api-behavior-analysis-feature-extractor-v2` | `40eaf79` | `22796060409` | `success` |
-| Emotion Features v2 (`/async-process` 即時ACK修正) | `api-emotion-analysis-feature-extractor-v2` | `ea9e24a` | `22796060425` | `success` |
-| Emotion Features v2 (CI高速化) | `api-emotion-analysis-feature-extractor-v2` | `47ee633` | `22796466068` | `cancelled` |
-| Vibe Transcriber v2 | `api-vibe-analysis-transcriber-v2` | `7cc1fb0` | `22796060720` | `success` |
-| Behavior Features v2 (queue-driven第1段) | `api-behavior-analysis-feature-extractor-v2` | `f01c1bb` | `22796680462` | `success` |
-| Emotion Features v2 (queue-driven第1段) | `api-emotion-analysis-feature-extractor-v2` | `c4186cd` | `22796682082` | `in_progress` |
-| Vibe Transcriber v2 (queue-driven第1段) | `api-vibe-analysis-transcriber-v2` | `a7e5e94` | `22796684688` | `success` |
+## 3. 次セッションで着手する本命タスク
 
-URL:
-- Behavior: <https://github.com/hey-watchme/api-behavior-analysis-feature-extractor-v2/actions/runs/22796060409>
-- Emotion (`ea9e24a`): <https://github.com/hey-watchme/api-emotion-analysis-feature-extractor-v2/actions/runs/22796060425>
-- Emotion (`47ee633`): <https://github.com/hey-watchme/api-emotion-analysis-feature-extractor-v2/actions/runs/22796466068>
-- Vibe: <https://github.com/hey-watchme/api-vibe-analysis-transcriber-v2/actions/runs/22796060720>
-- Behavior (`f01c1bb`): <https://github.com/hey-watchme/api-behavior-analysis-feature-extractor-v2/actions/runs/22796680462>
-- Emotion (`c4186cd`): <https://github.com/hey-watchme/api-emotion-analysis-feature-extractor-v2/actions/runs/22796682082>
-- Vibe (`a7e5e94`): <https://github.com/hey-watchme/api-vibe-analysis-transcriber-v2/actions/runs/22796684688>
+### P0. 状態遷移の原子化（重複実行・取りこぼし防止）
 
-補足:
-- Emotion は `Build, tag, and push image to Amazon ECR` が長時間化しやすい。次セッションで build cache / image 分割 / 不要レイヤー削減を優先調査する。
+対象:
+- `spot_aggregators.aggregator_status`
+- `spot_results.profiler_status`
 
----
+実施内容:
+- `pending -> queued -> processing -> completed|failed` を条件付き更新で実装
+- claim 成功した1実行だけが次段キュー送信できるようにする
 
-## 3. 失敗要因の整理（SEDが processing で止まる件）
+### P1. 通知欠落の根本原因調査（Emotion完了通知）
 
-今回の調査での要点:
+現状:
+- fallback により「止まらない」状態は実現
+- ただし「なぜ欠落するか」は未解明
 
-1. 失敗の直接要因は「固定 read timeout を超える同期待機」に起因する再試行ループ
-2. 処理時間の分布（数秒〜数十分）に対して、固定 timeout を成功条件に使う設計は破綻しやすい
-3. timeout は「障害検知の上限」としては必要だが、「完了判定」には使わないべき
+実施内容:
+- Emotion APIログ、feature-completed-queue、aggregator-checker の突合
+- 欠落条件（時刻・ステータス順序・失敗レスポンス）を特定
 
-結論:
-- 完了判定は DB 状態遷移 or 完了イベント（SQS）へ寄せる
-- HTTP timeout は回線断/ハング検知のガードレールに限定する
+### P2. 監視・運用強化
 
----
+実施内容:
+- DLQ / in-flight / message age / Lambda error の CloudWatch Alarm 化
+- runbook に Logs Insights クエリを固定化
+- timeout 超過を「完了判定」ではなく「障害検知」として扱う運用を明文化
 
-## 4. 次セッションの優先タスク
+### P3. 通知仕様の実運用確定
 
-### P0: 完了イベント駆動へ統一（Feature -> Spot -> Daily -> Weekly）
+現状:
+- `dashboard-analysis-worker` は Daily成功/失敗に関わらず通知送信を試行する実装
+- sandbox / production の実挙動は未確定
 
-1. `/async-process` を「受付専用」に固定
-   - 受付時は job レコード作成 + queue enqueue のみ
-   - 実処理は API プロセス外ワーカーで実行
+実施内容:
+- `apns_environment` と実機 build 種別、SNS Platform Application を実測で確定
+- 実運用仕様に合わせて `PROCESSING_ARCHITECTURE.md` の通知節を更新
 
-2. 各段の状態遷移を明示
-   - `accepted -> queued -> processing -> completed|failed`
-   - 同一レコードに対する二重実行を条件付き更新で抑止
+### P4. トレーサビリティ強化
 
-3. 完了通知を次段トリガーに統一
-   - Feature 完了 -> Spot queue
-   - Spot 完了 -> Daily queue
-   - Daily 完了 -> 通知
-   - Weekly は日次トリガー + 完了イベント記録
+実施内容:
+- `recording_id` または `job_id` を end-to-end（SQS/Lambda/API/DB/log）で通す
+- 1録音の追跡時間を短縮
 
-### P1: timeout 設定の役割を再定義
+## 4. 次セッション開始チェックリスト
 
-- HTTP timeout: 接続障害の検知専用
-- Lambda timeout: ワーカーの保護上限
-- SQS visibility timeout: 再試行制御
-- いずれも「完了判定」には使わない
+1. 直近テスト録音の `spot_features` 3ステータス推移確認
+2. `feature-completed-queue` / `spot-analysis-queue.fifo` の滞留確認
+3. `spot_aggregators` / `spot_results` 欠損有無確認
+4. Spot完了後の Daily更新・通知挙動の実機確認
+5. DLQ件数のスナップショットを取得
 
-### P2: 観測性強化
+## 5. 次セッションの起点（GitHub Issue）
 
-- `recording_id` または `job_id` を end-to-end でログ/DB/SQS に通す
-- CloudWatch Logs Insights の標準クエリを runbook 化
-- DLQ / in-flight 監視をアラート化
-
----
-
-## 5. 次セッション開始チェックリスト
-
-1. GitHub Actions の最終結論確認（`c4186cd` の Emotion run `22796682082` が success か）
-2. 直近テスト録音で `spot_features` の3 status 推移を確認
-3. `feature-completed-queue` / `spot-analysis-queue.fifo` の滞留有無確認
-4. `spot_aggregators` / `spot_results` が連続録音で欠損しないことを確認
-5. timeout 超過エラーが「再試行原因」ではなく「障害通知」として機能しているか確認
-
----
+- 起点Issue: https://github.com/hey-watchme/server-configs/issues/7
+- 次セッションは **このIssueを起点** に作業開始する
 
 ## 6. 参照ドキュメント
 
+- [CURRENT_STATE.md](./CURRENT_STATE.md)
 - [PROCESSING_ARCHITECTURE.md](./PROCESSING_ARCHITECTURE.md)
-- [SPOT_PIPELINE_HANDOFF_2026-03-07.md](./SPOT_PIPELINE_HANDOFF_2026-03-07.md)
+- [NON_TECH_PIPELINE_OVERVIEW.md](./NON_TECH_PIPELINE_OVERVIEW.md)
 - [DEPLOYMENT_RUNBOOK.md](./DEPLOYMENT_RUNBOOK.md)
