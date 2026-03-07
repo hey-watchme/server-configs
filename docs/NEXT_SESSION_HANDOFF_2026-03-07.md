@@ -57,6 +57,7 @@
 補足:
 - queue モードが未設定/失敗時は in-process executor にフォールバック（既存互換）
 - `server-configs/production/lambda-functions/create-feature-job-queues.sh` を追加（ASR/SED/SER job queue 作成用）
+- 2026-03-07 に上記スクリプトを実行し、`watchme-asr/sed/ser-job-queue-v1.fifo` と各DLQを本番作成済み
 
 ---
 

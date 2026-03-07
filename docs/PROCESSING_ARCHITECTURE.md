@@ -764,7 +764,7 @@ ORDER BY recorded_at ASC
 3. **dashboard-summary/analysis/weekly worker も同期呼び出し（180秒待ち）**  
    Daily/Weeklyがタイムアウト値依存の直列パイプラインになっている。
 4. **`/async-process` の実処理が同一プロセス内のスレッド実行キュー依存**  
-   202応答は即時化済み。さらに 2026-03-07 に SQS feature-job queue モード（`*-job-queue-v1.fifo`）をコード実装したが、環境変数有効化とキュー作成が必要な段階。
+   202応答は即時化済み。さらに 2026-03-07 に SQS feature-job queue モード（`*-job-queue-v1.fifo`）をコード実装し、キュー作成済み。残りは各APIデプロイ完了と env 有効化反映。
 
 ### 7. 改修方針（イベント駆動へ戻す）
 
