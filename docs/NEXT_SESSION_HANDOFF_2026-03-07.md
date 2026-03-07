@@ -25,6 +25,25 @@
 
 - `PROCESSING_ARCHITECTURE.md` にタイムアウト設定インベントリと、イベント駆動から外れている箇所を反映済み
 
+### 1-3. Emotion デプロイ時間短縮の改善（CI/Docker）
+
+`api-emotion-analysis-feature-extractor-v2` に以下を反映。
+
+- Commit: `47ee633`
+- Workflow: `22796466068`（進行中）
+- URL: <https://github.com/hey-watchme/api-emotion-analysis-feature-extractor-v2/actions/runs/22796466068>
+
+変更内容:
+- GitHub Actions:
+  - `--no-cache` を削除
+  - Buildx registry cache (`:buildcache`) を追加
+  - `concurrency.cancel-in-progress: true` を追加（同一ブランチ多重実行を抑制）
+- Dockerfile:
+  - モデルダウンロードレイヤーをアプリコード `COPY` より前に移動し、コード変更時でも重いレイヤーを再利用しやすくした
+  - `TRANSFORMERS_CACHE` / `HF_HOME` をビルド時と実行時で統一
+- `.dockerignore`:
+  - `_archive/`, `s3prl_cache/` を除外して build context を軽量化
+
 ---
 
 ## 2. 本番デプロイ状況（確認時点）
@@ -34,12 +53,14 @@
 | サービス | Repo | Commit | Workflow Run | 状態 |
 |---|---|---|---|---|
 | Behavior Features v2 | `api-behavior-analysis-feature-extractor-v2` | `40eaf79` | `22796060409` | `success` |
-| Emotion Features v2 | `api-emotion-analysis-feature-extractor-v2` | `ea9e24a` | `22796060425` | `in_progress` |
+| Emotion Features v2 (`/async-process` 即時ACK修正) | `api-emotion-analysis-feature-extractor-v2` | `ea9e24a` | `22796060425` | `success` |
+| Emotion Features v2 (CI高速化) | `api-emotion-analysis-feature-extractor-v2` | `47ee633` | `22796466068` | `in_progress` |
 | Vibe Transcriber v2 | `api-vibe-analysis-transcriber-v2` | `7cc1fb0` | `22796060720` | `success` |
 
 URL:
 - Behavior: <https://github.com/hey-watchme/api-behavior-analysis-feature-extractor-v2/actions/runs/22796060409>
-- Emotion: <https://github.com/hey-watchme/api-emotion-analysis-feature-extractor-v2/actions/runs/22796060425>
+- Emotion (`ea9e24a`): <https://github.com/hey-watchme/api-emotion-analysis-feature-extractor-v2/actions/runs/22796060425>
+- Emotion (`47ee633`): <https://github.com/hey-watchme/api-emotion-analysis-feature-extractor-v2/actions/runs/22796466068>
 - Vibe: <https://github.com/hey-watchme/api-vibe-analysis-transcriber-v2/actions/runs/22796060720>
 
 補足:
