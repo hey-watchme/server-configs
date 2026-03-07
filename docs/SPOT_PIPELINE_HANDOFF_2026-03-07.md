@@ -5,6 +5,18 @@
 > Status: Historical
 > Source of truth: セッション引き継ぎメモ。現行運用判断は [CURRENT_STATE.md](./CURRENT_STATE.md) と [DEPLOYMENT_RUNBOOK.md](./DEPLOYMENT_RUNBOOK.md) を優先。
 
+## この文書の扱い（2026-03-07 追記）
+
+- 削除せず保持する（理由: 現在進行中の「完全イベント駆動化」の失敗モードと再発対策の根拠が含まれるため）
+- 通常運用では本書を主参照にしない
+- 以下のときだけ参照する:
+  - Spot が `spot_features completed` なのに `spot_results` 未作成で停止した
+  - `feature-completed-queue` 欠落/遅延や `aggregator-checker` の判定不整合を疑う
+  - IAM / PostgREST `or` 条件の回帰を疑う
+
+関連する現行引き継ぎ:
+- [NEXT_SESSION_HANDOFF_2026-03-07.md](./NEXT_SESSION_HANDOFF_2026-03-07.md)
+
 ## 目的
 
 このドキュメントは、Spot分析パイプラインの「途中で止まる」不具合調査と、その場で実施した堅牢化対応を次セッションへ引き継ぐためのメモです。
