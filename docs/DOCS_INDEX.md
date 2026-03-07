@@ -31,6 +31,7 @@ Source of truth: このファイルは `server-configs/docs` の入口です
 | [KNOWN_ISSUES.md](./KNOWN_ISSUES.md) | Reference | 既知障害・詰まりどころ | 調査時に参照 |
 | [NEW_API_INTEGRATION_GUIDE.md](./NEW_API_INTEGRATION_GUIDE.md) | Reference | 新規 API 追加時の手順 | 新規開発向け |
 | [SPOT_AND_DAILY_ANALYSIS_GUIDE.md](./SPOT_AND_DAILY_ANALYSIS_GUIDE.md) | Reference | 分析仕様の補助理解 | 処理内容の補足 |
+| [NEXT_SESSION_HANDOFF_2026-03-07.md](./NEXT_SESSION_HANDOFF_2026-03-07.md) | Active | 次セッションへの作業引き継ぎ | 今回の改善計画とデプロイ状況 |
 | [SPOT_PIPELINE_HANDOFF_2026-03-07.md](./SPOT_PIPELINE_HANDOFF_2026-03-07.md) | Historical | Spot 調査の引き継ぎ | セッション文脈用 |
 | [ARCHITECTURE_AND_MIGRATION_GUIDE.md](./ARCHITECTURE_AND_MIGRATION_GUIDE.md) | Historical | 移行経緯の記録 | 現行仕様の正ではない |
 | [SCALABILITY_ROADMAP.md](./SCALABILITY_ROADMAP.md) | Reference | 将来の拡張計画 | 将来検討用 |

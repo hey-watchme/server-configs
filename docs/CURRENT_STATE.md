@@ -91,6 +91,10 @@ Spot の主要要素:
 - feature extractor 完了後の合流判定と enqueue は Lambda/SQS 側
 - Spot Aggregator / Spot Profiler の実処理本体は API 側
 
+2026-03-07 時点の補足:
+- feature API v2 (`behavior` / `emotion` / `vibe`) の `/async-process` は即時 `202 Accepted` を返し、処理本体は API 内 executor スレッドで継続
+- ただし、これは「受付の即時化」であり、専用ジョブキューへの完全分離（完了イベント駆動の徹底）は未完了
+
 ## 作業前の確認原則
 
 1. Supabase で対象テーブルと対象レコードを確認
