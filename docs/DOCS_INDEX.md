@@ -25,6 +25,7 @@ Source of truth: このファイルは `server-configs/docs` の入口です
 | [CURRENT_STATE.md](./CURRENT_STATE.md) | Active | 現在の運用モデル確認 | 最初に読む |
 | [DEPLOYMENT_RUNBOOK.md](./DEPLOYMENT_RUNBOOK.md) | Active | 何をどこからどう反映するか判断 | デプロイ時の主参照 |
 | [PROCESSING_ARCHITECTURE.md](./PROCESSING_ARCHITECTURE.md) | Active | Spot/Daily/Weekly の処理フロー | パイプライン理解用 |
+| [NON_TECH_PIPELINE_OVERVIEW.md](./NON_TECH_PIPELINE_OVERVIEW.md) | Active | 非エンジニア向けの全体像説明 | 共有資料・概念図の元ネタ |
 | [CICD_STANDARD_SPECIFICATION.md](./CICD_STANDARD_SPECIFICATION.md) | Active | API リポジトリ側の CI/CD 標準 | API デプロイ方式の基準 |
 | [TECHNICAL_REFERENCE.md](./TECHNICAL_REFERENCE.md) | Reference | 広い技術仕様の参照 | 一部古い記述あり。現行運用判断には使わない |
 | [OPERATIONS_GUIDE.md](./OPERATIONS_GUIDE.md) | Reference | 運用手順の補助資料 | 一部 systemd 前提の旧記述あり |

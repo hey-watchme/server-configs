@@ -169,6 +169,11 @@ graph TB
 | **sed-worker** | Behavior Features v2 | `/async-process` | connect=3秒 / read=10秒 | 60秒 |
 | **ser-worker** | Emotion Features v2 | `/async-process` | connect=3秒 / read=10秒 | 60秒 |
 
+**コード確認済みの判定条件（2026-03-07）**:
+- Worker Lambda は `HTTP 202` のときだけ「受付成功」として扱う
+- `202` 以外（例: `503`）は失敗扱いになり、SQS リトライへ戻る
+- これにより「受付成功なのに実処理が始まらない」取りこぼしを減らす運用にしている
+
 #### 🎙️ EC2 API バックグラウンド処理 (1-3分)
 
 各APIは `/async-process` で queue に投入できたときのみ `202 Accepted` を返す。  
@@ -327,6 +332,10 @@ dashboard-analysis-worker
   ↓
 iOSアプリに通知表示
 ```
+
+**コード確認済みの補足（2026-03-07）**:
+- `watchme-dashboard-analysis-worker` は Daily Profiler API の成功/失敗に関わらず、通知送信を試行する実装
+- そのため運用上は「Daily分析が完全成功した時だけ通知される」とは限らない（通知は refresh トリガーとして扱う）
 
 **通知内容**:
 - タイトル: 「{Subject名}さんのデイリー分析完了」
