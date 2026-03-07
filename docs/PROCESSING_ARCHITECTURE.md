@@ -634,6 +634,9 @@ ORDER BY recorded_at ASC
 | **watchme-asr-queue-v2.fifo** | **FIFO** | ASR処理キュー（順序保証） | audio-processor | asr-worker |
 | **watchme-sed-queue-v2.fifo** | **FIFO** | SED処理キュー（順序保証） | audio-processor | sed-worker |
 | **watchme-ser-queue-v2.fifo** | **FIFO** | SER処理キュー（順序保証） | audio-processor | ser-worker |
+| **watchme-asr-job-queue-v1.fifo** | **FIFO** | ASR API実行ジョブキュー（受付後実処理） | Vibe `/async-process` | Vibe API queue worker |
+| **watchme-sed-job-queue-v1.fifo** | **FIFO** | SED API実行ジョブキュー（受付後実処理） | Behavior `/async-process` | Behavior API queue worker |
+| **watchme-ser-job-queue-v1.fifo** | **FIFO** | SER API実行ジョブキュー（受付後実処理） | Emotion `/async-process` | Emotion API queue worker |
 | **watchme-feature-completed-queue** | Standard | 完了通知キュー | 各EC2 API | aggregator-checker |
 | **watchme-spot-analysis-queue.fifo** | **FIFO** | Spot分析実行キュー | aggregator-checker | spot-analysis-worker |
 | watchme-dashboard-summary-queue | Standard | Daily集計キュー | spot-analysis-worker | dashboard-summary-worker |
@@ -657,6 +660,10 @@ ORDER BY recorded_at ASC
 - `https://api.hey-watch.me/vibe-analysis/transcriber/async-process` (202 Accepted)
 - `https://api.hey-watch.me/behavior-analysis/features/async-process` (202 Accepted)
 - `https://api.hey-watch.me/emotion-analysis/feature-extractor/async-process` (202 Accepted)
+
+**feature API `/async-process`（queueモード有効時）**:
+- 受け付け後に `watchme-asr-job-queue-v1.fifo` / `watchme-sed-job-queue-v1.fifo` / `watchme-ser-job-queue-v1.fifo` へ enqueue
+- API内 queue worker が実処理を実行し、完了時に `watchme-feature-completed-queue` へ通知
 
 **EC2 API (バックグラウンド処理完了後)**:
 - `watchme-feature-completed-queue` に完了通知送信
@@ -733,6 +740,9 @@ ORDER BY recorded_at ASC
 | watchme-asr-queue-v2.fifo | 300秒 | 3 |
 | watchme-sed-queue-v2.fifo | 300秒 | 3 |
 | watchme-ser-queue-v2.fifo | 300秒 | 3 |
+| watchme-asr-job-queue-v1.fifo | 600秒 | 3 |
+| watchme-sed-job-queue-v1.fifo | 600秒 | 3 |
+| watchme-ser-job-queue-v1.fifo | 600秒 | 3 |
 | watchme-feature-completed-queue | 330秒 | なし（DLQ設定なし） |
 | watchme-spot-analysis-queue.fifo | 330秒 | 3 |
 | watchme-dashboard-summary-queue | 900秒 | 3 |
@@ -754,7 +764,7 @@ ORDER BY recorded_at ASC
 3. **dashboard-summary/analysis/weekly worker も同期呼び出し（180秒待ち）**  
    Daily/Weeklyがタイムアウト値依存の直列パイプラインになっている。
 4. **`/async-process` の実処理が同一プロセス内のスレッド実行キュー依存**  
-   202応答は即時化したが、実処理は依然としてAPIプロセス内で動作し、独立キュー実行基盤ではない。
+   202応答は即時化済み。さらに 2026-03-07 に SQS feature-job queue モード（`*-job-queue-v1.fifo`）をコード実装したが、環境変数有効化とキュー作成が必要な段階。
 
 ### 7. 改修方針（イベント駆動へ戻す）
 
@@ -962,6 +972,9 @@ FIFO/Standard どちらでも再試行の考え方は同じです。
 | watchme-asr-queue-v2.fifo | 300秒 | 3 | feature起動キュー |
 | watchme-sed-queue-v2.fifo | 300秒 | 3 | feature起動キュー |
 | watchme-ser-queue-v2.fifo | 300秒 | 3 | feature起動キュー |
+| watchme-asr-job-queue-v1.fifo | 600秒 | 3 | ASR API実行ジョブ |
+| watchme-sed-job-queue-v1.fifo | 600秒 | 3 | SED API実行ジョブ |
+| watchme-ser-job-queue-v1.fifo | 600秒 | 3 | SER API実行ジョブ |
 | watchme-feature-completed-queue | 330秒 | なし | 完了通知キュー（DLQなし） |
 | watchme-spot-analysis-queue.fifo | 330秒 | 3 | Spot分析本処理 |
 | watchme-dashboard-summary-queue | 900秒 | 3 | Daily集計 |

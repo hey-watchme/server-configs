@@ -44,6 +44,20 @@
 - `.dockerignore`:
   - `_archive/`, `s3prl_cache/` を除外して build context を軽量化
 
+### 1-4. 本命対応の第1段（feature job queue モード実装）
+
+3つの feature API に、`/async-process` の「受付専用 + SQSジョブ投入」モードを実装。
+環境変数が有効な場合、APIはジョブを `*-job-queue-v1.fifo` へ投入し、別スレッドの queue consumer が実処理を実行する。
+
+対象:
+- `api-behavior-analysis-feature-extractor-v2`
+- `api-emotion-analysis-feature-extractor-v2`
+- `api-vibe-analysis-transcriber-v2`
+
+補足:
+- queue モードが未設定/失敗時は in-process executor にフォールバック（既存互換）
+- `server-configs/production/lambda-functions/create-feature-job-queues.sh` を追加（ASR/SED/SER job queue 作成用）
+
 ---
 
 ## 2. 本番デプロイ状況（確認時点）
