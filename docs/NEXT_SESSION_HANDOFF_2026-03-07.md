@@ -64,6 +64,19 @@
 - `server-configs/production/lambda-functions/create-feature-job-queues.sh` を追加（ASR/SED/SER job queue 作成用）
 - 2026-03-07 に上記スクリプトを実行し、`watchme-asr/sed/ser-job-queue-v1.fifo` と各DLQを本番作成済み
 
+### 1-5. 追加ホットフィックス（2026-03-07 夜）
+
+SED 停滞再発（`behavior_status=processing` のまま）を受けて、`/async-process` の運用を以下に統一。
+
+- 3 feature API の queue 設定デフォルトを `enabled=true` + 既定 queue URL に変更
+- queue が無効/未設定、または enqueue 失敗時は `503` を返却
+- Lambda Worker 側は 202 以外を失敗として SQS リトライするため、「受付成功なのに未実行」の取りこぼしを防止
+- `*_ALLOW_IN_PROCESS_FALLBACK` を追加（デフォルト `false`、ローカル検証時のみ明示有効化）
+
+補足:
+- 既存の in-process フォールバックは「互換用に明示有効化した場合のみ」動作
+- 本番は queue モードを前提に運用する
+
 ---
 
 ## 2. 本番デプロイ状況（確認時点）
