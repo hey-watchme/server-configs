@@ -68,7 +68,7 @@ aws ec2 modify-instance-attribute --profile admin ...
 
 - **サブネット**: 172.27.0.0/16
 - **ゲートウェイ**: 172.27.0.1
-- **管理サービス**: watchme-infrastructure (systemd)
+- **管理**: Docker network（CI/CDデプロイ時に自動参加）
 - **設定ファイル**: docker-compose.infra.yml
 
 ### 接続コンテナ（稼働中のみ）
@@ -105,7 +105,7 @@ aws ec2 modify-instance-attribute --profile admin ...
 | **ゲートウェイ** | Vault API | 8000 | `/vault/` | watchme-api-vault | S3音声ファイル配信 |
 | **音声処理** | Behavior Features | 8017 | `/behavior-analysis/features/` | watchme-behavior-analysis-feature-extractor | 527種類の音響検出 |
 | | Emotion Features | 8018 | `/emotion-analysis/feature-extractor/` | watchme-emotion-analysis-feature-extractor | 音声感情認識 |
-| | Vibe Transcriber | 8013 | `/vibe-analysis/transcriber/` | watchme-vibe-analysis-transcriber | Deepgram Nova-2文字起こし |
+| | Vibe Transcriber | 8013 | `/vibe-analysis/transcriber/` | watchme-vibe-analysis-transcriber | マルチプロバイダーASR文字起こし |
 | **集計・分析** | **Aggregator API** | **8011** | **`/aggregator/`** | **watchme-aggregator** | **Spot/Daily集計** |
 | | **Profiler API** | **8051** | **`/profiler/`** | **watchme-profiler** | **Spot/Daily LLM分析** |
 | **管理** | Admin | 9000 | `/admin/` | watchme-admin | 管理UI |
@@ -163,15 +163,15 @@ aws ec2 modify-instance-attribute --profile admin ...
 
 ### 3. Vibe Transcriber API
 
-**役割**: 音声文字起こし
+**役割**: 音声文字起こし（マルチプロバイダー対応）
 
 **技術スタック**:
-- プロバイダー: Groq
-- モデル: Whisper v3
-- 処理時間: 26-28秒（60秒音声）
+- マルチプロバイダー対応（Speechmatics / Deepgram / Groq / Azure / aiOla）
+- 現在のプロバイダー設定は `api/vibe-analysis/transcriber-v2/README.md` 参照
+- `app/asr_providers.py` の `CURRENT_PROVIDER` で切り替え
 
 **エンドポイント**:
-- `POST /vibe-analysis/transcription/fetch-and-transcribe`
+- `POST /vibe-analysis/transcriber/fetch-and-transcribe`
 
 ---
 
@@ -310,7 +310,7 @@ aws ec2 modify-instance-attribute --profile admin ...
 |-----|------|------------|------|
 | Behavior Features | `/behavior-analysis/features/` | 180秒 | 大規模モデル処理 |
 | Emotion Features | `/emotion-analysis/feature-extractor/` | 180秒 | 感情認識処理 |
-| Vibe Transcriber | `/vibe-analysis/transcriber/` | 180秒 | Groq API処理 |
+| Vibe Transcriber | `/vibe-analysis/transcriber/` | 180秒 | ASR処理 |
 | Aggregator | `/aggregator/` | 60秒 | 軽量集計 |
 | Profiler | `/profiler/` | 180秒 | LLM分析 |
 | その他 | - | 60秒 | デフォルト |
@@ -382,29 +382,21 @@ location /business/ {
 
 ---
 
-## 🔧 systemd サービス
+## 🐳 コンテナ管理
 
-全サービスは systemd で管理。
+全サービスは Docker + `restart: always` ポリシーで永続化。systemd は使用しない（2026-03-08 全廃済み）。
 
 **確認コマンド**:
 ```bash
-sudo systemctl status <service-name>
+docker ps | grep watchme
+docker logs <container-name> --tail 100 -f
 ```
 
-**主要サービス**:
-- `watchme-vault-api.service`
-- `behavior-features.service`
-- `emotion-features.service`
-- `vibe-transcriber.service`
-- `aggregator-api.service`
-- `profiler-api.service`
-- `janitor-api.service`
-
-**起動・停止**:
+**再起動**:
 ```bash
-sudo systemctl restart <service-name>
-sudo systemctl stop <service-name>
-sudo systemctl start <service-name>
+cd /home/ubuntu/<service-dir>
+docker-compose -f docker-compose.prod.yml down
+docker-compose -f docker-compose.prod.yml up -d
 ```
 
 ---
@@ -516,7 +508,7 @@ GROQ_API_KEY=gsk-xxx
 - ✅ Aggregator API統一（Spot/Daily）
 - ✅ Profiler API統一（Spot/Daily）
 - ✅ local_date対応
-- ✅ Groq Whisper v3移行
+- ✅ マルチプロバイダーASR対応
 - ✅ Kushinada感情認識
 - ✅ PaSST音響検出
 - ✅ Lambda自動処理パイプライン

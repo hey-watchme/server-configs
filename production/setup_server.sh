@@ -3,54 +3,39 @@
 # WatchMe Server Configuration Setup Script
 # ==============================================================================
 #
-# このスクリプトは、watchme-server-configsリポジトリ内の設定ファイルを
-# EC2サーバーの適切な場所に配置し、サービスを有効化するためのものです。
-# 新しいサーバーをセットアップした際や、構成をリセットしたい場合に実行します。
+# Configures Nginx reverse proxy and Docker network on the EC2 server.
+# All API containers are managed by Docker (restart policy + CI/CD),
+# NOT by systemd.
 #
-# 実行方法:
-# 1. このリポジトリをサーバーの /home/ubuntu/watchme-server-configs にクローン
-# 2. cd /home/ubuntu/watchme-server-configs
+# Usage:
+# 1. Clone this repo to /home/ubuntu/watchme-server-configs
+# 2. cd /home/ubuntu/watchme-server-configs/production
 # 3. chmod +x setup_server.sh
 # 4. ./setup_server.sh
 #
 # ==============================================================================
 
-set -e # いずれかのコマンドが失敗したら、ただちにスクリプトを終了する
+set -e
 
 echo "=== WatchMe Server Configuration Setup ==="
-echo "This script will link systemd and Nginx configurations."
+echo "This script will configure Nginx and Docker network."
 echo "Sudo privileges will be required."
 
-# このスクリプトが存在するディレクトリの絶対パスを取得
-# これにより、どこから実行しても正しく動作する
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 
-# --- Systemd Setup ---
+# --- Docker Network ---
 echo ""
-echo "--> Setting up systemd services..."
-SYSTEMD_DIR="$SCRIPT_DIR/systemd"
-
-if [ -d "$SYSTEMD_DIR" ]; then
-  # systemdディレクトリ内の全ての.serviceファイルをループ処理
-  for service_file in "$SYSTEMD_DIR"/*.service; do
-    if [ -f "$service_file" ]; then
-      service_name=$(basename "$service_file")
-      target_path="/etc/systemd/system/$service_name"
-      echo "Linking $service_name to $target_path..."
-      # シンボリックリンクを作成（-fオプションで既存のリンクを上書き）
-      sudo ln -sf "$service_file" "$target_path"
-    fi
-  done
+echo "--> Ensuring Docker network exists..."
+if docker network inspect watchme-network > /dev/null 2>&1; then
+    echo "watchme-network already exists."
 else
-  echo "WARNING: 'systemd' directory not found. Skipping systemd setup."
+    echo "Creating watchme-network..."
+    docker network create watchme-network
+    echo "watchme-network created."
 fi
 
-echo "Reloading systemd daemon to recognize new services..."
-sudo systemctl daemon-reload
-echo "Systemd setup complete."
-echo ""
-
 # --- Nginx Setup ---
+echo ""
 echo "--> Setting up Nginx sites..."
 NGINX_DIR="$SCRIPT_DIR/sites-available"
 
@@ -60,11 +45,10 @@ if [ -d "$NGINX_DIR" ]; then
       conf_name=$(basename "$nginx_conf")
       target_path="/etc/nginx/sites-available/$conf_name"
       enabled_path="/etc/nginx/sites-enabled/$conf_name"
-      
+
       echo "Linking $conf_name to $target_path..."
       sudo ln -sf "$nginx_conf" "$target_path"
-      
-      # sites-enabledにもリンクを作成してサイトを有効化
+
       if [ ! -L "$enabled_path" ]; then
         echo "Enabling site: $conf_name"
         sudo ln -s "$target_path" "$enabled_path"
@@ -81,77 +65,11 @@ sudo nginx -t
 echo "Reloading Nginx to apply new configuration..."
 sudo systemctl reload nginx
 echo "Nginx setup complete."
-echo ""
-
-# --- Infrastructure Service ---
-echo "--> Enabling and starting the base infrastructure service..."
-# watchme-infrastructure.serviceが存在すれば、有効化して起動する
-if systemctl list-unit-files | grep -q 'watchme-infrastructure.service'; then
-    echo "Enabling and starting watchme-infrastructure.service..."
-    sudo systemctl enable --now watchme-infrastructure.service
-    echo "Waiting a moment for the infrastructure to settle..."
-    sleep 10
-    sudo systemctl status watchme-infrastructure.service --no-pager || true
-else
-    echo "WARNING: watchme-infrastructure.service not found. Please ensure it exists."
-fi
-
-# --- Enable All WatchMe Services ---
-echo ""
-echo "--> Enabling all WatchMe services for auto-start on boot..."
-
-# 全てのwatchmeサービスをリスト化（2025-10-22更新: 階層化サービス名に対応）
-WATCHME_SERVICES=(
-    "watchme-vault-api"
-    "watchme-api-manager"
-    "watchme-web-app"
-    "watchme-admin"
-    "watchme-avatar-uploader"
-    "watchme-behavior-yamnet"
-    "watchme-docker"
-    "api-gpt-v1"
-    "api-sed-aggregator"
-    "mood-chart-api"
-    "behavior-analysis-feature-extractor-v2"
-    "emotion-analysis-feature-extractor-v3"
-    "emotion-analysis-aggregator"
-    "vibe-analysis-transcriber-v2"
-    "vibe-analysis-aggregator"
-)
-
-# 各サービスを有効化（起動はしない）
-for service in "${WATCHME_SERVICES[@]}"; do
-    if systemctl list-unit-files | grep -q "${service}.service"; then
-        echo "Enabling ${service}.service for auto-start..."
-        sudo systemctl enable "${service}.service" 2>/dev/null || true
-    else
-        echo "  - ${service}.service not found, skipping..."
-    fi
-done
-
-# --- Start Critical Services ---
-echo ""
-echo "--> Starting critical services..."
-
-# 重要なサービスのみ起動
-CRITICAL_SERVICES=(
-    "watchme-vault-api"
-    "watchme-api-manager"
-    "watchme-web-app"
-)
-
-for service in "${CRITICAL_SERVICES[@]}"; do
-    if systemctl list-unit-files | grep -q "${service}.service"; then
-        echo "Starting ${service}.service..."
-        sudo systemctl start "${service}.service" 2>/dev/null || true
-        sleep 2
-    fi
-done
 
 echo ""
 echo "=== Setup Finished Successfully! ==="
-echo "All services have been enabled for auto-start on server reboot."
-echo "Critical services have been started."
 echo ""
-echo "To check service status: sudo systemctl status watchme-*.service"
-echo "To start all services: for s in watchme-*.service api-*.service mood-*.service opensmile-*.service vibe-*.service; do sudo systemctl start \$s; done"
+echo "Note: API containers are managed by Docker with restart policies."
+echo "  - Deployment: GitHub Actions CI/CD -> ECR -> run-prod.sh"
+echo "  - Persistence: Docker restart policy (always / unless-stopped)"
+echo "  - To check running containers: docker ps"

@@ -1,6 +1,6 @@
 # WatchMe Docs Index
 
-最終更新: 2026-03-07  
+最終更新: 2026-03-08  
 Status: Active  
 Source of truth: このファイルは `server-configs/docs` の入口です
 
@@ -28,7 +28,7 @@ Source of truth: このファイルは `server-configs/docs` の入口です
 | [NON_TECH_PIPELINE_OVERVIEW.md](./NON_TECH_PIPELINE_OVERVIEW.md) | Active | 非エンジニア向けの全体像説明 | 共有資料・概念図の元ネタ |
 | [CICD_STANDARD_SPECIFICATION.md](./CICD_STANDARD_SPECIFICATION.md) | Active | API リポジトリ側の CI/CD 標準 | API デプロイ方式の基準 |
 | [TECHNICAL_REFERENCE.md](./TECHNICAL_REFERENCE.md) | Reference | 広い技術仕様の参照 | 一部古い記述あり。現行運用判断には使わない |
-| [OPERATIONS_GUIDE.md](./OPERATIONS_GUIDE.md) | Reference | 運用手順の補助資料 | 一部 systemd 前提の旧記述あり |
+| [OPERATIONS_GUIDE.md](./OPERATIONS_GUIDE.md) | Historical | 運用手順の補助資料 | systemd 前提の旧記述。systemd は 2026-03-08 に廃止済み |
 | [KNOWN_ISSUES.md](./KNOWN_ISSUES.md) | Reference | 既知障害・詰まりどころ | 調査時に参照 |
 | [NEW_API_INTEGRATION_GUIDE.md](./NEW_API_INTEGRATION_GUIDE.md) | Reference | 新規 API 追加時の手順 | 新規開発向け |
 | [SPOT_AND_DAILY_ANALYSIS_GUIDE.md](./SPOT_AND_DAILY_ANALYSIS_GUIDE.md) | Reference | 分析仕様の補助理解 | 処理内容の補足 |

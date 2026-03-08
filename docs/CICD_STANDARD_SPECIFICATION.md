@@ -667,22 +667,11 @@ grep "allow_origins" backend/app.py
 
 ---
 
-## 📋 起動方式の全体像（2025-11-21更新）
+## 📋 起動方式の全体像（2026-03-08更新）
 
-### 現状
+### デプロイ方式: GitHub Actions CI/CD（全サービス統一）
 
-**GitHub Actions方式（新標準）**: 9サービス稼働中
-**systemd方式（移行期/保留）**: 3サービス
-**Infrastructure（維持）**: watchme-network管理
-
-### 🔄 起動方式の詳細
-
-#### 方式1: GitHub Actions方式（新標準・推奨）✨
-
-**特徴:**
-- `git push` だけで自動デプロイ
-- 各APIリポジトリが独立して管理
-- EC2上のディレクトリに設定ファイルを自動配置
+**systemd は 2026-03-08 に全廃済み。** 全サービスが GitHub Actions + Docker restart policy で管理されています。
 
 **デプロイフロー:**
 ```
@@ -699,103 +688,30 @@ EC2にSSH → ディレクトリ内に.env/docker-compose.prod.yml配置 →
 └── run-prod.sh               # GitHub Actionsがコピー
 ```
 
-**管理方法:**
+**永続化:**
 - コンテナは `docker-compose.prod.yml` の `restart: always` で自動再起動
-- systemdサービスは**使用しない**
+- EC2 再起動 → Docker daemon 自動起動 → restart policy でコンテナ復帰
 
-**適用サービス（10個）:**
+**CI/CD 対応サービス:**
 
-| サービス | ポート | 稼働状況 | コンテナ名 |
-|---------|--------|---------|----------|
-| Profiler API | 8051 | ✅ 正常（2025-11-21移行完了） | profiler-api |
-| Aggregator API | 8050 | ✅ 正常 | aggregator-api |
-| Behavior Features | 8017 | ✅ 正常（AST） | behavior-analysis-feature-extractor |
-| Emotion Features | 8018 | ✅ 正常 | emotion-analysis-feature-extractor |
-| Vibe Transcriber | 8013 | ✅ 正常（Groq Whisper） | vibe-analysis-transcriber |
-| Vault API | 8000 | ✅ 正常 | watchme-vault-api |
-| Admin | 9000 | ✅ 正常 | watchme-admin |
-| Janitor | 8030 | ✅ 正常 | janitor-api |
-| Avatar Uploader | 8014 | ✅ 正常 | watchme-avatar-uploader |
-| Demo Generator | 8020 | ✅ 正常 | demo-generator-api |
+| サービス | ポート | コンテナ名 |
+|---------|--------|----------|
+| Vault API | 8000 | watchme-vault-api |
+| Aggregator API | 8050 | aggregator-api |
+| Profiler API | 8051 | profiler-api |
+| Vibe Transcriber | 8013 | vibe-analysis-transcriber |
+| Behavior Features | 8017 | behavior-analysis-feature-extractor |
+| Emotion Features | 8018 | emotion-analysis-feature-extractor |
+| Janitor | 8030 | janitor-api |
+| Avatar Uploader | 8014 | watchme-avatar-uploader |
+| Admin | 9000 | watchme-admin |
+| API Manager | 9001 | api-manager-frontend |
+| Business API | 8052 | watchme-business-api |
 
-**確認コマンド:**
-```bash
-# コンテナが稼働しているか確認
-ssh ubuntu@3.24.16.82
-docker ps | grep {container-name}
+### Docker network
 
-# ログ確認
-docker logs {container-name} --tail 100
-
-# 再起動（GitHub Actions再実行、またはEC2上で手動）
-cd /home/ubuntu/{api-name}
-./run-prod.sh
-```
-
-#### 方式2: systemd + 集中管理方式（移行期）🔄
-
-**特徴:**
-- systemdサービスが `/home/ubuntu/watchme-server-configs/production/docker-compose-files/` 内のファイルを参照
-- サーバー再起動時に自動起動（systemdが管理）
-- GitHub Actionsも併用（ハイブリッド）
-
-**デプロイフロー:**
-```
-git push → GitHub Actions起動 → ECRにイメージpush →
-EC2にSSH → .envファイル作成 → systemdサービス再起動
-```
-
-**EC2上の配置:**
-```
-/home/ubuntu/{api-name}/
-├── .env                      # GitHub Actionsが作成
-
-/home/ubuntu/watchme-server-configs/production/
-├── docker-compose-files/
-│   └── {api-name}-docker-compose.prod.yml  # systemdが参照
-└── systemd/
-    └── {api-name}.service                   # systemdサービス定義
-```
-
-**systemdサービスの動作:**
-```bash
-# サービスは以下を実行
-docker-compose -f /home/ubuntu/watchme-server-configs/production/docker-compose-files/{api-name}-docker-compose.prod.yml up
-```
-
-**適用サービス（3個）:**
-
-| サービス | ポート | 状態 | systemdサービス名 | 備考 |
-|---------|--------|------|------------------|------|
-| API Manager | 9001 | ✅ 稼働中 | watchme-api-manager.service | systemd管理 |
-| Web Dashboard | 3000 | ✅ 稼働中 | watchme-web-app.service | systemd管理 |
-| Infrastructure | - | ✅ 維持 | watchme-infrastructure.service | watchme-network管理（変更不要） |
-
-**削除済みsystemdサービス（2025-12-02）:**
-- `watchme-behavior-yamnet.service` → GitHub Actions方式に移行済み
-- `watchme-vault-api.service` → GitHub Actions方式に移行済み
-
-**確認コマンド:**
-```bash
-# systemdサービス状態確認
-ssh ubuntu@3.24.16.82
-sudo systemctl status profiler-api.service
-
-# サービス再起動
-sudo systemctl restart profiler-api.service
-
-# ログ確認（systemd経由）
-sudo journalctl -u profiler-api.service -n 50
-
-# ログ確認（Docker）
-docker logs profiler-api --tail 100
-```
-
-### Infrastructure サービスについて
-
-**役割**: `watchme-network` Dockerネットワークの作成・管理
-**維持理由**: EC2再起動時に自動的にネットワークを作成（全コンテナが依存）
-**方針**: **このまま維持**（変更不要）
+- `watchme-network`（bridge）を全コンテナで共有
+- `setup_server.sh` または `docker network create watchme-network` で作成
 
 ### 管理コマンド
 
@@ -806,11 +722,11 @@ docker ps
 # ログ確認
 docker logs {container-name} --tail 100 -f
 
-# 再起動
+# 再起動（EC2上で手動）
 cd /home/ubuntu/{api-name} && ./run-prod.sh
 
-# systemd確認（Infrastructure/API Manager/Web Dashboard のみ）
-sudo systemctl status {service-name}
+# CI/CD再実行（GitHub Actions）
+gh workflow run deploy-ecr.yml --repo hey-watchme/{repo-name}
 ```
 
 ---

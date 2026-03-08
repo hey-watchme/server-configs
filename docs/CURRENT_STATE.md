@@ -1,6 +1,6 @@
 # WatchMe Current State
 
-最終更新: 2026-03-07  
+最終更新: 2026-03-08  
 Status: Active  
 Source of truth: 現在の運用モデル・責務分担
 
@@ -41,14 +41,13 @@ Source of truth: 現在の運用モデル・責務分担
 ### 2. EC2 基盤設定
 
 対象:
-- Nginx
-- `production/systemd/`
+- Nginx (`production/sites-available/`)
+- Docker network (`watchme-network`)
 - `production/docker-compose-files/`
-- ネットワーク・集中管理用設定
 
 原則:
 - これらは `server-configs` が source of truth
-- EC2 に `production/` を反映する
+- EC2 に `production/` を反映する（`setup_server.sh` を使用）
 
 ### 3. AWS 非同期基盤
 
@@ -62,16 +61,27 @@ Source of truth: 現在の運用モデル・責務分担
 - **Lambda は `server-configs` から直接反映**
 - API の CI/CD とは別経路
 
-## systemd の位置づけ
+## コンテナのライフサイクル管理
 
-現時点の理解:
-- すべてのランタイムは Docker ベース
-- 一部は `systemd -> docker-compose` のラッパーで管理
-- 一部は GitHub Actions により `/home/ubuntu/{api-name}` 配下へ配備される運用
+**systemd は使用しない。** 2026-03-08 に全 systemd サービスを廃止済み。
 
-重要:
-- **「systemd で起動している = そのサービスのコード変更も server-configs から反映する」とは限らない**
-- 特に Aggregator / Profiler は API リポジトリ側 CI/CD を先に確認する
+### デプロイ（コンテナの作成・更新）
+
+- 各 API リポジトリの **GitHub Actions CI/CD** が担当
+- フロー: `git push` → GitHub Actions → ECR にイメージ push → EC2 に SSH → `run-prod.sh` 実行 → `docker-compose up -d`
+- 2026-03-08: Avatar Uploader も CI/CD に統一済み
+
+### 永続化（EC2 再起動時の自動復帰）
+
+- **Docker の restart policy** に依存
+- `restart: always` → Docker daemon 起動時に自動復帰（`docker stop` しても復帰）
+- `restart: unless-stopped` → Docker daemon 起動時に自動復帰（`docker stop` した場合は復帰しない）
+- EC2 起動時に Docker daemon が自動起動するため、restart policy が設定されたコンテナは自動復帰する
+
+### Docker network
+
+- `watchme-network`（bridge）を全コンテナで共有
+- `setup_server.sh` または手動で `docker network create watchme-network` で作成
 
 ## Spot パイプラインの現行構成
 

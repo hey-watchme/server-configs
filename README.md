@@ -1,9 +1,9 @@
 # WatchMe Server Configurations
 
-最終更新: 2026-03-07
+最終更新: 2026-03-08
 
 WatchMe 全体のサーバー設定と運用ドキュメントを集約するリポジトリ。  
-このリポジトリ自体はアプリ本体ではなく、`EC2/Nginx/systemd/docker-compose/Lambda/運用文書` の基盤レイヤーを管理します。
+このリポジトリ自体はアプリ本体ではなく、`EC2/Nginx/Docker/Lambda/運用文書` の基盤レイヤーを管理します。
 
 ## 最初に読むもの
 
@@ -31,7 +31,7 @@ WatchMe 全体のサーバー設定と運用ドキュメントを集約するリ
 - `docs/`: 運用・設計・調査用ドキュメント
 - `production/lambda-functions/`: Lambda / SQS / EventBridge 関連の実装と反映スクリプト
 - `production/sites-available/`: Nginx 設定
-- `production/systemd/`, `production/docker-compose-files/`: EC2 側の起動・ネットワーク・集中管理用設定
+- `production/docker-compose-files/`: Docker Compose 設定（Web アプリ等）
 
 重要:
 - **API アプリ本体のコードは原則このリポジトリにはありません**
@@ -44,7 +44,7 @@ WatchMe 全体のサーバー設定と運用ドキュメントを集約するリ
 |---------|-------------|---------|
 | Lambda 関数 | `server-configs/production/lambda-functions/` | 手動で AWS に反映 |
 | SQS / EventBridge / Lambda 配線 | `server-configs` | 手動で AWS に反映 |
-| Nginx / systemd / docker-compose-files | `server-configs/production/` | EC2 で `setup_server.sh` 等を実行 |
+| Nginx / Docker network | `server-configs/production/` | EC2 で `setup_server.sh` を実行 |
 | Aggregator / Profiler など API 本体 | 各 API リポジトリ | GitHub Actions CI/CD |
 | DB スキーマ | プロジェクト全体の Supabase migrations | migration 実行 |
 
@@ -59,7 +59,6 @@ server-configs/
 │   ├── lambda-functions/
 │   ├── scripts/
 │   ├── sites-available/
-│   ├── systemd/
 │   └── setup_server.sh
 └── docs/
 ```
@@ -67,6 +66,19 @@ server-configs/
 運用方針:
 - EC2 に配置するのは基本的に `production/`
 - `docs/` は作業者向けの知識集約
+
+## コンテナの永続化方式
+
+**全 API コンテナは Docker の restart policy で永続化しています（systemd は使用しません）。**
+
+| 方式 | 説明 |
+|------|------|
+| `restart: always` | Docker daemon 起動時に自動復帰。`docker stop` しても復帰 |
+| `restart: unless-stopped` | Docker daemon 起動時に自動復帰。`docker stop` した場合は復帰しない |
+
+- EC2 再起動 → Docker daemon 自動起動 → restart policy に従いコンテナ自動復帰
+- デプロイは GitHub Actions CI/CD が `run-prod.sh` を実行し `docker-compose up -d` する方式
+- Docker network (`watchme-network`) は `setup_server.sh` または手動で作成
 
 ## 文書の見方
 
