@@ -472,7 +472,7 @@ CREATE TABLE spot_features (
   -- 3つの特徴抽出結果
   vibe_transcriber_result TEXT,          -- ASR: 文字起こしテキスト
   behavior_extractor_result JSONB,       -- SED: 527種類の音響イベント
-  emotion_extractor_result JSONB,        -- SER: 8感情スコア + OpenSMILE特徴量
+  emotion_extractor_result JSONB,        -- SER: 8感情スコア + Paralinguistic特徴量
 
   -- 処理ステータス
   vibe_transcriber_status TEXT,
@@ -819,7 +819,7 @@ SELECT device_id, timezone FROM devices;
 - ✅ **技術名の汎用化**
   - YAMNet → SED (Sound Event Detection)
   - Kushinada → SER (Speech Emotion Recognition)
-  - OpenSMILE → SER（統一）
+  - Paralinguistic → SER（統一）
 
 - ✅ **プロンプト構造**
   ```

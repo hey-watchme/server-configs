@@ -1,16 +1,31 @@
 # WatchMe 技術仕様書
 
-最終更新: 2025-11-15
+最終更新: 2026-03-12
 
 > Status: Reference
 > Source of truth: 現在の運用判断には [CURRENT_STATE.md](./CURRENT_STATE.md) と [DEPLOYMENT_RUNBOOK.md](./DEPLOYMENT_RUNBOOK.md) を優先してください。
 > Note: この文書には広い技術情報が残っていますが、一部の運用記述は現状より古い可能性があります。
 
+## 📮 公式連絡先 / メール受信運用
+
+- 公式サイト: `https://hey-watch.me`
+- サポートメール: `support@hey-watch.me`
+
+### Cloudflare Email Routing（受信）
+
+- カスタムアドレス: `support@hey-watch.me`
+- アクション: `Send to an email`
+- 転送先: `matsumotokaya@gmail.com`
+- ステータス: `Active`
+- Catch-all: `Disabled`（`Drop`）
+
+> 補足: Cloudflare Email Routing は受信転送のため、Webフォーム等の送信機能は別途SMTP/API送信設定が必要。
+
 ## 🏗️ システムアーキテクチャ
 
 ### AWS EC2
 
-- **インスタンスタイプ**: t4g.large (AWS Graviton2, 2 vCPU, 8GB RAM)
+- **インスタンスタイプ**: t4g.small (AWS Graviton2, 2 vCPU, 2GB RAM)
 - **ストレージ**: 30GB gp3 SSD
 - **リージョン**: ap-southeast-2 (Sydney)
 - **IPアドレス**: 3.24.16.82

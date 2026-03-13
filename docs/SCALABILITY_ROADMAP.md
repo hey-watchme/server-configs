@@ -259,8 +259,8 @@ aws lambda create-event-source-mapping \
 
 ### 現状の問題
 
-**EC2単一インスタンス（t4g.large）**:
-- 固定リソース: 2 vCPU, 8GB RAM
+**EC2単一インスタンス（t4g.small）**:
+- 固定リソース: 2 vCPU, 2GB RAM
 - スケール不可: 負荷が増えても対応できない
 - 単一障害点: EC2停止 = 全サービス停止
 
@@ -270,7 +270,7 @@ aws lambda create-event-source-mapping \
 
 ```
 【現在】
-EC2 (t4g.large)
+EC2 (t4g.small)
 ├─ Behavior API (Docker)
 ├─ Emotion API (Docker)
 └─ Vibe Transcriber (Docker)

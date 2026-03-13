@@ -339,7 +339,7 @@ docker stats --no-stream
 free -h
 
 # 2. 重要度の低いコンテナを一時停止
-docker stop opensmile-aggregator api-sed-aggregator
+docker stop paralinguistic-aggregator api-sed-aggregator
 
 # 3. メモリ制限付きで起動（例）
 docker run -d --name [container-name] \
@@ -552,7 +552,7 @@ curl http://localhost:8018/health
 #### トラブル時の緊急対応
 ```bash
 # メモリ逼迫時（優先度の低いサービスを停止）
-docker stop api-sed-aggregator opensmile-aggregator
+docker stop api-sed-aggregator paralinguistic-aggregator
 
 # ディスク容量不足時
 docker system prune -a -f
@@ -583,7 +583,7 @@ docker ps -a               # 全コンテナ状態
 # systemdサービスの状態確認
 sudo systemctl status watchme-*.service | grep -E "●|Active|failed"
 sudo systemctl status api-*.service | grep -E "●|Active|failed"
-sudo systemctl status mood-*.service opensmile-*.service vibe-*.service | grep -E "●|Active|failed"
+sudo systemctl status mood-*.service paralinguistic-*.service vibe-*.service | grep -E "●|Active|failed"
 ```
 
 ### Step 2: インフラストラクチャの起動
@@ -626,7 +626,7 @@ sudo systemctl start watchme-web-app.service
 sleep 5
 
 # その他のAPIサービスを起動
-for service in api-gpt-v1 mood-chart-api vibe-transcriber-v2 opensmile-api opensmile-aggregator api-sed-aggregator; do
+for service in api-gpt-v1 mood-chart-api vibe-transcriber-v2 paralinguistic-api paralinguistic-aggregator api-sed-aggregator; do
     sudo systemctl start ${service}.service
     sleep 2
 done
@@ -687,7 +687,7 @@ curl -I https://admin.hey-watch.me/
 
 1. **全サービスが自動起動設定されているか**
    ```bash
-   systemctl list-unit-files | grep -E "watchme|api-|mood|opensmile|vibe" | grep enabled
+   systemctl list-unit-files | grep -E "watchme|api-|mood|paralinguistic|vibe" | grep enabled
    ```
 
 2. **docker-compose.infra.ymlが存在するか**
@@ -717,10 +717,9 @@ crontab -e
 
 ### 📊 EC2インスタンス情報
 
-- **現在のインスタンスタイプ**: t4g.large (8GB RAM)
-- **アップグレード日**: 2025-09-19
-- **以前**: t4g.small (2GB RAM)
-- **注意**: 一時的なアップグレード、将来的にt4g.smallに戻す可能性あり
+- **現在のインスタンスタイプ**: t4g.small (2GB RAM)
+- **以前**: t4g.large (8GB RAM)
+- **注意**: 現在はメモリ余裕が小さいため、重い解析系コンテナの同時稼働数に注意
 
 ---
 

@@ -1,8 +1,15 @@
 # Docker Compose メモリ制限設定ガイド
 
-## t4g.large (8GB RAM) での推奨メモリ制限
+## 現在の前提: t4g.small (2GB RAM)
 
-EC2インスタンスをt4g.largeにアップグレード後の推奨メモリ制限設定：
+このファイルにある詳細な数値は `t4g.large (8GB)` 運用時の参考値でした。  
+**現在の本番は t4g.small (2GB) のため、このまま適用しないでください。**
+
+### t4g.small での暫定方針
+
+- 解析系APIは同時常駐を最小化し、必要なものだけ起動する
+- `docker stats --no-stream` と `free -h` を見て 80%超の常態化を避ける
+- OpenSMILE/eGeMAPS 等の追加は、先にインスタンス再拡張または分離配置を検討する
 
 ### 各サービスの推奨メモリ制限
 
@@ -15,13 +22,13 @@ watchme-web: 768m             # Webダッシュボード
 
 # 重要度：中（APIサービス）
 vibe-transcriber-v2: 1536m    # Whisper API (音声認識処理が重い)
-opensmile-api: 1024m          # 音声特徴量抽出
+paralinguistic-api: 1024m          # 音声特徴量抽出
 api-gpt-v1: 768m              # GPT連携
 mood-chart-api: 512m          # プロンプト生成
 sed-api: 768m                 # 音声イベント検出
 
 # 重要度：低（集計・管理系）
-opensmile-aggregator: 512m    # 感情スコア集計
+paralinguistic-aggregator: 512m    # 感情スコア集計
 api-sed-aggregator: 512m      # 音声イベント集計
 watchme-admin: 512m           # 管理画面
 watchme-avatar-uploader: 256m # アバターアップロード
@@ -45,10 +52,9 @@ services:
 
 ### 注意事項
 
-1. **合計メモリ使用量**: 約9GB（OS含む）を想定
-2. **余裕を持たせる**: 実際の使用可能メモリ7.8GBに対して、合計で7GB程度に抑える
-3. **動的調整**: 実際の使用状況に応じて調整が必要
-4. **t4g.smallに戻す場合**: メモリ制限を1/4程度に減らす必要あり
+1. 上記メモリ値は `t4g.large` 想定の旧値
+2. `t4g.small` では同値を設定しても実効性が低く、OOM/Swap悪化のリスクが高い
+3. 現行では「同時稼働数の制御 + 実測監視」を優先する
 
 ### モニタリングコマンド
 

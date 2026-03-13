@@ -5,6 +5,30 @@
 WatchMe 全体のサーバー設定と運用ドキュメントを集約するリポジトリ。  
 このリポジトリ自体はアプリ本体ではなく、`EC2/Nginx/Docker/Lambda/運用文書` の基盤レイヤーを管理します。
 
+## リポジトリ構成の注意（重要）
+
+WatchMe は **単一Gitリポジトリではありません**。  
+`/Users/kaya.matsumoto/projects/watchme` 配下に、用途ごとの **独立リポジトリ（マルチリポ）** が並ぶ構成です。
+
+- `server-configs`: 基盤・運用・Lambda配線の source of truth
+- 各 API: それぞれ独立したマイクロサービスリポジトリ（独立CI/CD）
+- App / Web / Business: それぞれ独立リポジトリ
+
+そのため、実装変更時は「どのリポジトリが責務を持つか」を先に切り分け、必要なら複数リポジトリを同時に更新します。
+
+## 公式情報（連絡先）
+
+- 公式サイト: `https://hey-watch.me`
+- サポートメール: `support@hey-watch.me`
+
+### Cloudflare Email Routing（受信設定）
+
+- カスタムアドレス: `support@hey-watch.me`
+- アクション: `Send to an email`
+- 転送先: `matsumotokaya@gmail.com`
+- ステータス: `Active`
+- Catch-all: `Disabled`（`Drop`）
+
 ## 最初に読むもの
 
 1. [docs/DOCS_INDEX.md](./docs/DOCS_INDEX.md)
