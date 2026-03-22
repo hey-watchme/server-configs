@@ -336,6 +336,20 @@ server {
         }
     }
 
+    # ZeroTouch API (2026-03-22)
+    location /zerotouch/ {
+        proxy_pass http://localhost:8061/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Timeout (180s for STT/LLM processing)
+        proxy_read_timeout 180s;
+        proxy_connect_timeout 180s;
+        proxy_send_timeout 180s;
+    }
+
     # PUNCHLINE API - パンチライン抽出API (2026-01-20)
     location /punchline/ {
         proxy_pass http://localhost:8060/;

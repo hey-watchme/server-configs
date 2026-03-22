@@ -234,6 +234,7 @@
 
 ### 2026-03-14
 - **現状調査メモ追記**（EC2/EBS/ECR/ログ/ディスク/メモリ）。
+- **今後の調査は ap-southeast-2 に限定**（全リージョン調査は行わない）。
 - **Cost Explorer月次（全体）**:
   - 2026-01: **$0.0000000978**（Unblended/NetUnblended）
   - 2026-02: **$2.0235390518**（Unblended/NetUnblended）
