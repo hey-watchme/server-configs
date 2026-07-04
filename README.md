@@ -60,14 +60,19 @@ WatchMe は **単一Gitリポジトリではありません**。
 - ステータス: `Active`
 - Catch-all: `Disabled`（`Drop`）
 
+## 🔴 今の状態と次にやること
+
+2026-07-05 に約4ヶ月の凍結から再始動。まず **[docs/MASTER_PLAN.md](./docs/MASTER_PLAN.md) の「0. 次にやること」** を読めば、現在のフェーズと次に着手する作業がわかります。
+
 ## 最初に読むもの
 
-1. [docs/DOCS_INDEX.md](./docs/DOCS_INDEX.md)
-2. [docs/CURRENT_STATE.md](./docs/CURRENT_STATE.md)
-3. [docs/DEPLOYMENT_RUNBOOK.md](./docs/DEPLOYMENT_RUNBOOK.md)
-4. [docs/PROCESSING_ARCHITECTURE.md](./docs/PROCESSING_ARCHITECTURE.md)
+1. [docs/MASTER_PLAN.md](./docs/MASTER_PLAN.md) — 目的・ゴール・フェーズ計画・次にやること（**再始動後はまずこれ**）
+2. [docs/DOCS_INDEX.md](./docs/DOCS_INDEX.md)
+3. [docs/CURRENT_STATE.md](./docs/CURRENT_STATE.md)
+4. [docs/DEPLOYMENT_RUNBOOK.md](./docs/DEPLOYMENT_RUNBOOK.md)
+5. [docs/PROCESSING_ARCHITECTURE.md](./docs/PROCESSING_ARCHITECTURE.md)
 
-この順で読むと、`どの文書が現行の正か` と `何をどこからデプロイするか` が分かるようにしています。
+この順で読むと、`今何をすべきか`、`どの文書が現行の正か`、`何をどこからデプロイするか` が分かるようにしています。
 
 > **⚠️ 開発の前提**
 >
