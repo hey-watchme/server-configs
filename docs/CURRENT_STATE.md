@@ -1,6 +1,6 @@
 # WatchMe Current State
 
-最終更新: 2026-03-08  
+最終更新: 2026-07-05  
 Status: Active  
 Source of truth: 現在の運用モデル・責務分担
 
@@ -8,6 +8,24 @@ Source of truth: 現在の運用モデル・責務分担
 
 この文書は「今の WatchMe がどう運用されているか」を短く固定するためのものです。  
 歴史や移行経緯ではなく、現時点で作業判断に使う情報だけを置きます。
+
+## 2026-07-05 再始動時点のスナップショット（重要）
+
+約2.5ヶ月の凍結を経てプロジェクトを再始動した。プロダクトの目的・計画は [MASTER_PLAN.md](./MASTER_PLAN.md) が正本。
+
+事実（Supabase 実測 2026-07-05）:
+
+- 実録音・実分析の最終稼働は **2026-04-23**（`audio_files` / `spot_features` の最終行）
+- **SER（Emotion Features）は利用不可**: Hume Expression Measurement API が 2026-06-14 にサンセット。復旧不能、再設計対象（[TECH_INVENTORY_2026-07.md](./TECH_INVENTORY_2026-07.md)）
+- ASR（Speechmatics）/ SED（AST）/ Profiler（gpt-5.4）は凍結時点まで稼働していた
+- **デモデータ生成 Lambda は毎時稼働継続中**（デモデバイス `a1b2c3d4-...` が `spot_results` に書き込み中）
+- Observer デバイス（ESP32 定点録音）は**プロダクトとして凍結済み**。本文書含め Observer 前提の記述は古い情報として読むこと
+
+方針の変更点:
+
+- ゴールは実用サービスではなく**プレゼンテーション用モックアップ**（コスト度外視・最高精度）
+- 入力はモバイル中心の3経路（アプリ内録音 / BT 議事録デバイス経由ファイル / カメラロール動画）
+- 以下の「Spot パイプラインの現行構成」は凍結時点の構成であり、MASTER_PLAN の Phase 2 で簡素化する予定
 
 ## 全体像
 

@@ -1,6 +1,6 @@
 # WatchMe Docs Index
 
-最終更新: 2026-03-08  
+最終更新: 2026-07-05  
 Status: Active  
 Source of truth: このファイルは `server-configs/docs` の入口です
 
@@ -8,9 +8,10 @@ Source of truth: このファイルは `server-configs/docs` の入口です
 
 まず以下の順で確認します。
 
-1. [CURRENT_STATE.md](./CURRENT_STATE.md)
-2. [DEPLOYMENT_RUNBOOK.md](./DEPLOYMENT_RUNBOOK.md)
-3. [PROCESSING_ARCHITECTURE.md](./PROCESSING_ARCHITECTURE.md)
+1. [MASTER_PLAN.md](./MASTER_PLAN.md) — プロダクトの目的・ゴール・フェーズ計画（2026-07 再始動の正本）
+2. [CURRENT_STATE.md](./CURRENT_STATE.md)
+3. [DEPLOYMENT_RUNBOOK.md](./DEPLOYMENT_RUNBOOK.md)
+4. [PROCESSING_ARCHITECTURE.md](./PROCESSING_ARCHITECTURE.md)
 
 注意:
 - `Active` は現行運用で参照すべき文書
@@ -22,7 +23,9 @@ Source of truth: このファイルは `server-configs/docs` の入口です
 
 | 文書 | Status | 用途 | 備考 |
 |------|--------|------|------|
-| [CURRENT_STATE.md](./CURRENT_STATE.md) | Active | 現在の運用モデル確認 | 最初に読む |
+| [MASTER_PLAN.md](./MASTER_PLAN.md) | Active | 目的・ゴール・フェーズ計画 | **2026-07 再始動の正本。最初に読む** |
+| [TECH_INVENTORY_2026-07.md](./TECH_INVENTORY_2026-07.md) | Reference | 音声AI技術の棚卸し（2026-07） | 技術選定の根拠。Hume サンセット等 |
+| [CURRENT_STATE.md](./CURRENT_STATE.md) | Active | 現在の運用モデル確認 | 冒頭に 2026-07-05 スナップショットあり |
 | [DEPLOYMENT_RUNBOOK.md](./DEPLOYMENT_RUNBOOK.md) | Active | 何をどこからどう反映するか判断 | デプロイ時の主参照 |
 | [PROCESSING_ARCHITECTURE.md](./PROCESSING_ARCHITECTURE.md) | Active | Spot/Daily/Weekly の処理フロー | パイプライン理解用 |
 | [NON_TECH_PIPELINE_OVERVIEW.md](./NON_TECH_PIPELINE_OVERVIEW.md) | Active | 非エンジニア向けの全体像説明 | 共有資料・概念図の元ネタ |
@@ -32,7 +35,7 @@ Source of truth: このファイルは `server-configs/docs` の入口です
 | [KNOWN_ISSUES.md](./KNOWN_ISSUES.md) | Reference | 既知障害・詰まりどころ | 調査時に参照 |
 | [NEW_API_INTEGRATION_GUIDE.md](./NEW_API_INTEGRATION_GUIDE.md) | Reference | 新規 API 追加時の手順 | 新規開発向け |
 | [SPOT_AND_DAILY_ANALYSIS_GUIDE.md](./SPOT_AND_DAILY_ANALYSIS_GUIDE.md) | Reference | 分析仕様の補助理解 | 処理内容の補足 |
-| [NEXT_SESSION_HANDOFF_2026-03-08.md](./NEXT_SESSION_HANDOFF_2026-03-08.md) | Active | 次セッションへの作業引き継ぎ（最新） | **ハンドオフ資料はこれを参照** |
+| [NEXT_SESSION_HANDOFF_2026-03-08.md](./NEXT_SESSION_HANDOFF_2026-03-08.md) | Historical | 凍結前（2026-03）の作業引き継ぎ | 再始動後の計画は MASTER_PLAN.md を参照 |
 | [NEXT_SESSION_HANDOFF_2026-03-07.md](./NEXT_SESSION_HANDOFF_2026-03-07.md) | Historical | 前回セッションの引き継ぎ | 03-08 に統合済み |
 | [ARCHITECTURE_AND_MIGRATION_GUIDE.md](./ARCHITECTURE_AND_MIGRATION_GUIDE.md) | Historical | 移行経緯の記録 | 現行仕様の正ではない |
 | [SCALABILITY_ROADMAP.md](./SCALABILITY_ROADMAP.md) | Reference | 将来の拡張計画 | 将来検討用 |
