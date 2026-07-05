@@ -15,6 +15,7 @@ Source of truth: プロダクトの目的・ゴール・そこに至るフェー
   2. デフォルトリージョンを **ap-northeast-1（東京）** に設定
   3. アカウント作成後、このセクションの完了チェックを付け、Phase 2 の次の項目（AIエージェント用IAMの設計）に進む
 - 前回セッションからの既知情報: 現行環境は ap-southeast-2（シドニー）、アカウント `754724220380`（IAMユーザー `watchme-api-user`、および `admin` プロファイル）。新環境ではこれらを参照用として残し、直接は触らない
+- 2026-07-05: `watchme/.vscode/mcp.json` に AWS API MCP（`awslabs.aws-api-mcp-server`、AWS Labs公式、AWS CLI相当の操作が可能）を追加済み（`.cursor/mcp.json` に既にあった設定をミラー）。現在は旧環境（ap-southeast-2 / `watchme-api-user`）向けの設定のまま。**新アカウント作成後、この MCP のリージョン・認証プロファイルを新環境向けに更新すること**。VS Code 側は設定反映にウィンドウ再読み込みが必要
 
 進行中・未着手の他タスクは §5「フェーズ計画」の Phase 0/1 チェックリストを参照。
 
