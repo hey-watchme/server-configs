@@ -1,0 +1,143 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Reusable AI-agent IAM model. One low-privilege entry user assumes two
+  purpose-built roles: a read-only role (default for investigation/cost
+  analysis) and an operator role (explicit elevation for write operations,
+  but no privilege escalation). Deploy this identical template to any account
+  to reproduce the same AI-agent access model.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    Default: ai-agent
+    Description: Prefix for the created IAM user and roles.
+  CreateEntryUser:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: >
+      Create the entry IAM user in this stack. Set to "false" and provide
+      ExistingEntryUserArn to reuse an existing user as the trusted principal.
+  ExistingEntryUserArn:
+    Type: String
+    Default: ""
+    Description: >
+      ARN of an existing IAM user to trust when CreateEntryUser is "false".
+
+Conditions:
+  ShouldCreateEntryUser: !Equals [!Ref CreateEntryUser, "true"]
+  UseExistingUser: !Equals [!Ref CreateEntryUser, "false"]
+
+Resources:
+  # Entry user: holds the only static credentials, but has almost no power.
+  # Its sole ability is to assume the two roles below, so a leaked key is
+  # near-useless on its own.
+  EntryUser:
+    Type: AWS::IAM::User
+    Condition: ShouldCreateEntryUser
+    Properties:
+      UserName: !Ref NamePrefix
+      Tags:
+        - Key: Purpose
+          Value: ai-agent-entry
+        - Key: ManagedBy
+          Value: cloudformation
+
+  EntryUserAssumePolicy:
+    Type: AWS::IAM::Policy
+    Condition: ShouldCreateEntryUser
+    Properties:
+      PolicyName: assume-ai-agent-roles
+      Users:
+        - !Ref EntryUser
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AssumeAiAgentRoles
+            Effect: Allow
+            Action: sts:AssumeRole
+            Resource:
+              - !GetAtt ReadonlyRole.Arn
+              - !GetAtt OperatorRole.Arn
+
+  # Read-only role: the agent's default identity. Comprehensive read plus
+  # billing/cost visibility. Used for the ~95% of work that is investigation.
+  ReadonlyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-readonly"
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !If
+                - ShouldCreateEntryUser
+                - !GetAtt EntryUser.Arn
+                - !Ref ExistingEntryUserArn
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/ReadOnlyAccess
+        - arn:aws:iam::aws:policy/AWSBillingReadOnlyAccess
+      Tags:
+        - Key: Purpose
+          Value: ai-agent-readonly
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # Operator role: explicit elevation for write operations. Grants
+  # PowerUserAccess (all service actions) but deliberately excludes IAM,
+  # Organizations, and account management, so the agent can operate
+  # infrastructure yet cannot escalate its own privileges. A guardrail Deny
+  # blocks the most dangerous account-level actions outright.
+  OperatorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-operator"
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !If
+                - ShouldCreateEntryUser
+                - !GetAtt EntryUser.Arn
+                - !Ref ExistingEntryUserArn
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/PowerUserAccess
+      Policies:
+        - PolicyName: operator-guardrails
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: DenyPrivilegeAndAccountChanges
+                Effect: Deny
+                Action:
+                  - iam:*
+                  - organizations:*
+                  - account:*
+                  - ce:UpdatePreferences
+                  - aws-portal:*
+                Resource: "*"
+      Tags:
+        - Key: Purpose
+          Value: ai-agent-operator
+        - Key: ManagedBy
+          Value: cloudformation
+
+Outputs:
+  EntryUserArn:
+    Description: ARN of the entry user (create access keys for it out-of-band).
+    Value: !If
+      - ShouldCreateEntryUser
+      - !GetAtt EntryUser.Arn
+      - !Ref ExistingEntryUserArn
+  ReadonlyRoleArn:
+    Description: Assume this for read-only / cost analysis (agent default).
+    Value: !GetAtt ReadonlyRole.Arn
+  OperatorRoleArn:
+    Description: Assume this for write operations (explicit elevation).
+    Value: !GetAtt OperatorRole.Arn
