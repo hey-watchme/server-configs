@@ -1,6 +1,6 @@
 # WatchMe Docs Index
 
-最終更新: 2026-07-05  
+最終更新: 2026-07-06  
 Status: Active  
 Source of truth: このファイルは `server-configs/docs` の入口です
 
@@ -8,10 +8,11 @@ Source of truth: このファイルは `server-configs/docs` の入口です
 
 まず以下の順で確認します。
 
-1. [MASTER_PLAN.md](./MASTER_PLAN.md) — プロダクトの目的・ゴール・フェーズ計画（2026-07 再始動の正本）
-2. [CURRENT_STATE.md](./CURRENT_STATE.md)
-3. [DEPLOYMENT_RUNBOOK.md](./DEPLOYMENT_RUNBOOK.md)
-4. [PROCESSING_ARCHITECTURE.md](./PROCESSING_ARCHITECTURE.md)
+1. [VISION.md](./VISION.md) — プロダクトの北極星と DI 設計思想（なぜ作るか・何を映すか）
+2. [MASTER_PLAN.md](./MASTER_PLAN.md) — プロダクトの目的・ゴール・フェーズ計画（2026-07 再始動の正本）
+3. [CURRENT_STATE.md](./CURRENT_STATE.md)
+4. [DEPLOYMENT_RUNBOOK.md](./DEPLOYMENT_RUNBOOK.md)
+5. [PROCESSING_ARCHITECTURE.md](./PROCESSING_ARCHITECTURE.md)
 
 注意:
 - `Active` は現行運用で参照すべき文書
@@ -23,7 +24,9 @@ Source of truth: このファイルは `server-configs/docs` の入口です
 
 | 文書 | Status | 用途 | 備考 |
 |------|--------|------|------|
-| [MASTER_PLAN.md](./MASTER_PLAN.md) | Active | 目的・ゴール・フェーズ計画 | **2026-07 再始動の正本。最初に読む** |
+| [VISION.md](./VISION.md) | Active | 北極星・DI 設計思想 | **なぜ作るか／何を映す鏡か。MASTER_PLAN の前に読む** |
+| [MASTER_PLAN.md](./MASTER_PLAN.md) | Active | 目的・ゴール・フェーズ計画 | **2026-07 再始動の正本** |
+| [RESEARCH_DI_2026-07.md](./RESEARCH_DI_2026-07.md) | Reference | 音声バイオマーカー/DI 実装調査（2026-07） | DI・パイプライン技術選定の根拠（一次文献ベース） |
 | [TECH_INVENTORY_2026-07.md](./TECH_INVENTORY_2026-07.md) | Reference | 音声AI技術の棚卸し（2026-07） | 技術選定の根拠。Hume サンセット等 |
 | [CURRENT_STATE.md](./CURRENT_STATE.md) | Active | 現在の運用モデル確認 | 冒頭に 2026-07-05 スナップショットあり |
 | [DEPLOYMENT_RUNBOOK.md](./DEPLOYMENT_RUNBOOK.md) | Active | 何をどこからどう反映するか判断 | デプロイ時の主参照 |
