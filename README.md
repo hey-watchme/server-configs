@@ -1,14 +1,21 @@
 # WatchMe Server Configurations
 
-最終更新: 2026-03-08
+最終更新: 2026-07-08
 
 ## WatchMe とは
 
+> **一文で**: 声を"生体信号"として読み、「何を話したか」ではなく「どう話したか」から、
+> その人の認知・感情・性格・不調のサインを映し出す。診断は下さない。自分に気づくための「きっかけ」を返す鏡になる。
+> 詳細・思想の正本は **[docs/VISION.md](./docs/VISION.md)** を参照。
+
 WatchMe は、**音声 × AI を使って発達特性や精神状態を可視化し、メンタルヘルスケアを支援するプロダクト**です。
+録音デバイス（ウェアラブル / 据え置き）または iPhone アプリで収録した音声を自動分析し、本人や支援者に継続的なインサイトを提供します。
 
-録音デバイス（Observer）または iPhone アプリで収録した音声を自動分析し、本人や支援者に継続的なインサイトを提供します。
+⚠️ 以下の「分析パイプライン」表は 2026-03 時点の旧実装（3パイプライン並列・Observer前提）です。
+**2026-07 再始動後のターゲット構成（2.5系統・DI設計）は [docs/MASTER_PLAN.md](./docs/MASTER_PLAN.md) §4 を正としてください。**
+Observer デバイスは凍結済みです。
 
-### 分析パイプライン
+### 分析パイプライン（旧・2026-03時点）
 
 収録した音声は、まず 3 種類の特徴量抽出を並列実行します。
 
@@ -63,16 +70,29 @@ WatchMe は **単一Gitリポジトリではありません**。
 ## 🔴 今の状態と次にやること
 
 2026-07-05 に約4ヶ月の凍結から再始動。まず **[docs/MASTER_PLAN.md](./docs/MASTER_PLAN.md) の「0. 次にやること」** を読めば、現在のフェーズと次に着手する作業がわかります。
+「今どういう状況だったか」を尋ねられたら、まず MASTER_PLAN の §0〜§3 を提示してください。
+
+## 最新のまとまったアウトプット（成果物）
+
+現時点でのビジョン・技術方針を反映した最新の成果物は以下です。「今の最新情報は何か」を聞かれたらこれを確認してください。
+
+- **営業パンフレット（コンセプトモックアップ、2026-07-06 作成）**: https://claude.ai/code/artifact/caf2e5d7-dfd3-4096-a60f-7a6e0c312595
+  - 対象: 発達特性・認知特性のあるこども（3歳〜中高生）の保護者。自己理解目的での成人利用も想定
+  - 構成: 前半＝ベネフィット訴求（家庭の悩み→WatchMeの価値）、後半＝技術基盤の説明（DI・2.5系統パイプライン・プライバシー設計）で信頼性を担保
+  - 前提: MASTER_PLAN の技術要件が揃った「あるべき姿」でのリリース時点を想定したモックアップ。現時点で実装済みの機能ではない
+  - Artifact は claude.ai 上のプライベートページ。恒久リンクではないため、リンク切れの場合は本セッションの会話履歴か再生成を参照
 
 ## 最初に読むもの
 
-1. [docs/MASTER_PLAN.md](./docs/MASTER_PLAN.md) — 目的・ゴール・フェーズ計画・次にやること（**再始動後はまずこれ**）
-2. [docs/DOCS_INDEX.md](./docs/DOCS_INDEX.md)
-3. [docs/CURRENT_STATE.md](./docs/CURRENT_STATE.md)
-4. [docs/DEPLOYMENT_RUNBOOK.md](./docs/DEPLOYMENT_RUNBOOK.md)
-5. [docs/PROCESSING_ARCHITECTURE.md](./docs/PROCESSING_ARCHITECTURE.md)
+1. [docs/VISION.md](./docs/VISION.md) — プロダクトの北極星・DI設計思想（**なぜ作るか・何を映す鏡か。最初に読む**）
+2. [docs/MASTER_PLAN.md](./docs/MASTER_PLAN.md) — 目的・ゴール・フェーズ計画・次にやること（**再始動後はこれで現状把握**）
+3. [docs/RESEARCH_DI_2026-07.md](./docs/RESEARCH_DI_2026-07.md) — DI・音声分析パイプラインの技術選定の根拠（外部ディープリサーチ、一次文献ベース）
+4. [docs/DOCS_INDEX.md](./docs/DOCS_INDEX.md)
+5. [docs/CURRENT_STATE.md](./docs/CURRENT_STATE.md)
+6. [docs/DEPLOYMENT_RUNBOOK.md](./docs/DEPLOYMENT_RUNBOOK.md)
+7. [docs/PROCESSING_ARCHITECTURE.md](./docs/PROCESSING_ARCHITECTURE.md)
 
-この順で読むと、`今何をすべきか`、`どの文書が現行の正か`、`何をどこからデプロイするか` が分かるようにしています。
+この順で読むと、`なぜ作るか`、`今何をすべきか`、`どの文書が現行の正か`、`何をどこからデプロイするか` が分かるようにしています。
 
 > **⚠️ 開発の前提**
 >
