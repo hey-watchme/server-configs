@@ -1,5 +1,10 @@
 # WatchMe Server Configurations
 
+> **このリポジトリはアーカイブ（2026-11-07）。** 旧 WatchMe（AWS シドニー）は撤収し、新版は `hey-watchme/platform`（東京）に移った。
+> WatchMe の文書の正本は `platform/docs/`。この中の資料のどこに何があるかは `platform/docs/legacy/README.md`。
+> `VISION.md`・`RESEARCH_DI_2026-07.md`・`TECH_INVENTORY_2026-07.md` と `ai-agent-iam/` は platform に移した（ここにあるのは当時の写し）。
+> `docs/WATCHME_ROOT_CLAUDE_2026-02-26.md` は、`watchme/CLAUDE.md` を書き直す前の旧版。
+
 最終更新: 2026-07-08
 
 ## WatchMe とは
