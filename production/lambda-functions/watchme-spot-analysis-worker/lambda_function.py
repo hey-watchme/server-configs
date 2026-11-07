@@ -1,5 +1,6 @@
 import json
 import os
+from datetime import datetime, timedelta, timezone
 
 import boto3
 import requests
@@ -13,6 +14,9 @@ DASHBOARD_SUMMARY_QUEUE_URL = os.environ.get(
 )
 
 FEATURE_STATUS_FIELDS = ("vibe_status", "behavior_status", "emotion_status")
+FEATURE_SETTLED_STATUSES = {"completed", "failed"}
+# Must match watchme-aggregator-checker.
+FEATURE_WAIT_TIMEOUT_MINUTES = int(os.environ.get("FEATURE_WAIT_TIMEOUT_MINUTES", "15"))
 
 sqs = boto3.client("sqs", region_name="ap-southeast-2")
 
@@ -38,9 +42,10 @@ def process_spot_analysis(message):
     if not statuses:
         raise RuntimeError(f"No feature status found for {recording_key}")
 
-    if not all(statuses.get(field) == "completed" for field in FEATURE_STATUS_FIELDS):
+    readiness = get_feature_readiness(statuses)
+    if readiness != "ready":
         raise RuntimeError(
-            f"Features are not complete for {recording_key}: "
+            f"Spot analysis not ready for {recording_key} ({readiness}): "
             f"{json.dumps(statuses, ensure_ascii=False)}"
         )
 
@@ -273,13 +278,52 @@ def claim_profiler_processing(device_id, recorded_at, local_date):
     return True
 
 
+def get_feature_readiness(statuses):
+    """
+    Decide whether the spot analysis can run with the features available.
+
+    Ready when every feature has settled (completed or failed), or the wait
+    for unsettled ones has timed out, and at least one feature completed.
+    """
+    unsettled = [
+        field
+        for field in FEATURE_STATUS_FIELDS
+        if statuses.get(field) not in FEATURE_SETTLED_STATUSES
+    ]
+    if unsettled and not is_feature_wait_expired(statuses.get("created_at")):
+        return "waiting_for_features"
+
+    if not any(statuses.get(field) == "completed" for field in FEATURE_STATUS_FIELDS):
+        return "no_completed_features"
+
+    return "ready"
+
+
+def is_feature_wait_expired(created_at):
+    if not created_at:
+        return False
+
+    try:
+        created = datetime.fromisoformat(created_at)
+    except ValueError:
+        print(f"Unparseable spot_features.created_at: {created_at}")
+        return False
+
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+
+    return datetime.now(timezone.utc) - created >= timedelta(
+        minutes=FEATURE_WAIT_TIMEOUT_MINUTES
+    )
+
+
 def get_feature_statuses(device_id, recorded_at):
     response = requests.get(
         f"{SUPABASE_URL}/rest/v1/spot_features",
         params={
             "device_id": f"eq.{device_id}",
             "recorded_at": f"eq.{recorded_at}",
-            "select": "vibe_status,behavior_status,emotion_status,local_date",
+            "select": "vibe_status,behavior_status,emotion_status,local_date,created_at",
         },
         headers=supabase_headers(),
         timeout=10,
